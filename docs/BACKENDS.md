@@ -1560,8 +1560,10 @@ Setup knows the files in the table above. Another file of one of these architect
 
 ## Limits
 
-- One NVIDIA card. Built and run on one Linux machine, and the three new models' nine sizes on one Windows
-  laptop as well. GLM 5.3 Flash was not run on Windows.
+- NVIDIA cards only. Built and run on one Linux machine, and the three new models' nine sizes on one Windows
+  laptop as well. GLM 5.3 Flash was not run on Windows. Two cards can share a model since 2026-10-11
+  ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)); that ran with Qwen3.6 and Gemma 4 on two RTX 3080
+  under Linux only.
 - The changes that came from the laptop were built on Windows first, and on Linux on 2026-10-10 (gcc 11.4,
   CUDA 12.8), where the first sizes were checked against llama.cpp and with and without guesses again, and the
   benchmark of [A prompt of 30,000 tokens](#a-prompt-of-30000-tokens) was run. GLM 5.3 Flash, which only that

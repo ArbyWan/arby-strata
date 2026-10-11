@@ -23,7 +23,7 @@ Il fait tourner cinq modèles, avec deux moteurs :
   de 12 Go ou plus, sous Windows ou Linux. Il lit aussi les images. Son moteur est celui de
   [Strata](https://github.com/Niko1221/Strata), inchangé.
 
-Les quatre autres tournent sur un moteur écrit pour PolyStrata, avec une carte NVIDIA : tous les quatre sous Linux, et
+Les quatre autres tournent sur un moteur écrit pour PolyStrata, avec une carte NVIDIA ou [deux](docs/MULTI_GPU.md#the-strata-poly-models) : tous les quatre sous Linux, et
 les trois plus petits aussi sous Windows. Ils sont expérimentaux : ils n'ont tourné que sur un seul PC avec une carte
 de 32 Go, et les trois plus petits en plus sur un portable avec une carte de 8 Go.
 
@@ -240,7 +240,7 @@ La liste complète : [docs/GLM.md](docs/GLM.md#what-you-need) (en anglais).
 L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
 de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
 version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : les cartes AMD, plusieurs cartes.
+installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus.
 
 ### Ornith 1.5
 
@@ -254,7 +254,7 @@ installer. Pas encore : les cartes AMD, plusieurs cartes.
 L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
 de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
 version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : les cartes AMD, plusieurs cartes.
+installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus.
 
 ### Gemma 4 26B-A4B
 
@@ -268,7 +268,7 @@ installer. Pas encore : les cartes AMD, plusieurs cartes.
 L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
 de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
 version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : les cartes AMD, plusieurs cartes.
+installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus.
 
 Ce qu'il faut à chacun des trois et comment il a été vérifié : [docs/BACKENDS.md](docs/BACKENDS.md#install) (en anglais).
 

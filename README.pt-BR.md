@@ -23,7 +23,7 @@ Ele roda cinco modelos, com dois motores:
   12 GB ou mais, no Windows ou no Linux. Ele também entende imagens. O motor dele é o do
   [Strata](https://github.com/Niko1221/Strata), sem mudanças.
 
-Os outros quatro usam um motor escrito para o PolyStrata, com uma placa NVIDIA: os quatro no Linux, e os três menores
+Os outros quatro usam um motor escrito para o PolyStrata, com uma placa NVIDIA ou [duas](docs/MULTI_GPU.md#the-strata-poly-models): os quatro no Linux, e os três menores
 também no Windows. São experimentais: só rodaram em um PC com uma placa de 32 GB, e os três menores também em um
 notebook com uma placa de 8 GB.
 
@@ -240,7 +240,7 @@ A lista completa: [docs/GLM.md](docs/GLM.md#what-you-need) (em inglês).
 O instalador cuida de todo o resto, como faz com o GLM 5.3 Flash. No Windows ele baixa o motor já compilado da
 última versão publicada. Num processador sem AVX2, ou numa cópia cujo motor mudou depois dessa versão, ele compila o
 motor no lugar, com o compilador de 2022 do Visual Studio e o CUDA Toolkit, e oferece instalar os dois. Ainda não:
-placas AMD, várias placas.
+placas AMD, duas placas no Windows, três placas ou mais.
 
 ### Ornith 1.5
 
@@ -254,7 +254,7 @@ placas AMD, várias placas.
 O instalador cuida de todo o resto, como faz com o GLM 5.3 Flash. No Windows ele baixa o motor já compilado da
 última versão publicada. Num processador sem AVX2, ou numa cópia cujo motor mudou depois dessa versão, ele compila o
 motor no lugar, com o compilador de 2022 do Visual Studio e o CUDA Toolkit, e oferece instalar os dois. Ainda não:
-placas AMD, várias placas.
+placas AMD, duas placas no Windows, três placas ou mais.
 
 ### Gemma 4 26B-A4B
 
@@ -268,7 +268,7 @@ placas AMD, várias placas.
 O instalador cuida de todo o resto, como faz com o GLM 5.3 Flash. No Windows ele baixa o motor já compilado da
 última versão publicada. Num processador sem AVX2, ou numa cópia cujo motor mudou depois dessa versão, ele compila o
 motor no lugar, com o compilador de 2022 do Visual Studio e o CUDA Toolkit, e oferece instalar os dois. Ainda não:
-placas AMD, várias placas.
+placas AMD, duas placas no Windows, três placas ou mais.
 
 Do que cada um dos três precisa e como foi conferido: [docs/BACKENDS.md](docs/BACKENDS.md#install) (em inglês).
 

@@ -23,7 +23,7 @@ Ejecuta cinco modelos, con dos motores:
   12 GB o más, en Windows o Linux. También entiende imágenes. Su motor es el de
   [Strata](https://github.com/Niko1221/Strata), sin cambios.
 
-Los otros cuatro usan un motor escrito para PolyStrata, con una tarjeta NVIDIA: los cuatro en Linux, y los tres más
+Los otros cuatro usan un motor escrito para PolyStrata, con una tarjeta NVIDIA o [dos](docs/MULTI_GPU.md#the-strata-poly-models): los cuatro en Linux, y los tres más
 pequeños también en Windows. Son experimentales: solo han funcionado en un PC con una tarjeta de 32 GB, y los tres más
 pequeños además en un portátil con una tarjeta de 8 GB.
 
@@ -240,7 +240,7 @@ La lista completa: [docs/GLM.md](docs/GLM.md#what-you-need) (en inglés).
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD, varias tarjetas.
+tarjetas AMD, dos tarjetas en Windows, tres tarjetas o más.
 
 ### Ornith 1.5
 
@@ -254,7 +254,7 @@ tarjetas AMD, varias tarjetas.
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD, varias tarjetas.
+tarjetas AMD, dos tarjetas en Windows, tres tarjetas o más.
 
 ### Gemma 4 26B-A4B
 
@@ -268,7 +268,7 @@ tarjetas AMD, varias tarjetas.
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD, varias tarjetas.
+tarjetas AMD, dos tarjetas en Windows, tres tarjetas o más.
 
 Qué necesita cada uno de los tres y cómo se comprobó: [docs/BACKENDS.md](docs/BACKENDS.md#install) (en inglés).
 

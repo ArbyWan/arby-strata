@@ -732,6 +732,9 @@ void usage() {
                  "  --threads N            CPU threads for the experts that are not in VRAM (default: all usable)\n"
                  "  --vram-reserve-mib N   VRAM left free beside the expert cache (default: a thirty-second of\n"
                  "                         the card, 256 to 768, and half of that after the first request)\n"
+                 "  --layer-split S        the model's layers across the CUDA devices this process sees, in their\n"
+                 "                         order: S is auto (by each card's free VRAM) or the first layer of each\n"
+                 "                         later card, as 20 or 20,30 (default: the first card alone)\n"
                  "  --expert-profile FILE  expert use counts: read to choose the cached experts, written back on\n"
                  "                         exit and by --serve after an answer, every 10 s at most\n"
                  "  --no-gpu-experts       keep every routed expert on the CPU\n"
@@ -834,6 +837,7 @@ int main(int argc, char** argv) {
         else if (a == "--draft-model") o.draft_model = val();
         else if (a == "--expert-swaps") o.expert_swaps = std::atoi(val());
         else if (a == "--tail-skip") o.tail_skip = std::atoi(val());
+        else if (a == "--layer-split") o.layer_split = val();
         else if (a == "--draft-vocab") o.draft_vocab = std::atoi(val());
         else if (a == "--prompt-batch") o.prompt_batch = std::atoi(val());
         else if (a == "--stage-mib") o.stage_mib = std::atoi(val());

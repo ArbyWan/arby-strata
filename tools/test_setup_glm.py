@@ -387,6 +387,16 @@ class Main(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual((cfg["gpu"], cfg["gpus_asked"]), (1, True))
 
+    def test_layer_split(self):
+        code, out, cfg = self.main(["--gpus", "0,1"], n_gpus=2)
+        self.assertEqual(code, 0, out)
+        self.assertEqual((cfg["gpu"], cfg["gpus_asked"], cfg["layer_split"]), ([0, 1], True, "auto"))
+        self.assertNotIn("runs on one GPU", out)
+        code, out, cfg = self.main(["--gpus", "0,1", "--layer-split", "30"], n_gpus=2)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(cfg["layer_split"], "30")
+        self.assertNotIn("--layer-split", next((ln for ln in out.splitlines() if "not used with" in ln), ""))
+
     def test_windows_is_asked(self):
         code, out, cfg = self.main(win=True, answers={})
         self.assertNotEqual(code, 0)

@@ -22,7 +22,7 @@ It runs five models, on two engines:
 - **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** on an NVIDIA or AMD graphics card with
   12 GB or more, on Windows or Linux. It also reads pictures. Its engine is the Strata project's, unchanged.
 
-The other four run on an engine written for PolyStrata, with one NVIDIA card: on Linux, and the three smaller ones on
+The other four run on an engine written for PolyStrata, with one NVIDIA card or [two](docs/MULTI_GPU.md#the-strata-poly-models): on Linux, and the three smaller ones on
 Windows too. They are experimental: they have run on one PC with a 32 GB card, and the three smaller ones on a laptop
 with an 8 GB card as well.
 
@@ -237,7 +237,7 @@ The full list: [docs/GLM.md](docs/GLM.md#what-you-need).
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards, several cards.
+yet: AMD cards, two cards on Windows, three cards or more.
 
 ### Ornith 1.5
 
@@ -251,7 +251,7 @@ yet: AMD cards, several cards.
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards, several cards.
+yet: AMD cards, two cards on Windows, three cards or more.
 
 ### Gemma 4 26B-A4B
 
@@ -265,7 +265,7 @@ yet: AMD cards, several cards.
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards, several cards.
+yet: AMD cards, two cards on Windows, three cards or more.
 
 What each of the three needs and how it was checked: [docs/BACKENDS.md](docs/BACKENDS.md#install).
 

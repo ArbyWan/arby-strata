@@ -97,7 +97,8 @@ draft block, 2.8 GB, once for every size that needs it. The web app is at
 - The compile needs g++ and the CUDA toolkit (12.8 or newer for an RTX 50 card). Setup offers to install what is
   missing. The ready-made `strata-poly` of a release is for Windows only.
 - You already have the GGUF: `./setup.sh --family glm --gguf-dir /folder/with/the/file`.
-- The other options are the README's: `--context`, `--port`, `--host`, `--api-key`, `--gpu`, `--yes`, `--no-start`.
+- The other options are the README's: `--context`, `--port`, `--host`, `--api-key`, `--gpu`, `--gpus`,
+  `--layer-split`, `--yes`, `--no-start`.
   The ones for the Qwen engine (`--kv`, `--vision`, `--low-ram`, `--parallel`, ...) are named and left out.
 
 On the test machine, with the file already on the disk, this took about five minutes.
@@ -263,7 +264,8 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
 - Release builds of `strata-poly`: setup compiles it.
 - GLM on Windows. The engine compiles there and runs the three smaller models of this engine, but GLM has not
   been run on Windows: no PC with the RAM for it was at hand. Setup asks before it installs it there.
-- AMD and Intel cards, and more than one card.
+- AMD and Intel cards. Two NVIDIA cards can share the model ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)),
+  which has run with the smaller models of this engine and not yet with GLM.
 - Pictures. The model's image input is not read.
 - Several requests decoded together (`"parallel"`). Requests wait their turn.
 - `--prompt-cache-root` and `--turn-token`. Checkpoints are taken by position.

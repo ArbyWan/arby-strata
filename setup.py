@@ -4533,11 +4533,10 @@ def start(cfg_path: Path, port: int | None, gpu: int | list | None = None, open_
     missing = [p for p in [cfg["exe"], *[a for a in cfg["args"] if a.endswith(".gguf")]] if not Path(p).exists()]
     if missing:
         fail(f"{cfg_path.name} refers to missing files: {missing[0]}", "run it again with --setup to repair")
-    glm = poly_config(cfg)                              # a model of strata-poly: one card, an engine compiled here
+    glm = poly_config(cfg)                              # a model of strata-poly: its own engine (engine-poly/)
     if glm:
-        if isinstance(gpu, list):
-            warn(f"{cfg.get('model_name', 'this model')} runs on one GPU: GPU {gpu[0]} alone")
-            gpu = gpu[0]
+        if isinstance(gpu, list):                      # update_poly_engine() wants code for these cards
+            cfg["gpu"] = gpu
         update_poly_engine(cfg, yes, cfg_path)
         poly_tail_skip(cfg, cfg_path)
     keep = {k: v for k, v in (keep or {}).items() if v is not None}
@@ -4620,7 +4619,8 @@ def start(cfg_path: Path, port: int | None, gpu: int | list | None = None, open_
     elif isinstance(use, list):
         check_gpus(use, found, "(chosen for this model) ", yes=True, named=True)
         byid = {g["index"]: g for g in found}
-        cfg = ensure_engine_for([byid[i] for i in use], cfg_path, cfg, yes)
+        if not glm:
+            cfg = ensure_engine_for([byid[i] for i in use], cfg_path, cfg, yes)
         ok("GPUs: " + " + ".join(gpu_name(byid[i]) for i in use) + f" together (layers split {cfg.get('layer_split') or 'auto'})")
     elif found:
         g = next((x for x in found if x["index"] == use), None) if use is not None else max(
@@ -5231,14 +5231,16 @@ def update_poly_engine(cfg: dict, yes=False, cfg_path: Path | None = None) -> No
         return
     try:
         meta = json.loads(stamp.read_text()) if stamp.exists() else {}
-        gpu = gpu_info(cfg["gpu"] if isinstance(cfg.get("gpu"), int) else None)
+        picks = cfg["gpu"] if isinstance(cfg.get("gpu"), list) else [cfg["gpu"] if isinstance(cfg.get("gpu"), int) else None]
+        gpu = gpu_info(picks[0])
         if gpu is None:
             raise RuntimeError("no NVIDIA GPU found")
+        gpu["archs"] = sorted({int(gpu_info(i)["arch"]) for i in picks})   # a layer split's cards
         # the encoder too, when this model has one: on the device it was built for
         vis = cfg.get("vision")
         vision = ("gpu" if meta.get("vision") == "gpu" or vis.get("gpu") else "cpu") if isinstance(vis, dict) else "none"
         changed = renamed
-        fits = int(gpu["arch"]) in [int(x) for x in meta.get("archs", [])]
+        fits = set(gpu["archs"]) <= {int(x) for x in meta.get("archs", [])}
         if not (meta.get("src") == source_hash(ENGINE_SOURCES) and (eng / POLY_EXE).exists() and fits
                 and (vision == "none" or meta.get("vision_src") == source_hash(VISION_SOURCES))):
             # one compiled here (--build, a CPU without AVX2) stays so
@@ -5290,8 +5292,6 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         confirm_risk(f"{title} has been run on Linux only: its engine compiles on Windows, the model was not tried "
                      "there", bool(a.family), a.yes, f"{title} has not been tried on Windows",
                      f"use Linux, or --family {family} --yes to try it here")
-    if multi:
-        warn(f"{title} runs on one GPU: {gpu_name(gpu)} alone")
     sees = fam.get("vision") is True
     unused = [flag for flag, given in (
         ("--vision", not sees and a.vision not in (None, "no", "none")),
@@ -5299,7 +5299,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         ("--kv", a.kv), ("--kv-streaming", a.kv_streaming != "auto"), ("--rope-scaling", a.rope_scaling),
         ("--rope-scale", a.rope_scale is not None), ("--low-ram", a.low_ram != "auto"),
         ("--resident-budget-gib", a.resident_budget_gib is not None), ("--parallel", a.parallel is not None),
-        ("--draft-vocab", a.draft_vocab), ("--layer-split", a.layer_split), ("--calibrate", a.calibrate),
+        ("--draft-vocab", a.draft_vocab), ("--layer-split", a.layer_split and not multi), ("--calibrate", a.calibrate),
         ("--experimental-speed-projection",
          (a.experimental_speed_projection or "off").strip().lower() not in ("off", "no", "n", "0"))) if given]
     if unused:
@@ -5310,6 +5310,8 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     if a.model and a.model not in names:
         fail(f"{title} has no {a.model} model file", "choose one of: " + ", ".join(names))
     vram = gpu["vram_gb"]
+    if multi:   # each card has its layers' dense weights; its own scratch and staging buffer cost ~2 GB a card more
+        vram = sum(gpu_info(i)["vram_gb"] for i in multi) - 2.0 * (len(multi) - 1)
     model = a.model or poly_default(sizes, ram, vram)
     if not a.model and len(names) > 1:
         say()
@@ -5342,7 +5344,8 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     held, need_ram = poly_held_gb(d, room), poly_ram_need(d, room)
     say()
     say(f"  {model}: {d['about']}; download {d['download_gb']:.0f} GB. The file is read in place: about {held:.0f} of")
-    say(f"  its {d['arena_gb']:.0f} GB of experts fit this card, the rest stay in RAM (the OS file cache).")
+    say(f"  its {d['arena_gb']:.0f} GB of experts fit {'these cards' if multi else 'this card'}, the rest stay in RAM "
+        "(the OS file cache).")
     if room < beside + 2:
         enc = vision == "gpu"                          # the encoder's share may be what does not fit
         confirm_risk(f"{title} takes about {beside} GB of VRAM before any expert (measured on a 32 GB "
@@ -5529,7 +5532,11 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     cfg = {"exe": str(eng / POLY_EXE), "args": args, "cwd": str(ROOT), "tokenizer": str(pack / "tokenizer"),
            "model_name": f"{fam['name']}-{model.lower()}", "display_name": f"{title} {model}",
            "log": str(ROOT / f"strata-{tag.lower()}.log"), "lib_dirs": lib_dirs, "port": port}
-    if gpu["count"] > 1 or a.gpu is not None:
+    if multi:                                          # the server passes --layer-split and orders the cards
+        cfg["gpu"], cfg["gpus_asked"] = multi, True
+        cfg["layer_split"] = a.layer_split or "auto"
+        ok(f"layer split across GPUs {multi} ({cfg['layer_split']})")
+    elif gpu["count"] > 1 or a.gpu is not None:
         cfg["gpu"] = gpu["index"]                      # the engine is told this card (issue #51)
         cfg["gpus_asked"] = True
     if cuda_tk == 12:
@@ -6011,7 +6018,7 @@ def main() -> int:
     if fam.get("license"):
         say(f"  Its license: {fam['license']}")
     if fam.get("engine") == "poly":                     # another engine: its own questions and steps
-        return poly_setup(a, family, gpu, hip, cuda_tk, bool(multi), ram, data, elsewhere, port, adopted)
+        return poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, adopted)
     say()
     names = [m for m in MODELS if family in MODELS[m].get("families", ("qwen", "swift"))]
     names.sort(key=lambda m: bool(MODELS[m].get("experimental")))   # an experimental size last, never the default

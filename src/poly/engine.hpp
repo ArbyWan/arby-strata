@@ -7,6 +7,11 @@
 // Engine is what every architecture shares.  An architecture is a class derived from it (glm5next.hpp, qwen35.hpp,
 // gemma4.hpp) that reads the model's shape, loads a layer's weights and composes a layer from the kernels;
 // Engine::open() picks it by the file's general.architecture.
+//
+// On several cards (Options::layer_split) each card has an engine of its own for a run of the layers, with their
+// weights, caches, state and expert cache, and the last one has the output and the draft block.  The first one is
+// the one the caller holds: it runs its layers, hands the rows of the residual on to the next one through host
+// memory, and the next one goes on from them.
 #pragma once
 
 #include "cpu_experts.hpp"
@@ -63,6 +68,9 @@ struct Options {
     int tail_skip = 0;            ///< a routed expert outside VRAM that every token of a call ranks this far down or
                                   ///< further (the router's first choice is 0) is left out (--tail-skip,
                                   ///< STRATA_ROUTE_TAIL_SKIP); 0: none is
+    std::string layer_split;      ///< the layers across the CUDA devices this process sees, in their order: "auto"
+                                  ///< (by each card's free VRAM) or the first layer of each later card ("20,30");
+                                  ///< empty, or one device: the current card alone
 };
 
 /// A thing a model's file may call by other names than the engine does: converters differ.
@@ -161,7 +169,7 @@ public:
     /// Feed n tokens from position pos().  With want_logits, logits() then holds the scores of the token after the
     /// last one.
     void eval(const int32_t* tokens, int n, bool want_logits);
-    const float* logits() const { return h_logits_; }
+    const float* logits() const { return next_ ? next_->logits() : h_logits_; }
     /// Feed n tokens of a prompt, none of them a picture's row, as eval() without logits would in calls of
     /// max_rows(): the same tokens a call.  With experts outside the cache it is faster than those calls, the
     /// more the more of them n is.  The result is the calls' own bit for bit, but for a call of fewer than
@@ -198,7 +206,7 @@ public:
     /// What a kept token computed is what eval() would have computed for it.
     int max_window() const { return opt_.window; }
     void window(const int32_t* tokens, int t);
-    const float* logits_of(int i) const { return h_wlogits_ + (size_t) i * n_vocab_; }
+    const float* logits_of(int i) const { return next_ ? next_->logits_of(i) : h_wlogits_ + (size_t) i * n_vocab_; }
     void keep(int n);
 
     /// Some files carry a block that guesses ahead: one layer that takes a token and the model's output for the
@@ -208,33 +216,38 @@ public:
     /// in the model's place.  p is the probability the block gives what it returns.  pos() + i must be inside the
     /// context.  logits() is left alone.  An architecture may guess with a small model of its own instead of a
     /// block (draft_step()); the calls are the same.
-    bool drafts() const { return draft_; }
+    bool drafts() const { return next_ ? next_->drafts() : draft_; }
     int32_t draft(int32_t token, int i, float* prob);
     /// Whether a call since the last time this was asked recorded launches for replaying, which takes far longer
     /// than the call does afterwards: its time says nothing of the calls to come.
-    bool took_record() { return std::exchange(recorded_, false); }
+    bool took_record() {
+        const bool later = next_ && next_->took_record();
+        return std::exchange(recorded_, false) || later;
+    }
 
     // A sequence's state, to leave the sequence and come back to it.  The recurrent layers have a state that
     // every token changes.  Each token also leaves a row in the attention caches, which stays as it was written.
-    size_t state_bytes() const { return state_n_ * sizeof(float) + extra_bytes(); }
-    virtual size_t row_bytes() const = 0;
+    // On several cards: the first card's part, then the next one's.
+    size_t state_bytes() const { return card_state_bytes() + (next_ ? next_->state_bytes() : 0); }
+    size_t row_bytes() const { return card_row_bytes() + (next_ ? next_->row_bytes() : 0); }
     /// The recurrent state at pos(), state_bytes() long.
     void save_state(uint8_t* dst);
     /// Back to position `pos` with the recurrent state it had there.  The rows before pos must be the sequence's.
     void load_state(const uint8_t* src, int64_t pos);
     /// The rows of positions [first, first + n), n * row_bytes() long: layer after layer, a layer's rows together.
-    virtual void save_rows(int64_t first, int64_t n, uint8_t* dst) = 0;
+    void save_rows(int64_t first, int64_t n, uint8_t* dst);
     /// Rows [first, first + n) out of what save_rows wrote for [from, from + count).
-    virtual void load_rows(const uint8_t* src, int64_t from, int64_t count, int64_t first, int64_t n) = 0;
+    void load_rows(const uint8_t* src, int64_t from, int64_t count, int64_t first, int64_t n);
 
-    const Stats& stats() const { return stats_; }
-    int cached_experts() const { return cached_; }
-    int total_experts() const { return n_moe_ * n_expert_; }
-    double cached_gib() const { return double(exp_at_) / double(1ull << 30); }
+    const Stats& stats() const;
+    int cached_experts() const { return cached_ + (next_ ? next_->cached_experts() : 0); }
+    int total_experts() const { return n_moe_ * n_expert_ + (next_ ? next_->total_experts() : 0); }
+    double cached_gib() const { return double(exp_at_) / double(1ull << 30) + (next_ ? next_->cached_gib() : 0); }
     /// The cache as load() filled it, which is as large as resize_cache() makes it again.
-    int full_experts() const { return full_cached_; }
-    double full_gib() const { return double(full_bytes_) / double(1ull << 30); }
-    /// The VRAM the cache was last sized to leave free, and what is free now, in MiB.
+    int full_experts() const { return full_cached_ + (next_ ? next_->full_experts() : 0); }
+    double full_gib() const { return double(full_bytes_) / double(1ull << 30) + (next_ ? next_->full_gib() : 0); }
+    /// The VRAM the cache was last sized to leave free, and what is free now, in MiB: on several cards, the
+    /// first card's reserve and the least that one of them has free.
     int reserve_mib() const { return reserve_mib_; }
     int64_t vram_free_mib() const;
     /// The expert cache sized again, to leave `mib` of VRAM free (below 0: what load() left), and filled with the
@@ -270,8 +283,13 @@ protected:
     /// How many of the vocabulary's first tokens hold nearly every token an answer writes; 0: the order says
     /// nothing of that.
     virtual int guess_vocab() const { return 0; }
-    /// The layers' places in state_, and the attention's caches: a row a position.
+    /// The layers' places in state_, and the attention's caches: a row a position.  Only for the layers this
+    /// engine runs (runs()).
     virtual void alloc_caches() = 0;
+    /// What row_bytes(), save_rows() and load_rows() are for the layers this engine runs.
+    virtual size_t card_row_bytes() const = 0;
+    virtual void save_card_rows(int64_t first, int64_t n, uint8_t* dst) = 0;
+    virtual void load_card_rows(const uint8_t* src, int64_t from, int64_t count, int64_t first, int64_t n) = 0;
     /// The scratch of the architecture's own kernels, a fbuf() each.  Called twice: the first time only counts.
     virtual void assign_scratch() = 0;
     /// The widest input lin() gets, beside the model's width and the FFNs'.
@@ -326,6 +344,14 @@ protected:
     virtual const Names* meta_alias(const char* key) const { (void) key; return nullptr; }
 
     // ---- what it builds on ----
+    /// Whether layer il is this engine's: one of [lo_, hi_), or the draft block on the card that ends the model.
+    bool runs(int il) const { return il >= lo_ && (il < hi_ || hi_ == n_layer_); }
+    size_t card_state_bytes() const { return state_n_ * sizeof(float) + extra_bytes(); }
+    /// Every expert of this engine's layers is in its cache.
+    bool all_cached() const { return cached_ == n_moe_ * n_expert_; }
+    /// The rows a call of n tokens leaves in r_, to h_pass_ for the next card's engine, which goes on from them.
+    void hand_on(int64_t pos, int n);
+    float* pass_rows(int n);
     /// kGuessMat: quantized again to Q4_0, for a matrix only guesses are made with: a guess is checked, so a less
     /// exact one costs a wrong guess now and then and no token.
     enum Want { kF32, kFloatMat, kAnyMat, kGuessMat };
@@ -393,6 +419,8 @@ protected:
     void vmm_free(Mapped& m);
     void shrink_cache(size_t bytes);
     int grow_cache(size_t bytes);
+    void resize_card_cache(int mib);   ///< resize_cache() and mind_vram() for this engine's card
+    bool mind_card_vram();
     void held_is_budget();
     void settle_swaps();
 
@@ -400,8 +428,20 @@ protected:
     std::unique_ptr<Shards> gg_;
     std::unique_ptr<Shards> dg_;      ///< Options::draft_model, while the draft block is read from it
     const Shards* block_ = nullptr;   ///< the file the draft block is in: gg_ or dg_
-    std::unique_ptr<Workers> workers_;
+    std::shared_ptr<Workers> workers_;   ///< on several cards, one for all of them: they take turns
     int node_ = -1;
+    // A layer split (open()).  The layers of the model are [lo_, hi_) here, and the engine of the next card has
+    // the ones after.  A later card's engine reads its first layer's input from pass_, which the one before wrote:
+    // a row of the residual a position, from pass_at_.
+    int lo_ = 0, hi_ = 0;
+    int end_ = -1;                        ///< what open() asked for hi_; -1: the model's end
+    bool split_ = false;                  ///< one of several engines: a call sets its card first
+    std::unique_ptr<Engine> next_;
+    const float* pass_ = nullptr;
+    int64_t pass_at_ = 0;
+    float* h_pass_ = nullptr;             ///< pinned; h_pass_rows_ tokens' rows
+    int h_pass_rows_ = 0;
+    mutable Stats all_stats_;             ///< stats() of every card's engine together
     double node_share_ = 0;
     std::thread mapper_;                  ///< reads the experts' pages once after load, so they are mapped
     std::atomic<bool> map_quit_{false};

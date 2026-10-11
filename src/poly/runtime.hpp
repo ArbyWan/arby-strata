@@ -149,6 +149,11 @@ public:
         return it == where_.end() ? nullptr : it->second.t;
     }
     const uint8_t* data(const TensorInfo& t) const { return where_.at(t.name).file->tensor_data(t); }
+    /// f(tensor) for every tensor of the model, in no order.
+    template <class F>
+    void each(F&& f) const {
+        for (const auto& w : where_) f(*w.second.t);
+    }
     /// A tensor's byte count, after checking that its file holds that much.
     size_t payload(const TensorInfo& t) const {
         const GgufFile& g = *where_.at(t.name).file;
