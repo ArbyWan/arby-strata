@@ -49,9 +49,11 @@ struct Options {
     int stage_mib = 2048;         ///< the buffer the experts that are not cached pass through: by default about
                                   ///< what a layer of Q2_K experts leaves out of the cache, and never more than
                                   ///< a layer's experts take
-    int stage_ahead = 256;        ///< from this many tokens, a call routes to most of a layer's experts, and the
+    int stage_ahead = 1024;       ///< from this many tokens, a call routes to most of a layer's experts, and the
                                   ///< ones that are not cached start their copy before the layer has routed; in a
-                                  ///< read of several calls every call does; 0: never
+                                  ///< read of several calls and this many tokens every call does; 0: never.  Under
+                                  ///< it a call copies only the experts it routes to, which with 8 GB of VRAM was
+                                  ///< the faster of the two up to about 1,000 tokens
     int expert_swaps = 64;        ///< experts on their way into the cache at a time while an answer is written, each
                                   ///< to the slot of one the answer uses less; 0: the cache stays as it was loaded
     bool stay_near = true;        ///< with several NUMA nodes, keep the CPU threads on the one that holds the experts
@@ -172,8 +174,9 @@ public:
     const float* logits() const { return next_ ? next_->logits() : h_logits_; }
     /// Feed n tokens of a prompt, none of them a picture's row, as eval() without logits would in calls of
     /// max_rows(): the same tokens a call.  With experts outside the cache it is faster than those calls, the
-    /// more the more of them n is.  The result is the calls' own bit for bit, but for a call of fewer than
-    /// stage_ahead tokens beside others: its experts' sums are split as a larger call's, not as on its own.
+    /// more the more of them n is; under stage_ahead tokens it makes those calls.  The result is the calls' own
+    /// bit for bit, but for a call of fewer than stage_ahead tokens beside others: its experts' sums are split as a
+    /// larger call's, not as on its own.
     ///
     /// A mark is a place inside the read where the caller would have stopped between two calls: `at` of the
     /// read's tokens come before it.  The calls end there as they would have, and `state`, when it is not null,

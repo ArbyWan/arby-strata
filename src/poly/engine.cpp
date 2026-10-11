@@ -2321,7 +2321,9 @@ void Engine::layer(int il, int n) {
 // calls go through a layer one after the other before any goes on to the next, and the second one finds the
 // layer's experts where the first one's copy left them (moe_rows()).  A call's tokens meet what they met in a
 // call of their own, in the same order, so the result is eval()'s.  But a call under stage_ahead tokens takes
-// those experts too, which on its own it would not, and its sums are split as a larger call's.
+// those experts too, which on its own it would not, and its sums are split as a larger call's.  A read of fewer
+// than stage_ahead tokens is the calls themselves: the copy of every layer's experts took a second, where its
+// calls copy the experts they route to.
 //
 // All a call needs kept from one layer to the next is its rows of the residual.  r_ holds two calls' rows.  With
 // more calls, a call's rows go to host memory when the card is done with them and come back before the call's
@@ -2361,7 +2363,7 @@ bool Engine::read(const int32_t* tokens, int n, const Mark* marks, int n_marks,
         share = [&, to](int done, int of) { return (*asked)(lo_ * of + done * (to - lo_), n_layer_ * of); };
         return (const std::function<bool(int, int)>*) &share;
     };
-    if (n_calls == 1 || !mmq_ || all_cached()) {
+    if (n_calls == 1 || !mmq_ || all_cached() || n < opt_.stage_ahead) {
         turn = share_to(n_layer_);   // eval() takes the calls through the cards after this one
         for (int c = 0; c < n_calls; ++c) {
             const Call& call = calls_[(size_t) c];
