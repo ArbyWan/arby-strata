@@ -337,9 +337,11 @@ Engine::~Engine() {
 void* Engine::dmalloc(size_t bytes, const char* what) {
     void* p = nullptr;
     const cudaError_t e = cudaMalloc(&p, std::max<size_t>(bytes, 256));
-    if (e != cudaSuccess)
+    if (e != cudaSuccess) {
+        cudaGetLastError();   // as ck() does
         throw std::runtime_error("no VRAM for " + std::string(what) + " (" + std::to_string(bytes >> 20) +
                                  " MiB): " + cudaGetErrorString(e));
+    }
     dev_allocs_.push_back(p);
     return p;
 }
@@ -2052,6 +2054,7 @@ void* Engine::record(F&& work) {
     } catch (...) {
         recording_ = false;
         if (cudaStreamEndCapture(cs(st_), &g) == cudaSuccess && g) cudaGraphDestroy(g);
+        cudaGetLastError();   // a capture the failure broke does not end cleanly: the work's exception says why
         throw;
     }
     recording_ = false;
