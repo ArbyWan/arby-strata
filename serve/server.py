@@ -2976,7 +2976,7 @@ class Service:
                     old.unload()
             freed = self.free_vram_mib() if debug else None
             try:
-                engine, vision, sampling_defaults, effort_end = start_model(cfg, tok)
+                engine, vision, sampling_defaults, effort_end, _groups = start_model(cfg, tok)
             except (Exception, SystemExit) as e:
                 print(f"[strata] {target['id']} did not start ({e}); starting {old_name} again ...", flush=True)
                 try:
@@ -6249,7 +6249,8 @@ def load_tokenizer(tpath: Path):
 
 def start_model(cfg: dict, tok, lazy: bool = False):
     """A run config's engine, started (with `lazy`: left for the first request to start), and its vision encoder:
-    (engine, vision, sampling defaults, the engine's arguments for an effort at the end or None).  SystemExit for
+    (engine, vision, sampling defaults, the engine's arguments for an effort at the end or None, and the replica
+    card groups).  SystemExit for
     a config that cannot be used, RuntimeError for an engine that does not start."""
     vision = None
     env = child_env(cfg)
@@ -6305,7 +6306,7 @@ def start_model(cfg: dict, tok, lazy: bool = False):
                              linux_desktop()) if not groups else None
     if note:                                        # #560 #516: before --open starts a browser on that card
         print(note, flush=True)
-    return engine, vision, sampling_defaults, effort_end
+    return engine, vision, sampling_defaults, effort_end, groups
 def start_replicas(cfg: dict, groups: list[list[int]], exe: str, effort_end: list[str], lazy: bool):
     """Opt-in data-parallel replicas (serve/replicas.py): one StrataEngine per card group, each with its own cards, log
     and CPU cores, started together; the ReplicaEngine in front spreads the requests."""
@@ -6453,7 +6454,7 @@ def main() -> int:
     if a.engine == "strata":
         if not cfg:
             ap.error("--engine strata needs --config")
-        engine, vision, sampling_defaults, effort_end = start_model(cfg, tok, a.lazy or cfg.get("lazy_load") is True)
+        engine, vision, sampling_defaults, effort_end, groups = start_model(cfg, tok, a.lazy or cfg.get("lazy_load") is True)
     else:
         effort_end = None
         engine, vision, sampling_defaults = MockEngine(tok, a.script or [

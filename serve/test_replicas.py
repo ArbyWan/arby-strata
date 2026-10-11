@@ -218,5 +218,25 @@ class ReplicaService(unittest.TestCase):
         self.assertEqual(self.served()[1], 3)
 
 
+class StartModel(unittest.TestCase):
+    def test_start_model_returns_the_replica_groups(self):
+        """start_model hands the replica card groups back as its fifth value: main() and the model
+        switch unpack five (the Monitor reads every replica's cards, not just the first engine's)."""
+        import serve.server as server
+        with tempfile.TemporaryDirectory() as d:
+            script = Path(d) / "fake_strata.py"
+            script.write_text(FAKE_BATCH, encoding="utf-8")
+            real = server.subprocess.Popen
+            cfg = {"exe": "strata", "args": [], "gpu": [0, 1], "replicas": 2}
+            with mock.patch.object(server.subprocess, "Popen",
+                                   lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw)):
+                engine, vision, sampling_defaults, effort_end, groups = server.start_model(cfg, ByteTokenizer())
+            try:
+                self.assertEqual(groups, [[0], [1]])
+                self.assertIsInstance(engine, ReplicaEngine)
+            finally:
+                engine.unload()
+
+
 if __name__ == "__main__":
     unittest.main()
