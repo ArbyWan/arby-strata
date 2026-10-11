@@ -346,9 +346,14 @@ as fit. The last card also runs the output and the draft block, or Gemma 4's dra
 copies the rows of the tokens it read into pinned RAM, and the next card reads them from there: one row of the
 model's width a token, 8 KB for Qwen3.6. No NVLink or peer-to-peer access is needed.
 
-The cards take turns: while one runs its layers the others wait, so with no expert in VRAM two cards read a prompt
-no faster than one. What a split adds is VRAM: two cards hold more of the experts, and an expert on a card is not
-computed by the processor.
+A prompt read in several calls keeps the cards busy together when every routed expert is in VRAM, or when the
+prompt is shorter than `--stage-ahead` tokens: the next card runs its layers for a call on a thread of its own while
+this card runs the call after it. A longer prompt with experts outside VRAM is read a layer at a time for all its
+calls, so that each layer's experts are copied in once, and there the cards take turns. Having them overlap would
+mean reading the prompt in parts, which copies every layer's experts once a part, and the copy is most of the time
+such a read takes. An answer is written a token at a time, and the cards take turns on it too. So with no expert in
+VRAM two cards read a long prompt no faster than one. What a split adds there is VRAM: two cards hold more of the
+experts, and an expert on a card is not computed by the processor.
 
 Setup asks which cards as it does for Qwen3.8-Flash-Next (`--gpus 0,1`, or the list it shows) and writes
 `"gpu": [0, 1]` and `"layer_split": "auto"` into the config. With `"auto"` each card gets a share of the layers'
@@ -369,11 +374,14 @@ starts of each.
 | Qwen3.6 UD-Q3_K_M | Experts in VRAM | Reads the prompt | Writes |
 | --- | ---: | ---: | ---: |
 | one RTX 3080 | 4,606 of 10,496 | 1,570-1,700 tokens/s | 159-173 tokens/s |
-| both | 10,496 of 10,496 | 3,100-3,160 tokens/s | 219-221 tokens/s |
+| both | 10,496 of 10,496 | 3,430-3,520 tokens/s | 216-219 tokens/s |
 
-Gemma 4 UD-Q3_K_M in one start each: a prompt of 3,527 tokens at 2,190 tokens/s on one card and 3,090 on both,
-and writing at 178 and 189 tokens/s. One card already held 2,042 of its 3,840 experts, which were most of what an
-answer used.
+With the cards taking turns on the prompt, as they did before, both read it at 3,070-3,090 tokens/s in two starts
+of the same test, and wrote as fast.
+
+Gemma 4 UD-Q3_K_M: a prompt of 3,527 tokens at 2,190 tokens/s on one card in one start, and at 3,600 on both in
+two starts (3,110-3,160 with the cards taking turns); writing at 178 and 189 tokens/s in one start each. One card
+already held 2,042 of its 3,840 experts, which were most of what an answer used.
 
 With no expert in VRAM (`--vram-reserve-mib 20000`) and with every expert on the processor (`--no-gpu-experts`),
 both cards gave the same greedy tokens as one card, for Qwen3.6 and for Gemma 4, through a prompt read in several
@@ -399,5 +407,5 @@ the size asked for.
 Not done yet:
 
 - Only two cards under Linux have run it. Three cards and Windows were not tried.
-- The cards never work on a prompt at the same time. The other engine's chunk pipeline, `--pipeline-windows`,
-  `"split_skip_if_fits"` and its `STRATA_*` variables are not in strata-poly.
+- A long prompt with experts outside VRAM, and an answer, have the cards take turns (above). The other engine's
+  chunk pipeline, `--pipeline-windows`, `"split_skip_if_fits"` and its `STRATA_*` variables are not in strata-poly.

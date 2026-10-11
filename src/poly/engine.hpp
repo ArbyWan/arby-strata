@@ -352,8 +352,8 @@ protected:
     size_t card_state_bytes() const { return state_n_ * sizeof(float) + extra_bytes(); }
     /// Every expert of this engine's layers is in its cache.
     bool all_cached() const { return cached_ == n_moe_ * n_expert_; }
-    /// The rows a call of n tokens leaves in r_, to h_pass_ for the next card's engine, which goes on from them.
-    void hand_on(int64_t pos, int n);
+    /// The rows a call of n tokens leaves in r_, to h (pinned) for the next card's engine, which goes on from them.
+    void hand_on(int64_t pos, int n, float* h);
     float* pass_rows(int n);
     /// kGuessMat: quantized again to Q4_0, for a matrix only guesses are made with: a guess is checked, so a less
     /// exact one costs a wrong guess now and then and no token.

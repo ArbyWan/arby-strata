@@ -106,6 +106,7 @@ void Workers::run(int n, const std::function<void(int)>& fn) {
         for (int i = 0; i < n; ++i) fn(i);
         return;
     }
+    const std::lock_guard<std::mutex> one(one_);
     Batch b;
     b.fn = &fn;
     b.n = n;

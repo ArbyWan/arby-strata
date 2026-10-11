@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <numeric>
 #include <stdexcept>
@@ -200,8 +201,8 @@ float largest(const float* x, int n) {
     return best;
 }
 
-// The CUDA calls of a card's engine go to its card: a split's engines share the caller's thread, and the card is
-// the thread's.  Back to the caller's card at the end.  One engine alone changes nothing.
+// The CUDA calls of a card's engine go to its card: a split's engines share the caller's thread (but in read()),
+// and the card is the thread's.  Back to the caller's card at the end.  One engine alone changes nothing.
 class OnCard {
 public:
     OnCard(int device, bool split) : split_(split) {
@@ -218,6 +219,34 @@ public:
 private:
     bool split_;
     int was_ = 0;
+};
+
+// Work on a thread of its own, whose exception wait() throws.  Going out of scope it waits and drops the exception.
+class Behind {
+public:
+    Behind() = default;
+    Behind(const Behind&) = delete;
+    Behind& operator=(const Behind&) = delete;
+    ~Behind() {
+        if (th_.joinable()) th_.join();
+    }
+    void go(std::function<void()> work) {
+        th_ = std::thread([this, work = std::move(work)] {
+            try {
+                work();
+            } catch (...) {
+                err_ = std::current_exception();
+            }
+        });
+    }
+    void wait() {
+        if (th_.joinable()) th_.join();
+        if (err_) std::rethrow_exception(std::exchange(err_, nullptr));
+    }
+
+private:
+    std::thread th_;
+    std::exception_ptr err_;
 };
 
 // The first layer of each card's share of n_layer layers, for Options::layer_split on `cards` cards; empty: no
@@ -2295,8 +2324,7 @@ float* Engine::pass_rows(int n) {
 }
 
 // The n rows of the residual a call from `pos` leaves in r_, to the next card, which reads them for its layers.
-void Engine::hand_on(int64_t pos, int n) {
-    float* h = pass_rows(n);
+void Engine::hand_on(int64_t pos, int n, float* h) {
     ck(cudaMemcpyAsync(h, r_, (size_t) n * streams() * n_embd_ * sizeof(float), cudaMemcpyDeviceToHost, cs(st_)),
        "the next card");
     ck(cudaStreamSynchronize(cs(st_)), "the next card");
@@ -2308,7 +2336,7 @@ void Engine::eval(const int32_t* tokens, int n, bool want_logits) {
     OnCard here(device_, split_);
     run(tokens, n);
     if (next_) {
-        hand_on(pos_, n);
+        hand_on(pos_, n, pass_rows(n));
         next_->eval(tokens, n, want_logits);
         pos_ += n;
         stats_.tokens += n;
@@ -2407,12 +2435,31 @@ bool Engine::read(const int32_t* tokens, int n, const Mark* marks, int n_marks,
     };
     if (n_calls == 1 || !mmq_ || all_cached() || n < opt_.stage_ahead) {
         turn = share_to(n_layer_);   // eval() takes the calls through the cards after this one
+        // On several cards the next one takes a call on a thread of its own, while this one runs the call after
+        // it.  Each card runs the calls as eval() does, in the same order.
+        Behind behind;
         for (int c = 0; c < n_calls; ++c) {
             const Call& call = calls_[(size_t) c];
-            eval(tokens + call.at, call.m, false);
-            if (call.mark >= 0 && marks[call.mark].state) save_state(marks[call.mark].state);
-            if (turn && c + 1 < n_calls && !(*turn)(c + 1, n_calls)) return false;
+            if (next_) {
+                run(tokens + call.at, call.m);
+                behind.wait();
+                hand_on(pos_, call.m, pass_rows(call.m));
+                behind.go([this, t = tokens + call.at, m = call.m] { next_->eval(t, m, false); });
+                pos_ += call.m;
+                stats_.tokens += call.m;
+            } else {
+                eval(tokens + call.at, call.m, false);
+            }
+            if (call.mark >= 0 && marks[call.mark].state) {
+                behind.wait();
+                save_state(marks[call.mark].state);
+            }
+            if (turn && c + 1 < n_calls && !(*turn)(c + 1, n_calls)) {
+                behind.wait();
+                return false;
+            }
         }
+        behind.wait();
         return true;
     }
     turn = share_to(hi_);
@@ -2583,7 +2630,7 @@ void Engine::window(const int32_t* tokens, int t) {
     snap_bits_ = 0;
     std::copy(tokens, tokens + t, win_tok_);
     if (next_) {   // a card's way is timed by its own layers
-        hand_on(pos_, t);
+        hand_on(pos_, t, pass_rows(t));
         if (timed && !recorded_) took_way(t, ms_since(t0));
         recorded_ = recorded_ || recorded;
         win_ = t;
