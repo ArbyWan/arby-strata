@@ -141,5 +141,35 @@ class SettingsLine(unittest.TestCase):
         self.assertIn("--vram-reserve-mib 2048", text)
 
 
+class TailSkip(unittest.TestCase):
+    """A Qwen3.6 config from before its family got "tail_skip" gets --tail-skip on update, once the engine knows it."""
+
+    def upgraded(self, name, version, args=()):
+        with tempfile.TemporaryDirectory() as d:
+            eng = Path(d) / "engine-poly"
+            eng.mkdir()
+            (eng / "BUILD.json").write_text(json.dumps({"version": version}), encoding="utf-8")
+            p = Path(d) / "strata-x.json"
+            cfg = {"model_name": name, "exe": str(eng / setup.POLY_EXE), "args": ["--model", "m.gguf", *args]}
+            p.write_text(json.dumps(cfg), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                setup.poly_tail_skip(cfg, p)
+            return json.loads(p.read_text(encoding="utf-8"))["args"]
+
+    def test_qwen36_gets_it(self):
+        self.assertEqual(self.upgraded("qwen3.6-35b-a3b-ud-q2_k_xl", "0.1.42")[-2:], ["--tail-skip", "6"])
+
+    def test_an_older_engine_or_another_family_does_not(self):
+        for name, version in (("qwen3.6-35b-a3b-ud-q3_k_m", "0.1.41"), ("ornith-1.5-35b-a3b-apex-i-compact", "0.1.42"),
+                              ("gemma-4-26b-a4b-ud-q3_k_m", "0.1.42")):
+            with self.subTest(name=name, version=version):
+                self.assertNotIn("--tail-skip", self.upgraded(name, version))
+
+    def test_a_value_the_user_set_stays(self):
+        args = self.upgraded("qwen3.6-35b-a3b-ud-q3_k_m", "0.1.42", ["--tail-skip", "0"])
+        self.assertEqual(args.count("--tail-skip"), 1)
+        self.assertEqual(args[-1], "0")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4459,6 +4459,7 @@ def update_install(have: list, a) -> int:
         cfg = upgrade_config(cfg_path, json.loads(cfg_path.read_text(encoding="utf-8-sig")))
         if poly_config(cfg):
             update_poly_engine(cfg, cfg_path=cfg_path)
+            poly_tail_skip(cfg, cfg_path)
         if "--mtp" in cfg["args"][:-1]:
             refresh_draft_vocab(Path(cfg["args"][cfg["args"].index("--mtp") + 1]), cfg.get("draft_vocab", "cjk"))
         if cfg.get("backend") == "hip" and WIN:
@@ -4510,6 +4511,7 @@ def start(cfg_path: Path, port: int | None, gpu: int | list | None = None, open_
             warn(f"{cfg.get('model_name', 'this model')} runs on one GPU: GPU {gpu[0]} alone")
             gpu = gpu[0]
         update_poly_engine(cfg, yes, cfg_path)
+        poly_tail_skip(cfg, cfg_path)
     keep = {k: v for k, v in (keep or {}).items() if v is not None}
     reserve = keep.pop("vram_reserve_mib", None)       # #493: an engine argument, kept in the config's args
     if reserve is not None:
@@ -5219,6 +5221,21 @@ def update_poly_engine(cfg: dict, yes=False, cfg_path: Path | None = None) -> No
             ok(f"this install's engine is {POLY_EXE} now (it was {OLD_POLY_EXE}); {OLD_ENGINE_POLY_DIR}/ can be deleted")
     except (Exception, SystemExit) as e:
         warn(f"could not update strata-poly{'' if isinstance(e, SystemExit) else f' ({e})'}: starting the installed one")
+
+
+def poly_tail_skip(cfg: dict, cfg_path: Path | None = None) -> None:
+    """A config written before its family got "tail_skip" gets the option, once the installed engine knows it (0.1.42).
+    A config that has --tail-skip, with any value, keeps it."""
+    a = cfg["args"]
+    fam = next((f for f in FAMILIES.values() if f.get("tail_skip")
+                and str(cfg.get("model_name", "")).startswith(f["name"] + "-")), None)
+    if fam is None or "--tail-skip" in a or engine_version(Path(cfg["exe"])) < (0, 1, 42):
+        return
+    a += ["--tail-skip", str(fam["tail_skip"])]
+    ok(f"{fam['title']}: --tail-skip {fam['tail_skip']}, a few experts outside VRAM are left out (faster on a small "
+       "card, the answers move a little; STRATA_ROUTE_TAIL_SKIP=0 turns it off)")
+    if cfg_path is not None:
+        write_config(cfg_path, cfg)
 
 
 def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, adopted) -> int:
