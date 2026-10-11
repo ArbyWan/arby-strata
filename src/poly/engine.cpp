@@ -678,16 +678,16 @@ int64_t Engine::vram_free_mib() const {
 // number from every layer.
 //
 // The cache takes what is free but for a reserve.  What the engine allocates after it comes out of the reserve:
-// the recorded launches and a library's work space were 80 to 130 MiB on an 8 GB card.  Unless the caller names
-// it, the reserve is a sixteenth of the card, between 512 and 1,024 MiB.  Under Windows a card that is asked for
-// more than it has does not refuse: memory moves to the system's, and an answer came at 13 tokens/s where it
-// comes at 30.
+// the recorded launches and a library's work space took 180 MiB of an 8 GB card in the first request.  Unless the
+// caller names it, the reserve is a thirty-second of the card, between 256 and 768 MiB (mind_vram() keeps what is
+// free near half of it later).  Under Windows a card that is asked for more than it has does not refuse: memory
+// moves to the system's, and an answer came at 13 tokens/s where it comes at 30.
 void Engine::fill_expert_cache() {
     if (!opt_.gpu_experts || n_moe_ == 0) return;
     size_t free_b = 0, total_b = 0;
     ck(cudaMemGetInfo(&free_b, &total_b), "cudaMemGetInfo");
     reserve_mib_ = opt_.vram_reserve_mib >= 0 ? opt_.vram_reserve_mib
-                                              : (int) std::clamp<size_t>(total_b >> 24, 512, 1024);
+                                              : (int) std::clamp<size_t>(total_b >> 25, 256, 768);
     const size_t reserve = size_t(reserve_mib_) << 20;
     if (free_b <= reserve) return;
 
@@ -726,11 +726,12 @@ void Engine::fill_expert_cache() {
                      [](const Cand& a, const Cand& b) { return a.value != b.value ? a.value > b.value : a.e < b.e; });
 
     n_trade_ = (int) sizes.size();
-    // sized again (resize_cache()), it is no larger than load() made it
-    const size_t arena = std::min({all, free_b - reserve, full_bytes_ > 0 ? full_bytes_ : all});
+    // sized again (resize_cache()), it is no larger than load() made it, or than its addresses with VMM
+    const size_t most = vmm_ ? std::min(all, total_b) : full_bytes_ > 0 ? full_bytes_ : all;
+    const size_t arena = std::min({all, free_b - reserve, arena_.base ? arena_.reserved - 256 : most});
     if (arena == 0) return;
-    if (vmm_) {   // in pieces, so that it can give some up to the attention caches (shrink_cache())
-        if (!arena_.base) vmm_reserve(arena_, arena + 256);
+    if (vmm_) {   // in pieces, so that it can give some up to the attention caches (shrink_cache()) and grow
+        if (!arena_.base) vmm_reserve(arena_, most + 256);   // addresses only: grow_cache() maps more of them
         vmm_map(arena_, arena + 256, kArenaPiece, "the expert cache");
         exp_ = (uint8_t*) arena_.base;
         budget_ = free_b - reserve;   // when it holds every expert, what is left over goes to the rows first
@@ -817,13 +818,94 @@ void Engine::resize_cache(int mib) {
     start_swaps();
 }
 
-// The launches the engine records as it runs take VRAM after the cache was sized: 200 MiB of an 8 GB card over
-// prompts of 25 to 31,000 tokens.  That is what the reserve is for, and when most of it is gone the cache gives
-// some back, before the card has nothing free.
+// The launches the engine records as it runs take VRAM after the cache was sized: 180 to 200 MiB of an 8 GB card,
+// most of it in the first request.  That is what the reserve is for.  From the second request on the cache keeps
+// `keep` free: the reserve the caller named, else half the one it was filled for and 128 MiB at least.  It gives
+// back what another program took, its least used experts, and takes VRAM that came free again for the most used
+// experts it lacks.  Filled again whole it went down with every program that held VRAM a moment, and never came
+// back up.
 bool Engine::mind_vram() {
-    if (!exp_ || reserve_mib_ <= 0 || vram_free_mib() >= reserve_mib_ / 4) return false;
-    resize_cache(opt_.vram_reserve_mib);
-    return true;
+    if (!exp_ || reserve_mib_ <= 0) return false;
+    const int64_t free = vram_free_mib();
+    if (!vmm_) {   // a cache in one allocation is filled again
+        if (free >= reserve_mib_ / 4) return false;
+        resize_cache(opt_.vram_reserve_mib);
+        return true;
+    }
+    if (minds_++ == 0) return false;   // nothing is recorded before the first request
+    const int64_t keep = opt_.vram_reserve_mib >= 0 ? reserve_mib_ : std::max(reserve_mib_ / 2, 128);
+    if (free < keep / 2) {
+        shrink_cache(size_t(keep - free) << 20);
+        held_is_budget();
+        return true;
+    }
+    return free >= keep + (int64_t) (kArenaPiece >> 20) && grow_cache(size_t(free - keep) << 20) > 0;
+}
+
+// The cache's VRAM and the attention caches' as they are now become the budget cover() keeps them to.
+void Engine::held_is_budget() {
+    budget_ = arena_.mapped;
+    for (const Kv& k : kv_) budget_ += k.mapped;
+}
+
+// `bytes` more VRAM at the cache's end, for the experts it lacks that are used most (use per byte, as
+// fill_expert_cache() chooses), side by side by layer.  VRAM the card does not give is not an error: the cache
+// keeps what was mapped.  Returns the experts it took.
+int Engine::grow_cache(size_t bytes) {
+    if (!vmm_ || !exp_) return 0;
+    settle_swaps();
+    ck(cudaStreamSynchronize(cs(st_)), "the expert cache");
+    if (swap_st_) ck(cudaStreamSynchronize(cs(swap_st_)), "the expert cache");
+    struct Cand {
+        int il, e;
+        double value;
+    };
+    std::vector<Cand> cands;
+    for (int il = 0; il < (int) layers_.size(); ++il) {
+        const Layer& L = layers_[(size_t) il];
+        if (L.trade < 0) continue;
+        for (int e = 0; e < n_expert_; ++e) {
+            const size_t i = (size_t) il * n_expert_ + e;
+            if (L.slot[(size_t) e] || (!coming_.empty() && coming_[i])) continue;
+            const double used = (double) ((prior_.empty() ? 0 : prior_[i]) + use_[i]);
+            cands.push_back({il, e, used / (double) L.slot_bytes});
+        }
+    }
+    if (cands.empty()) return 0;
+    try {
+        vmm_map(arena_, std::min(arena_.mapped + bytes, arena_.reserved), kArenaPiece, "the expert cache");
+    } catch (const std::runtime_error&) {
+    }
+    if (arena_.mapped < exp_at_ + kTail) return 0;
+    ck(cudaMemset(exp_ + exp_at_, 0, arena_.mapped - exp_at_), "the expert cache");   // the new slots' tails
+    std::stable_sort(cands.begin(), cands.end(),
+                     [](const Cand& a, const Cand& b) { return a.value != b.value ? a.value > b.value : a.e < b.e; });
+    std::vector<Cand> taken;
+    size_t room = arena_.mapped - kTail - exp_at_;
+    for (const Cand& c : cands) {
+        const size_t n = layers_[(size_t) c.il].slot_bytes;
+        if (n > room) continue;
+        room -= n;
+        taken.push_back(c);
+    }
+    std::sort(taken.begin(), taken.end(),
+              [](const Cand& a, const Cand& b) { return a.il != b.il ? a.il < b.il : a.e < b.e; });
+    for (const Cand& c : taken) {
+        Layer& L = layers_[(size_t) c.il];
+        uint8_t* s = exp_ + exp_at_;
+        exp_at_ += L.slot_bytes;
+        const size_t e = (size_t) c.e;
+        ck(cudaMemcpy(s, L.exp_gate + e * L.gu_stride, L.gu_bytes, cudaMemcpyHostToDevice), "expert upload");
+        ck(cudaMemcpy(s + L.gu_bytes, L.exp_up + e * L.gu_stride, L.gu_bytes, cudaMemcpyHostToDevice),
+           "expert upload");
+        ck(cudaMemcpy(s + 2 * L.gu_bytes, L.exp_down + e * L.d_bytes, L.d_bytes, cudaMemcpyHostToDevice),
+           "expert upload");
+        L.slot[e] = s;
+        ++cached_;
+    }
+    staged_il_ = -1;
+    held_is_budget();
+    return (int) taken.size();
 }
 
 // What a layer copies to the staging buffer ahead of its routing: the experts outside the cache, the most used

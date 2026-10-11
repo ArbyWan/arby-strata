@@ -1047,6 +1047,10 @@ picture in its place, and a prompt without pictures after them.
 | | the same after 7,709 tokens, the engine started from a shell | 48 to 50 in four runs of six | 66 to 72 |
 | A checkpoint where the prompt's last turn begins, the place sent by the server | Qwen3.6 on the laptop under Claude Code, one task: tokens read by a request after the first, on average | 1,442 over six | 399 over nine |
 | | the same: seconds reading such a request, on average | 1.9 | 1.5 |
+| The reserve a thirty-second of the card, 256 to 768 MiB, half of it kept from the second request on, and VRAM that comes free taken back | Qwen3.6 UD-Q3_K_M on the laptop: experts in VRAM at a start | 2,449 | 2,642 |
+| | the same, writing after a 31,337-token prompt | 77.7 | 80.6 |
+| | Qwen3.6 UD-Q3_K_M on an RTX 3080 under Linux: experts in VRAM once 2 GiB another program held came free | 2,880 | 4,368 |
+| | the same, writing | 159 | 169 to 177 |
 
 All but Gemma 4's draft model and GLM's recurrent step, indexer and selection are in the shared runtime or its
 kernels, so every architecture with that kind of layer has them. Gemma 4's row for the routing has the two
@@ -1363,10 +1367,15 @@ allocates later, the launches it records as it runs: 200 MiB over prompts of 25 
 card. It cannot be nothing. Under Windows a card that is asked for more than it has moves memory to the system's
 and goes on: started with a reserve of 96 MiB the engine had no VRAM free after a 31,000-token prompt, read it at
 1,108 tokens/s where it reads at 1,387 to 1,450 and wrote after it at 13 where it writes at 28 to 31. The reserve
-is now a sixteenth of the card, between 512 and 1,024 MiB: 512 on 8 GB, and what it was from 16 GB on. The engine
-looks before each request, and when less than a quarter of the reserve is free it sizes the cache again. The
-server's `POST /v1/vram` does the same on request ([DETAILS.md](DETAILS.md)): the cache is emptied and filled
-for another reserve with the experts used most so far, in 11 ms to give up 1.6 GiB and 262 ms to take it back.
+became a sixteenth of the card, between 512 and 1,024 MiB, and then a thirty-second, between 256 and 768: the
+launches take 180 MiB of the 8 GB card, most of it in the first request, and with 256 the laptop had 159 MiB free
+with Qwen3.6 at its fullest, against 418 with 512, and no memory moved to the system's. From the second request on
+the engine keeps half the reserve free, 128 MiB at least. It looks before each request: when another program has
+taken VRAM and less than half of that is free, the cache gives up its least used experts, and when 64 MiB more
+than that has come free, it takes the most used experts it lacks. Sized again whole, as it was, it went down with
+every program that held VRAM a moment and never came back up. The server's `POST /v1/vram` still sizes it again
+whole ([DETAILS.md](DETAILS.md)): the cache is emptied and filled for another reserve with the experts used most
+so far, in 11 ms to give up 1.6 GiB and 262 ms to take it back.
 
 A read took up to 8,192 tokens, and each read copies every layer's experts outside the cache to the card once:
 four times for a 31,000-token prompt, on a card that has four fifths of the experts outside its cache. A read is

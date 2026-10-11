@@ -238,11 +238,11 @@ public:
     int reserve_mib() const { return reserve_mib_; }
     int64_t vram_free_mib() const;
     /// The expert cache sized again, to leave `mib` of VRAM free (below 0: what load() left), and filled with the
-    /// experts used most so far.  It gets no larger than load() made it.  Between calls that feed tokens: the
-    /// experts it gives up are computed on the CPU from then on, as any expert outside it.
+    /// experts used most so far.  Without VMM it gets no larger than load() made it.  Between calls that feed
+    /// tokens: the experts it gives up are computed on the CPU from then on, as any expert outside it.
     void resize_cache(int mib);
-    /// Between requests: sizes the cache again when what the engine allocated since has left less than a quarter
-    /// of the reserve free.  True when it did.
+    /// Between requests: the cache gives up VRAM when little is free, and takes VRAM that came free (see the
+    /// definition for how much stays free).  True when it changed.
     bool mind_vram();
     void save_profile() const;
 
@@ -392,6 +392,8 @@ protected:
     void vmm_unmap(Mapped& m, size_t bytes);
     void vmm_free(Mapped& m);
     void shrink_cache(size_t bytes);
+    int grow_cache(size_t bytes);
+    void held_is_budget();
     void settle_swaps();
 
     Options opt_;
@@ -460,6 +462,7 @@ protected:
     size_t budget_ = 0;          ///< their VRAM and the expert cache's together, as the cache was filled
     int asked_reserve_mib_ = -1; ///< Options::vram_reserve_mib as load() got it
     int reserve_mib_ = 0;        ///< what the cache was sized to leave free
+    int minds_ = 0;              ///< mind_vram()'s calls
     int full_cached_ = 0;        ///< the cache as load() filled it: its experts and their bytes
     size_t full_bytes_ = 0;
     float* scratch_ = nullptr;

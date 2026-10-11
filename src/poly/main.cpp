@@ -630,9 +630,9 @@ int serve(Session& ss) {
         try {
             const int had = engine.cached_experts();
             if (engine.mind_vram())
-                std::fprintf(stderr, "strata-poly: the card had little VRAM left: the expert cache %d -> %d experts, "
-                                     "%lld MiB free now\n",
-                             had, engine.cached_experts(), (long long) engine.vram_free_mib());
+                std::fprintf(stderr, "strata-poly: the expert cache %d -> %d experts (%.2f GiB) for the VRAM free "
+                                     "now, %lld MiB left\n",
+                             had, engine.cached_experts(), engine.cached_gib(), (long long) engine.vram_free_mib());
             r = ss.generate(
                 ids, pictures, pad, turn_at, max_new, s, lines.stop,
                 [](int32_t t) {
@@ -730,8 +730,8 @@ void usage() {
                  "usage: strata-poly --model FILE.gguf (--serve | --tokens ID,ID,... [--max-new N])\n"
                  "  --max-context N        tokens the attention caches hold (default 8192)\n"
                  "  --threads N            CPU threads for the experts that are not in VRAM (default: all usable)\n"
-                 "  --vram-reserve-mib N   VRAM left free beside the expert cache (default: a sixteenth of the\n"
-                 "                         card, 512 to 1024)\n"
+                 "  --vram-reserve-mib N   VRAM left free beside the expert cache (default: a thirty-second of\n"
+                 "                         the card, 256 to 768, and half of that after the first request)\n"
                  "  --expert-profile FILE  expert use counts: read to choose the cached experts, written back on\n"
                  "                         exit and by --serve after an answer, every 10 s at most\n"
                  "  --no-gpu-experts       keep every routed expert on the CPU\n"
