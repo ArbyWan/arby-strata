@@ -394,7 +394,7 @@ class Main(unittest.TestCase):
         self.assertEqual(self.built, [])
 
     def test_windows_is_not_asked_for_a_family_that_ran_there(self):
-        for family in ("qwen36", "ornith", "gemma4"):
+        for family in ("qwen36", "ornith", "gemma4", "tiel"):
             with self.subTest(family):
                 self.built = []
                 code, out, cfg = self.main(win=True, family=family, ram=32.0, vram=8.0)

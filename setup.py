@@ -81,6 +81,7 @@ HF_REVISIONS = {
     "unsloth/Qwen3.6-35B-A3B-MTP-GGUF": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",                    # 2026-10-05
     "mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF": "4c326713c52d13fdb40983a2a09a46cca8e88739",             # 2026-10-05
     "unsloth/gemma-4-26B-A4B-it-GGUF": "c099eb48e663fd284577b04978a94ffccb261841",                     # 2026-10-05
+    "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP": "bbe9e566f39e4fc9652ac66b71968289a03c520a",        # 2026-09-10
 }
 
 
@@ -452,6 +453,32 @@ FAMILIES = {
                           (461766816, "6326fb9f5e487aa8dcdd313a091e3c67724cb2a666ec3b7d2895b5b26d93ed1b"),
                           "mmproj-F16.gguf":
                           (1193058784, "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f")}},
+    "tiel": {"title": "Tiel Coder 35B-A3B", "by": "peculiar-ragdoll, from ornith-ai's Ornith 1.5",
+             "about": "Ornith 1.5 quantized for coding, with the Sharp chat template; a 17 GB file, ~21 GB of RAM "
+                      "beside an 8 GB card; a smaller and a larger size too",
+             "hf": hf("peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP"), "file": "Tiel-Coder-35B-A3B-MTP-{q}.gguf",
+             "shards": 1, "tag": "tiel-", "name": "tiel-coder-35b-a3b", "engine": "poly", "vision": True,
+             "experimental": True, "windows": True, "ran_on_gb": 8, "row_bytes": 26624,
+             "mmproj_hf": hf("peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP"), "mmproj": "mmproj-BF16.gguf",
+             "vision_gb": 0.9, "vision_vram_gb": 1.6,
+             "models": {"UD-Q3_K_XL": {"about": "3-bit i-quant experts, 4-bit where they write; its draft block in "
+                                                "the file",
+                                       "download_gb": 17.2, "ram_gb": 21, "arena_gb": 14.6,
+                                       "vram_beside_gb": 4.7, "draft": "own"},
+                        "UD-IQ3_XXS": {"about": "2-bit i-quant experts, 3-bit where they write: the least RAM",
+                                       "download_gb": 13.6, "ram_gb": 18, "arena_gb": 11.5,
+                                       "vram_beside_gb": 4.4, "draft": "own"},
+                        "UD-Q4_K_XL": {"about": "4-bit experts, 5- and 6-bit where they write",
+                                       "download_gb": 22.7, "ram_gb": 27, "arena_gb": 20.0,
+                                       "vram_beside_gb": 4.8, "draft": "own"}},
+             "sha256": {"Tiel-Coder-35B-A3B-MTP-UD-Q3_K_XL.gguf":
+                        (17234935648, "46b8fbeba6e888c9a101e49cc717baa9bb8dfa0d203ec7b3185288159543ec14"),
+                        "Tiel-Coder-35B-A3B-MTP-UD-IQ3_XXS.gguf":
+                        (13600579424, "a4d8ffc7f030466c67db289543871a8f9e6d5340241b300c09fbaf16642273ca"),
+                        "Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf":
+                        (22749880160, "54f46c4ce544c225122b0f066c2336f10404be7bc53b0cc94d1dbbc5e826bdc1"),
+                        "mmproj-BF16.gguf":
+                        (902822016, "d9ce31026d1cb1f3f8d5152e2e2a014d9d2b302b6c93a7dc07bb0a0487f52837")}},
 }
 MMPROJ = "mmproj-Qwen3.8-Flash-Next-BF16.gguf"
 # EXPERIMENTAL, off by default (setup asks): a control vector shipped with the repository, see its README

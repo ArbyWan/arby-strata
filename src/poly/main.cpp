@@ -747,7 +747,7 @@ void usage() {
                  "  --draft-model FILE     a file of the same model to take that block from, when --model has none;\n"
                  "                         for Gemma 4, its draft model (a gemma4-assistant file)\n"
                  "  --draft-vocab N        the block guesses among the vocabulary's first N tokens (default:\n"
-                 "                         131072 for Qwen3.6 and Ornith, all of it for the others; 0 = all)\n"
+                 "                         131072 for Qwen3.6, Ornith and Tiel, all of it for the others; 0 = all)\n"
                  "  --no-graphs            launch a token's kernels one by one (default: a layer's are recorded once\n"
                  "                         as a CUDA graph and replayed)\n"
                  "  --kv-whole             give the attention caches VRAM for the whole context at load (default: as\n"
