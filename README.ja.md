@@ -467,7 +467,8 @@ GLM 5.3 Flash のほかの量子化にはまだ対応していません：[足�
 - **アプリやコーディングエージェントから：** 「OpenAI-compatible」プロバイダーを追加し、ベース URL に
   **`http://127.0.0.1:8080/v1`** を指定します。API キーとモデル名は何でもかまいません。
   - Anthropic の API を使うアプリ：`http://127.0.0.1:8080/v1/messages`（Claude Code：
-    `ANTHROPIC_BASE_URL=http://127.0.0.1:8080`）。
+    `ANTHROPIC_BASE_URL=http://127.0.0.1:8080`、`strata-<model>.json` に `"fit_max_tokens": true`
+    （[理由](docs/FAQ.md#can-i-use-it-with-claude-code-codex-or-other-apps)））。
   - Codex CLI など OpenAI Responses API を使うアプリ：`/v1/responses`
     （[設定方法](docs/DETAILS.md#the-responses-api-and-codex-cli)）。
 - **思考（Thinking）：** チャットのメニュー、またはアプリの「reasoning effort」で **off、low、medium、high** を選びます。

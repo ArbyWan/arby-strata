@@ -122,9 +122,12 @@ Yes. It serves OpenAI- and Anthropic-compatible APIs on localhost, with tool cal
 `ANTHROPIC_BASE_URL=http://127.0.0.1:8080`. Codex CLI uses the Responses API at `/v1/responses`
 ([setup](DETAILS.md#the-responses-api-and-codex-cli)).
 
-For Claude Code, also add `"anthropic_thinking": "on_request"` to `strata-<model>.json` and restart. Claude Code
-first asks for a session title, and without the setting the model thinks that over before it starts on your task:
-17 s with Qwen3.6 on an 8 GB laptop ([more](DETAILS.md#using-it)). With `"warm_start": true` as well, the server
+For Claude Code, also add `"anthropic_thinking": "on_request"` and `"fit_max_tokens": true` to
+`strata-<model>.json` and restart. Claude Code first asks for a session title, and without the first setting the
+model thinks that over before it starts on your task: 17 s with Qwen3.6 on an 8 GB laptop
+([more](DETAILS.md#using-it)). The second one it needs with the 32K context setup suggests: Claude Code asks for
+32,000 tokens of room for the answer in every request, and the server refuses a request when the prompt leaves less
+than that. With the setting the server gives it the room that is left. With `"warm_start": true` as well, the server
 keeps Claude Code's system prompt and tool list and reads them when it starts, so the first request after a restart
 reads only the rest: 2.9 s instead of 9.9 s in a test.
 

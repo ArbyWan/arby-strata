@@ -475,7 +475,8 @@ Os seis modelos são usados do mesmo jeito: o mesmo app, a mesma API.
 - **Seus apps e agentes de programação:** adicione um provedor "OpenAI-compatible" com a URL base
   **`http://127.0.0.1:8080/v1`**. Qualquer chave de API e qualquer nome de modelo funcionam.
   - Apps que usam a API da Anthropic: `http://127.0.0.1:8080/v1/messages` (Claude Code:
-    `ANTHROPIC_BASE_URL=http://127.0.0.1:8080`).
+    `ANTHROPIC_BASE_URL=http://127.0.0.1:8080`, e `"fit_max_tokens": true` em `strata-<model>.json`
+    ([por quê](docs/FAQ.md#can-i-use-it-with-claude-code-codex-or-other-apps))).
   - Codex CLI e outros apps que usam a OpenAI Responses API: `/v1/responses`
     ([configuração](docs/DETAILS.md#the-responses-api-and-codex-cli)).
 - **Raciocínio:** escolha **off, low, medium ou high** no menu do chat ou no "reasoning effort" do seu app. Off é o

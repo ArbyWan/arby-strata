@@ -854,7 +854,9 @@ print(r.choices[0].message.content)
   `"reasoning_budget_tokens": N` to `strata-<model>.json` (see above).
 - **Claude Code** (PolyStrata 0.1.17 or newer): set `ANTHROPIC_BASE_URL=http://127.0.0.1:8080` and
   `ANTHROPIC_MODEL` to a Claude model name it knows (it refuses names it doesn't; PolyStrata ignores the name), plus any
-  `ANTHROPIC_AUTH_TOKEN` (or your `api_key`, if you set one).
+  `ANTHROPIC_AUTH_TOKEN` (or your `api_key`, if you set one). It asks for 32,000 tokens of answer in every request,
+  more than a 32K context leaves beside its prompt: add `"fit_max_tokens": true` to `strata-<model>.json` (see
+  **Context** below).
 - **Codex CLI** (0.1.39): see [the Responses API](#the-responses-api-and-codex-cli) below.
 - **Context.** Chosen in setup (8K-262K). Requests longer than that are refused, never silently cut. A request whose
   `max_tokens` would run past the context is refused too (400); agents that always ask for their full output cap
