@@ -54,6 +54,9 @@ struct Options {
                                   ///< read of several calls and this many tokens every call does; 0: never.  Under
                                   ///< it a call copies only the experts it routes to, which with 8 GB of VRAM was
                                   ///< the faster of the two up to about 1,000 tokens
+    float cpu_share = -1;         ///< of the experts outside VRAM that such a call routes to, the share the CPU
+                                  ///< computes while the others are copied: the ones the fewest tokens chose;
+                                  ///< below 0: as the two took the time between them; 0: none
     int expert_swaps = 64;        ///< experts on their way into the cache at a time while an answer is written, each
                                   ///< to the slot of one the answer uses less; 0: the cache stays as it was loaded
     bool stay_near = true;        ///< with several NUMA nodes, keep the CPU threads on the one that holds the experts
@@ -389,7 +392,7 @@ protected:
     template <class F>
     void* record(F&& work);
     void moe_rows(Layer& L, int il, int n);
-    void stage(const Layer& L, const int32_t* experts, int m, void* stream);
+    void stage(const Layer& L, const int32_t* experts, int m, void* stream, bool alone = false);
     void mind_memory();
     void follow(int written);
     void follow_loop();
@@ -578,6 +581,13 @@ protected:
     std::vector<Run> runs_;        ///< a layer's launches over cached experts whose slots lie one behind the other
     std::vector<int32_t> chan_;    ///< a layer's cached experts in the order of their slots
     std::vector<uint8_t> sent_;
+    // A call that copies only the experts it routes to leaves some of those outside VRAM to the CPU (moe_rows()).
+    std::vector<uint8_t> on_cpu_;  ///< per expert of the layer: the CPU's
+    std::vector<int32_t> spare_;   ///< the layer's routed experts outside VRAM, the fewest tokens' first
+    std::vector<CpuExpert> host_;  ///< their uses, by token
+    double share_[5] = {0.25, 0.25, 0.25, 0.25, 0.25};   ///< the CPU's share of spare_, by the call's tokens:
+                                                         ///< under 64, from 64, 128, 256 and 512
+    std::unique_ptr<Workers> stagers_;   ///< fill the staging buffers meanwhile
 
     // The cache follows what is written (follow()).  It is filled for the average answer; while one is written,
     // the experts it keeps routing to and the cache lacks are copied over the cached ones it uses least, by a

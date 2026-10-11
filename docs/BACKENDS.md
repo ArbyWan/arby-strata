@@ -1615,6 +1615,88 @@ times their noise, further than the Strata project's default moves its own. Both
 in the environment is read over `--tail-skip`, and `=0` turns it off. With every expert in VRAM nothing is left
 out, so the RTX 5090 rows of the small models do not change. The other sizes of the families were not measured.
 
+A call of fewer tokens than `--stage-ahead` routes a layer first and then copies the experts outside VRAM that it
+routes to: a turn of a conversation, a short prompt, the last call of a long one. A call of 150 to 800 tokens
+routes to most of a layer's experts, so with most of them outside VRAM the copies are most of its time, and the
+CPU waits. Such a call now leaves a share of those experts to the CPU (`--cpu-share`): the ones the fewest of its
+tokens chose, whose copy costs as much as any other's and which cost the CPU about as much as their tokens. The
+CPU computes them with the code it computes an answer's experts with, while a thread of the card's copies and runs
+the others, and the two sums are added. The share starts at a quarter and is kept for five sizes of call (under
+64 tokens, from 64, 128, 256 and 512); after each call it moves halfway to the share that would have had both
+parts take the same time, if each part's time grows with its share, and stays within 5% and 95%. With the CPU's
+threads on the experts, the staging buffers are filled by four threads of their own: with one, turns of 800
+tokens were 5% to 18% slower.
+
+It was measured with a conversation as Claude Code makes one: a first prompt of 16,000 tokens of these docs, six
+turns that add 150, 300, 500, 800, 300 and 150 tokens, each answered with 8 tokens, then new prompts of 150,
+300, 500 and 800 tokens. `--cpu-share 0` and the default ran in turn, two rounds, each run a new engine from the
+same expert profile. On the laptop, as setup runs the models but with 1 GiB of VRAM left free, which leaves 711
+of Gemma 4's 3,840 experts in VRAM and 2,062 to 2,532 of the others' 10,496. The time to read each request, in
+ms, `--cpu-share 0` and then the default:
+
+| Request | Qwen3.6 UD-Q3_K_M | Ornith APEX-I-COMPACT | Gemma 4 UD-Q3_K_M | Tiel Coder UD-Q3_K_XL |
+| --- | --- | --- | --- | --- |
+| turn, 150 | 808-809, 426-428 | 988-996, 431-468 | 686-689, 398-407 | 1,013-1,014, 515 |
+| turn, 300 | 1,566-1,571, 825-827 | 1,948-1,960, 810-843 | 1,336-1,337, 781-791 | 1,975-1,978, 1,005-1,018 |
+| turn, 500 | 1,253-1,257, 851-867 | 1,438-1,441, 861-868 | 959-962, 698 | 1,460-1,474, 998-1,011 |
+| turn, 800 | 1,425, 1,056-1,073 | 1,598-1,600, 1,072-1,105 | 1,070-1,078, 878-885 | 1,605-1,624, 1,208-1,259 |
+| turn, 300 | 1,010-1,023, 608-609 | 1,236-1,239, 592-600 | 822, 535 | 1,270-1,272, 739-745 |
+| turn, 150 | 796-797, 420-424 | 1,034-1,039, 408-418 | 714-715, 393-405 | 1,052-1,064, 512-514 |
+| new, 150 | 792, 428-435 | 878-886, 402-405 | 670-672, 381-385 | 888, 473-480 |
+| new, 300 | 866, 516-522 | 1,025-1,030, 495-502 | 800-811, 505-516 | 1,020-1,028, 590-592 |
+| new, 500 | 1,099-1,102, 696-700 | 1,225-1,229, 644-664 | 868-902, 669-695 | 1,239-1,248, 787-800 |
+| new, 800 | 1,236-1,249, 898-908 | 1,386, 878-900 | 951, 818-819 | 1,381-1,387, 1,005-1,015 |
+
+On the RTX 5090, Qwen3.6 with 22,000 MiB held back (4,738 of 10,496 experts in VRAM) and GLM 5.3 Flash 3.0BIT as
+setup runs it; on two RTX 3080 of 10 GB with 80 GB of RAM, GLM REAP50-Q3_K_M split across both (601 of 6,192 in
+VRAM) and Gemma 4 on one (2,181 of 3,840):
+
+| Request | Qwen3.6, RTX 5090 | GLM 3.0BIT, RTX 5090 | GLM REAP50, two RTX 3080 | Gemma 4, one RTX 3080 |
+| --- | --- | --- | --- | --- |
+| turn, 150 | 291-293, 214-215 | 1,677-1,686, 1,092-1,095 | 5,148-5,176, 2,470-2,508 | 496-497, 388-402 |
+| turn, 300 | 560-575, 367-376 | 3,188-3,198, 1,981-2,018 | 10,164-10,176, 4,785-4,795 | 938-939, 720-742 |
+| turn, 500 | 381-382, 328-342 | 2,123-2,136, 1,739-1,766 | 6,408-6,412, 4,492-4,505 | 621-622, 538-556 |
+| turn, 800 | 420-422, 398-410 | 2,420-2,423, 2,272-2,291 | 6,896-6,900, 5,372-5,429 | 701-704, 647-655 |
+| turn, 300 | 333-335, 254-255 | 1,948-1,953, 1,352-1,370 | 6,032-6,034, 3,600-3,673 | 525-532, 419-429 |
+| turn, 150 | 287-290, 183-189 | 1,637-1,646, 928-941 | 5,414-5,461, 2,426-2,441 | 452-453, 334-341 |
+| new, 150 | 300, 192-195 | 1,535-1,538, 843-854 | 5,132-5,156, 2,222-2,253 | 460-463, 342-350 |
+| new, 300 | 317-318, 210-223 | 1,900-1,912, 1,273-1,283 | 5,700-5,701, 3,189-3,267 | 502-506, 364-370 |
+| new, 500 | 374-375, 279-292 | 2,105-2,118, 1,715-1,735 | 6,062-6,063, 4,327-4,368 | 546-547, 456-458 |
+| new, 800 | 403-406, 346-350 | 2,298-2,301, 2,130-2,159 | 6,550-6,560, 5,328-5,329 | 614-617, 554-556 |
+
+The smaller the call and the fewer experts in VRAM, the more it gains: 1.2 to 2.5 times as fast on the laptop,
+up to 2.3 times with GLM on the two 3080s. Qwen3.6 split across the two 3080s has every expert in VRAM, and its
+times did not change. The first turn of 300 tokens takes longer than the turn of 500 after it: it goes past the
+checkpoint at 16,384 tokens (`--prompt-cache-every`), so it is read in two calls, and each copies the experts it
+routes to.
+
+With the share, two runs can write other tokens even with no expert in VRAM: the share follows how long the calls
+before took, so two runs can give a call's experts to the CPU and the card in another split, and an expert on the
+CPU differs from the same one on the card in the last bits. With `--cpu-share 0` a check that needs the same tokens
+twice gets them as before. How far the share moves the answers was measured on the RTX 5090 with eight prompts:
+six short ones (27 to 70 tokens, and 205 to 246 for Tiel Coder, whose template adds a system text) and two of 698
+to 1,103, each read in calls that the share applies to. The greedy answer of up to 300 tokens with
+`--cpu-share 0` was written again through `--follow`, with the 40 most likely tokens of each step, by
+`--cpu-share 0` once more and by the default. The table has the mean KL from the first to each, and how often the
+most likely token was the same. The four smaller models ran with 24,000 MiB held back, so that most of their
+experts were outside VRAM, and GLM 5.3 Flash 3.0BIT as setup runs it.
+
+| Model | `--cpu-share 0` again | Default |
+| --- | --- | --- |
+| Qwen3.6 UD-Q3_K_M | 0.0012, 99.2% | 0.0018, 98.8% |
+| Ornith APEX-I-COMPACT | 0.0082, 97.8% | 0.0138, 96.7% |
+| Gemma 4 UD-Q3_K_M | 0.0071, 98.4% | 0.0049, 98.4% |
+| Tiel Coder UD-Q3_K_XL | 0.0137, 96.8% | 0.0170, 95.9% |
+| GLM 5.3 Flash 3.0BIT | 0.0037, 98.6% | 0.0058, 98.5% |
+
+Two runs without the share already differ, since the experts in VRAM change while an answer is written. The share
+moves the answers 0.7 to 1.7 times as far as that.
+
+In a Claude Code session, turns of about 188 tokens had looked slower with `--stage-ahead 1024` than with 256. On
+the laptop, with Qwen3.6 UD-Q3_K_M as setup runs it, six turns of 188 tokens behind 16,000 took 418 to 489 ms each
+with either value, two rounds of each in turn. The new prompts of 300, 500 and 800 tokens after them took 499 to
+844 ms with 1,024 and 1,276 to 1,432 with 256, where their calls copy ahead and the CPU takes no share.
+
 ## Adding a model of an architecture that is there
 
 Setup knows the files in the table above. Another file of one of these architectures runs after these steps:

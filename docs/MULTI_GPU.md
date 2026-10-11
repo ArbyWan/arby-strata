@@ -383,18 +383,21 @@ Gemma 4 UD-Q3_K_M: a prompt of 3,527 tokens at 2,190 tokens/s on one card in one
 two starts (3,110-3,160 with the cards taking turns); writing at 178 and 189 tokens/s in one start each. One card
 already held 2,042 of its 3,840 experts, which were most of what an answer used.
 
-With no expert in VRAM (`--vram-reserve-mib 20000`) and with every expert on the processor (`--no-gpu-experts`),
-both cards gave the same greedy tokens as one card, for Qwen3.6 and for Gemma 4, through a prompt read in several
-calls, the prompt cache, a checkpoint, the conversation cache and a request stopped in the middle. With experts in
-VRAM the answers can differ a little, as they do between two starts on one card: which experts run on a card and
-which on the processor changes the rounding.
+With no expert in VRAM (`--vram-reserve-mib 20000`) and `--cpu-share 0`, and with every expert on the processor
+(`--no-gpu-experts`), both cards gave the same greedy tokens as one card, for Qwen3.6 and for Gemma 4, through a
+prompt read in several calls, the prompt cache, a checkpoint, the conversation cache and a request stopped in the
+middle. With no expert in VRAM and the CPU's share at its default, Gemma 4 still did, and two of Qwen3.6's eight
+answers came out other: the share follows how long the calls before took, so which experts the processor computes
+changes from one run to the next. With experts in VRAM the answers can differ a little, as they do between two
+starts on one card: which experts run on a card and which on the processor changes the rounding.
 
 GLM 5.3 Flash REAP50-Q3_K_M (79 GB) ran on the same two cards with 80 GB of RAM. One 10 GB card cannot hold the
 weights outside the routed experts, about 12 GB, so there is no one-card row. With `"auto"` the cards took layers 0
 to 27 and 28 to 44 and held 602 of the 6,192 routed experts (6.7 GiB). A prompt of 6,087 tokens read at 397-398
 tokens/s and 256 tokens were written at 20-21 tokens/s, in two starts; with no expert in VRAM, 367-384 and 16-16.5.
-With no expert in VRAM the split at layer 28 and the split at layer 30 gave the same greedy tokens for a short
-prompt, a long one read in several calls, the prompt cache and a checkpoint. The conversation cache was not compared:
+With no expert in VRAM and `--cpu-share 0` the split at layer 28 and the split at layer 30 gave the same greedy
+tokens for a short prompt, a long one read in several calls, the prompt cache and a checkpoint; with the share at
+its default, six of the eight answers differed. The conversation cache was not compared:
 with the RAM nearly full it parked nothing in the runs split at layer 28. Of eight starts of that test, one failed
 its long prompt with `pinned memory: invalid argument` and one stopped without a message while reading it. The same
 error came in later starts, at load or in the first long prompt, with Qwen3.6 too and on one card too, so neither

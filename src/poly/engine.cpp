@@ -1860,8 +1860,9 @@ bool Engine::moe(Layer& L, int il, int n, const std::function<void()>* first) {
 void Engine::moe_add(int n) { axpy(h_cpu_, 1.f, fo_, n * n_embd_, true, st_); }
 
 // m experts from the mapped file into the staging buffer: gate and up of each back to back from the start, the
-// downs after them.  The two pinned buffers take turns, so the workers fill one while the other uploads.
-void Engine::stage(const Layer& L, const int32_t* experts, int m, void* stream) {
+// downs after them.  The two pinned buffers take turns, so the workers fill one while the other uploads.  `alone`:
+// stagers_ fill them, while the workers compute experts.
+void Engine::stage(const Layer& L, const int32_t* experts, int m, void* stream, bool alone) {
     staged_il_ = -1;   // whatever the buffer held
     const size_t gu2 = 2 * L.gu_bytes, down_at = pad((size_t) m * gu2);
     const int per = (int) (chunk_bytes_ / (gu2 + L.d_bytes));
@@ -1871,12 +1872,13 @@ void Engine::stage(const Layer& L, const int32_t* experts, int m, void* stream) 
         uint8_t* h = h_stage_[stage_turn_];
         const cudaEvent_t left = (cudaEvent_t) ev_stage_[stage_turn_];
         ck(cudaEventSynchronize(left), "expert staging");
-        workers_->run((int) (3 * c), [&](int i) {
+        const auto copy = [&](int i) {
             const size_t j = (size_t) i / 3, e = (size_t) experts[(size_t) j0 + j];
             if (i % 3 == 0) std::memcpy(h + j * gu2, L.exp_gate + e * L.gu_stride, L.gu_bytes);
             else if (i % 3 == 1) std::memcpy(h + j * gu2 + L.gu_bytes, L.exp_up + e * L.gu_stride, L.gu_bytes);
             else std::memcpy(h + c * gu2 + j * L.d_bytes, L.exp_down + e * L.d_bytes, L.d_bytes);
-        });
+        };
+        (alone ? *stagers_ : *workers_).run((int) (3 * c), copy);
         ck(cudaMemcpyAsync(stage_ + (size_t) j0 * gu2, h, c * gu2, cudaMemcpyHostToDevice, cs(stream)),
            "expert staging");
         ck(cudaMemcpyAsync(stage_ + down_at + (size_t) j0 * L.d_bytes, h + c * gu2, c * L.d_bytes,
@@ -1887,16 +1889,23 @@ void Engine::stage(const Layer& L, const int32_t* experts, int m, void* stream) 
     ck(cudaMemsetAsync(stage_ + down_at + (size_t) m * L.d_bytes, 0, kTail, cs(stream)), "expert staging");
 }
 
-// A MoE layer for a prompt batch: every token's experts on the GPU, by llama.cpp's MMQ.  A row is a token and one
+// A MoE layer for a prompt batch: the experts on the GPU, by llama.cpp's MMQ.  A row is a token and one
 // of the experts it routes to.  The rows are sorted by expert, the experts of the VRAM cache first; the other
 // experts pass through the staging buffer, as many at a time as it holds.  A full batch starts the copy of
 // L.ahead before it knows the routing, on a stream of its own, so the upload runs under the layer's attention.
+// A call that copies only the experts it routes to leaves a share of them to the CPU, which computes them while
+// the others are copied: the share that had the two take about as long (Options::cpu_share).
 void Engine::moe_rows(Layer& L, int il, int n) {
     const int rr = n * n_used_;
     const size_t cap = (size_t) rows_ * n_used_;
+    const bool ahead = opt_.stage_ahead > 0 && (n >= opt_.stage_ahead || shared_ahead_);
+    const bool spare = !ahead && opt_.cpu_share != 0 && !all_cached();   // the CPU may take some (below)
     router_scores(L, n);
-    ck(cudaMemcpyAsync(h_rl_, rl_, (size_t) n * n_expert_ * sizeof(float), cudaMemcpyDeviceToHost, cs(st_)),
-       "router");
+    if (spare)
+        copy2(rl_, h_rl_, n * n_expert_, xn_, h_x_, n * n_embd_, st_);
+    else
+        ck(cudaMemcpyAsync(h_rl_, rl_, (size_t) n * n_expert_ * sizeof(float), cudaMemcpyDeviceToHost, cs(st_)),
+           "router");
     ck(cudaEventRecord((cudaEvent_t) ev_, cs(st_)), "router");
 
     moe_shared(L, il, n);
@@ -1910,7 +1919,6 @@ void Engine::moe_rows(Layer& L, int il, int n) {
     // A small call on its own copies only the experts it routes to.  With another launch's experts the batched
     // kernels would split its sums another way, so it cannot take what a call before it left.  In a read of
     // several calls it copies ahead as the others do, and the copy is theirs too.
-    const bool ahead = opt_.stage_ahead > 0 && (n >= opt_.stage_ahead || shared_ahead_);
     if (ahead) plan_ahead(L, il);
     const int n_ahead = ahead ? (int) L.ahead.size() : 0;
     const bool mine = ahead && staged_il_ == il && (staged_ == L.ahead || 2 * route_ms_ < ahead_ms_);
@@ -1964,6 +1972,22 @@ void Engine::moe_rows(Layer& L, int il, int n) {
         ++count_[(size_t) ids_[(size_t) i]];
         ++use_[(size_t) il * n_expert_ + (size_t) ids_[(size_t) i]];
     }
+    // The CPU computes some of the routed experts outside VRAM while the others are copied: the ones the fewest
+    // tokens chose, whose copy costs as much as any other's and which cost the CPU about as much as their tokens.
+    int n_spare = 0, n_cpu = 0;
+    const int size = std::clamp((int) std::bit_width((unsigned) n) - 6, 0, 4);   // which of share_
+    on_cpu_.assign((size_t) n_expert_, 0);
+    if (spare) {
+        spare_.clear();
+        for (int e = 0; e < n_expert_; ++e)
+            if (count_[(size_t) e] > 0 && !L.slot[(size_t) e]) spare_.push_back(e);
+        std::stable_sort(spare_.begin(), spare_.end(),
+                         [&](int32_t a, int32_t b) { return count_[(size_t) a] < count_[(size_t) b]; });
+        n_spare = (int) spare_.size();
+        const double s = opt_.cpu_share > 0 ? std::min(opt_.cpu_share, 1.f) : share_[size];
+        n_cpu = (int) std::lround(s * n_spare);
+        for (int j = 0; j < n_cpu; ++j) on_cpu_[(size_t) spare_[(size_t) j]] = 1;
+    }
     // The cached experts that have rows, class after class and a class's in the order of the slots (chan_ has
     // every cached expert in that order); the experts already on their way; then the others that have rows.
     chan_.clear();
@@ -1981,7 +2005,8 @@ void Engine::moe_rows(Layer& L, int il, int n) {
     sent_.assign((size_t) n_expert_, 0);
     for (int j = 0; j < n_ahead; ++j) sent_[(size_t) L.ahead[(size_t) j]] = 1;
     for (int e = 0; e < n_expert_; ++e)
-        if (count_[(size_t) e] > 0 && !L.slot[(size_t) e] && !sent_[(size_t) e]) group_.push_back(e);
+        if (count_[(size_t) e] > 0 && !L.slot[(size_t) e] && !sent_[(size_t) e] && !on_cpu_[(size_t) e])
+            group_.push_back(e);
     const int n_group = (int) group_.size();
     auto rows_of = [&](int g) { return count_[(size_t) group_[(size_t) g]]; };
 
@@ -1992,8 +2017,17 @@ void Engine::moe_rows(Layer& L, int il, int n) {
         at += rows_of(g);
     }
     bounds[n_group] = at;
+    const int rg = at;   // the card's rows
+    host_.clear();
     for (int i = 0; i < rr; ++i) {
-        const int row = first_[(size_t) ids_[(size_t) i]]++;
+        const size_t e = (size_t) ids_[(size_t) i];
+        if (on_cpu_[e]) {   // by token, as cpu_experts() takes them, and nothing of it in the card's sum
+            host_.push_back({L.exp_gate + e * L.gu_stride, L.exp_up + e * L.gu_stride, L.exp_down + e * L.d_bytes,
+                             w[i], i / n_used_});
+            w[i] = 0.f;
+            continue;
+        }
+        const int row = first_[e]++;
         tok[row] = i / n_used_;
         place[row] = i;
     }
@@ -2025,76 +2059,108 @@ void Engine::moe_rows(Layer& L, int il, int n) {
 
     const int rc = bounds[n_cached];   // the rows of the cached experts
     stats_.batch_cached += rc;
-    stats_.batch_staged += rr - rc;
+    stats_.batch_staged += rg - rc;
 
     const float limit = clamp_exp_[(size_t) il];
     const int gt = (int) L.gu_type, dt = (int) L.d_type;
     const int64_t ff = n_ff_exp_, ff2 = 2 * ff;
-    Mmq::quantize(xn_, d_tok, mq_, gt, n_embd_, n_embd_, rr, st_);
+    int holds = -1;   // the round in the buffer when this call is done
+    // The card's part.  With the CPU's beside it, the rows of its experts' places are left at nothing.
+    const auto card = [&] {
+        if (n_cpu > 0) ck(cudaMemsetAsync(dx_, 0, (size_t) rr * n_embd_ * sizeof(float), cs(st_)), "expert rows");
+        if (rg > 0) Mmq::quantize(xn_, d_tok, mq_, gt, n_embd_, n_embd_, rg, st_);
 
-    // The cached experts whose slots lie one behind the other are the matrices of one launch, as the experts of
-    // a staging round are; a launch for each class that has rows among them.  The cache is filled a layer's
-    // experts side by side, so that is the whole layer until experts trade slots (follow()).  A launch for each
-    // expert was a sixth of a long prompt's time in a model with 256 experts a layer.
-    auto slot_of = [&](int j) { return L.slot[(size_t) chan_[(size_t) j]]; };
-    runs_.clear();
-    for (int j = 0; j < n_chan;) {
-        int m = 1, most[kClasses] = {};
-        while (j + m < n_chan && slot_of(j + m) == slot_of(j + m - 1) + L.slot_bytes) ++m;
-        for (int i = j; i < j + m; ++i) {
-            const int rows = count_[(size_t) chan_[(size_t) i]];
-            if (rows > 0) most[tile_class(rows)] = std::max(most[tile_class(rows)], rows);
+        // The cached experts whose slots lie one behind the other are the matrices of one launch, as the experts of
+        // a staging round are; a launch for each class that has rows among them.  The cache is filled a layer's
+        // experts side by side, so that is the whole layer until experts trade slots (follow()).  A launch for each
+        // expert was a sixth of a long prompt's time in a model with 256 experts a layer.
+        auto slot_of = [&](int j) { return L.slot[(size_t) chan_[(size_t) j]]; };
+        runs_.clear();
+        for (int j = 0; j < n_chan;) {
+            int m = 1, most[kClasses] = {};
+            while (j + m < n_chan && slot_of(j + m) == slot_of(j + m - 1) + L.slot_bytes) ++m;
+            for (int i = j; i < j + m; ++i) {
+                const int rows = count_[(size_t) chan_[(size_t) i]];
+                if (rows > 0) most[tile_class(rows)] = std::max(most[tile_class(rows)], rows);
+            }
+            for (int c = 0; c < kClasses; ++c)
+                if (most[c] > 0) runs_.push_back({c, j, m, most[c]});
+            j += m;
         }
-        for (int c = 0; c < kClasses; ++c)
-            if (most[c] > 0) runs_.push_back({c, j, m, most[c]});
-        j += m;
-    }
-    for (const Run& r : runs_)
-        mmq_->mul(slot_of(r.j), gt, ff2, n_embd_, L.slot_bytes, r.m, mq_, d_cb + (size_t) r.c * cb_row + r.j, iota_,
-                  rr, r.most, gu_, ff2, st_);
-    if (rc > 0) {
-        if (gelu_) geglu_rows(gu_, hx_, n_ff_exp_, rc, st_);
-        else swiglu_clamp_rows(gu_, hx_, n_ff_exp_, rc, limit, st_);
-        Mmq::quantize(hx_, nullptr, mq2_, dt, ff, ff, rc, st_);
-    }
-    for (const Run& r : runs_)
-        mmq_->mul(slot_of(r.j) + gu2, dt, n_embd_, ff, L.slot_bytes, r.m, mq2_, d_cb + (size_t) r.c * cb_row + r.j,
-                  d_place, rc, r.most, dx_, n_embd_, st_);
+        for (const Run& r : runs_)
+            mmq_->mul(slot_of(r.j), gt, ff2, n_embd_, L.slot_bytes, r.m, mq_, d_cb + (size_t) r.c * cb_row + r.j, iota_,
+                      rg, r.most, gu_, ff2, st_);
+        if (rc > 0) {
+            if (gelu_) geglu_rows(gu_, hx_, n_ff_exp_, rc, st_);
+            else swiglu_clamp_rows(gu_, hx_, n_ff_exp_, rc, limit, st_);
+            Mmq::quantize(hx_, nullptr, mq2_, dt, ff, ff, rc, st_);
+        }
+        for (const Run& r : runs_)
+            mmq_->mul(slot_of(r.j) + gu2, dt, n_embd_, ff, L.slot_bytes, r.m, mq2_, d_cb + (size_t) r.c * cb_row + r.j,
+                      d_place, rc, r.most, dx_, n_embd_, st_);
 
-    // The round the buffer holds goes first and is not copied.  If it holds none of this call's, the experts
-    // that go ahead are copied last, so the next call finds them.  The order does not change a round's launches.
-    int kept = -1;
-    for (int r = 0; r < n_round && mine && kept < 0; ++r) {
-        const auto first = group_.begin() + round_[(size_t) r], last = group_.begin() + round_[(size_t) r + 1];
-        if ((size_t) (last - first) == staged_.size() && std::equal(first, last, staged_.begin())) kept = r;
-    }
-    const int from = mine && kept < 0 ? 1 : 0;
-    int holds = early ? 0 : kept;   // the round in the buffer when this call is done
-    for (int turn = 0; turn < n_round; ++turn) {
-        const int r = kept < 0 ? (turn + from) % n_round : turn == 0 ? kept : turn - (turn <= kept ? 1 : 0);
-        const int g0 = round_[(size_t) r], m = round_[(size_t) r + 1] - g0;
-        const size_t down_at = pad((size_t) m * gu2);
-        const int r0 = bounds[g0], rows = bounds[g0 + m] - r0;
-        if (r == kept) {
-            // the buffer has it
-        } else if (r == 0 && early) {
-            ck(cudaStreamWaitEvent(cs(st_), (cudaEvent_t) ev_ahead_, 0), "expert staging");
-        } else if (rows > 0) {
-            stage(L, group_.data() + g0, m, st_);
-            holds = r;
+        // The round the buffer holds goes first and is not copied.  If it holds none of this call's, the experts
+        // that go ahead are copied last, so the next call finds them.  The order does not change a round's launches.
+        int kept = -1;
+        for (int r = 0; r < n_round && mine && kept < 0; ++r) {
+            const auto first = group_.begin() + round_[(size_t) r], last = group_.begin() + round_[(size_t) r + 1];
+            if ((size_t) (last - first) == staged_.size() && std::equal(first, last, staged_.begin())) kept = r;
         }
-        if (rows == 0) continue;   // nothing routed to the experts that go ahead
-        int most = 0;
-        for (int g = g0; g < g0 + m; ++g) most = std::max(most, rows_of(g));
-        mmq_->mul(stage_, gt, ff2, n_embd_, gu2, m, mq_, d_bounds + g0, iota_, rr, most, gu_, ff2, st_);
-        if (gelu_) geglu_rows(gu_ + (size_t) r0 * ff2, hx_ + (size_t) r0 * ff, n_ff_exp_, rows, st_);
-        else swiglu_clamp_rows(gu_ + (size_t) r0 * ff2, hx_ + (size_t) r0 * ff, n_ff_exp_, rows, limit, st_);
-        Mmq::quantize(hx_ + (size_t) r0 * ff, nullptr, mq2_, dt, ff, ff, rows, st_);
-        mmq_->mul(stage_ + down_at, dt, n_embd_, ff, L.d_bytes, m, mq2_, d_rel + (g0 - n_cached + r), d_place + r0,
-                  rows, most, dx_, n_embd_, st_);
+        const int from = mine && kept < 0 ? 1 : 0;
+        holds = early ? 0 : kept;
+        for (int turn = 0; turn < n_round; ++turn) {
+            const int r = kept < 0 ? (turn + from) % n_round : turn == 0 ? kept : turn - (turn <= kept ? 1 : 0);
+            const int g0 = round_[(size_t) r], m = round_[(size_t) r + 1] - g0;
+            const size_t down_at = pad((size_t) m * gu2);
+            const int r0 = bounds[g0], rows = bounds[g0 + m] - r0;
+            if (r == kept) {
+                // the buffer has it
+            } else if (r == 0 && early) {
+                ck(cudaStreamWaitEvent(cs(st_), (cudaEvent_t) ev_ahead_, 0), "expert staging");
+            } else if (rows > 0) {
+                stage(L, group_.data() + g0, m, st_, n_cpu > 0);
+                holds = r;
+            }
+            if (rows == 0) continue;   // nothing routed to the experts that go ahead
+            int most = 0;
+            for (int g = g0; g < g0 + m; ++g) most = std::max(most, rows_of(g));
+            mmq_->mul(stage_, gt, ff2, n_embd_, gu2, m, mq_, d_bounds + g0, iota_, rg, most, gu_, ff2, st_);
+            if (gelu_) geglu_rows(gu_ + (size_t) r0 * ff2, hx_ + (size_t) r0 * ff, n_ff_exp_, rows, st_);
+            else swiglu_clamp_rows(gu_ + (size_t) r0 * ff2, hx_ + (size_t) r0 * ff, n_ff_exp_, rows, limit, st_);
+            Mmq::quantize(hx_ + (size_t) r0 * ff, nullptr, mq2_, dt, ff, ff, rows, st_);
+            mmq_->mul(stage_ + down_at, dt, n_embd_, ff, L.d_bytes, m, mq2_, d_rel + (g0 - n_cached + r), d_place + r0,
+                      rows, most, dx_, n_embd_, st_);
+        }
+        ck(cudaEventRecord((cudaEvent_t) ev_free_, cs(st_)), "expert staging");
+    };
+    if (n_cpu == 0) {
+        card();
+    } else {   // the card's part on a thread of its own, and the CPU's on the workers
+        if (!stagers_) stagers_ = std::make_unique<Workers>(4);   // one thread copied slower than the bus
+        Clock::time_point done;
+        Behind behind;
+        const Clock::time_point start = Clock::now();
+        behind.go([&] {
+            cudaSetDevice(device_);   // a thread starts on card 0
+            card();
+            ck(cudaStreamSynchronize(cs(st_)), "expert staging");
+            done = Clock::now();
+        });
+        cpu_experts(*workers_, host_.data(), (int) host_.size(), n, gt, dt, n_embd_, n_ff_exp_, h_x_, limit, gelu_,
+                    h_cpu_, nullptr);
+        const double cpu = ms_since(start);
+        behind.wait();
+        const double gpu = std::chrono::duration<double, std::milli>(done - start).count();
+        stats_.cpu_ms += cpu;
+        stats_.cpu_experts += (int64_t) host_.size();
+        // the share that would have had both done at once, if each one's time grows with its share
+        if (opt_.cpu_share < 0 && n_cpu < n_spare) {
+            const double s = (double) n_cpu / n_spare, c = cpu / s, g = gpu / (1 - s);
+            share_[size] = std::clamp(0.5 * share_[size] + 0.5 * g / (c + g), 0.05, 0.95);
+        }
     }
-    ck(cudaEventRecord((cudaEvent_t) ev_free_, cs(st_)), "expert staging");
     moe_sum(dx_, d_w, fo_, n_embd_, n_used_, n, st_);
+    if (n_cpu > 0) moe_add(n);
     if (ahead && holds >= 0) {
         staged_.assign(group_.begin() + round_[(size_t) holds], group_.begin() + round_[(size_t) holds + 1]);
         staged_il_ = il;
