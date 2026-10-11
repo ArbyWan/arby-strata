@@ -348,9 +348,46 @@ void* Engine::dmalloc(size_t bytes, const char* what) {
 
 void* Engine::hmalloc(size_t bytes, const char* what) {
     void* p = nullptr;
-    ck(cudaMallocHost(&p, std::max<size_t>(bytes, 256)), what);
+    const std::string why = std::string(what) + " (" + std::to_string(bytes) + " bytes)";
+    // A container at its memory limit refused pinned memory with "invalid argument" five times in five minutes
+    // while a download filled its page cache; a moment later the kernel has reclaimed some.
+    cudaError_t e = cudaSuccess;
+    for (int tries = 0; tries < 4; ++tries) {
+        e = cudaMallocHost(&p, std::max<size_t>(bytes, 256));
+        if (e == cudaSuccess) break;
+        cudaGetLastError();
+        std::fprintf(stderr, "strata-poly: %s: %s, trying again\n", why.c_str(), cudaGetErrorString(e));
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    ck(e, why.c_str());
     host_allocs_.push_back(p);
     return p;
+}
+
+// A container whose memory is not much more than the model's files.  The file cache cannot hold them beside
+// the engine, so an answer reads experts from the disk: on a pod with 80 GiB and two RTX 3080s, GLM REAP50's
+// 79 GB file wrote at 6 tokens/s where 20.  And the pod ended the engine with SIGKILL in half of its long reads,
+// within 2% of the limit, with no OOM kill counted by the kernel.  Said once at load; the remedy is RAM.
+void Engine::mind_memory() {
+#ifdef __linux__
+    if (split_ && lo_ > 0) return;   // the first card's engine says it for all of them
+    static const char* const files[] = {"/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"};
+    unsigned long long limit = 0;
+    for (const char* path : files) {
+        FILE* f = std::fopen(path, "r");
+        if (!f) continue;
+        if (std::fscanf(f, "%llu", &limit) != 1) limit = 0;   // "max" when there is none
+        std::fclose(f);
+        break;
+    }
+    if (limit == 0 || limit >= (1ULL << 50)) return;   // none, or one beyond any machine's RAM
+    const uint64_t file = gg_->bytes() + (dg_ ? dg_->bytes() : 0);
+    if (file + (8ULL << 30) <= limit) return;   // the engine and the rest of the container take a few GiB
+    std::fprintf(stderr, "strata-poly: the model's files are %.1f GiB and the container has %.1f GiB: the file "
+                         "cache cannot hold them beside the engine, so answers will read experts from the disk, "
+                         "and the container may end the engine\n",
+                 (double) file / (1 << 30), (double) limit / (1 << 30));
+#endif
 }
 
 void Engine::vmm_reserve(Mapped& m, size_t bytes) {
@@ -1325,6 +1362,7 @@ void Engine::load(const Options& o) {
         if ((int64_t) ((more + kArenaPiece) >> 20) + reserve_mib_ <= vram_free_mib()) cover(opt_.max_context);
     }
     const int threads = opt_.threads > 0 ? opt_.threads : usable_cpus();
+    mind_memory();
     std::vector<std::pair<const uint8_t*, size_t>> spans;   // the routed experts in the mapped files
     for (const Layer& L : layers_) {
         if (!L.moe) continue;
@@ -2247,7 +2285,7 @@ float* Engine::pass_rows(int n) {
     if (h_pass_rows_ < n) {
         if (h_pass_) {
             host_allocs_.erase(std::find(host_allocs_.begin(), host_allocs_.end(), (void*) h_pass_));
-            ck(cudaFreeHost(h_pass_), "pinned memory");
+            ck(cudaFreeHost(h_pass_), "freeing pinned memory");
             h_pass_ = nullptr;
         }
         h_pass_rows_ = std::max(n, rows_);
@@ -2392,7 +2430,7 @@ bool Engine::read(const int32_t* tokens, int n, const Mark* marks, int n_marks,
     if (host && h_res_rows_ < n) {   // for this read's tokens and some more, so that a longer one seldom asks again
         if (h_res_) {
             host_allocs_.erase(std::find(host_allocs_.begin(), host_allocs_.end(), (void*) h_res_));
-            ck(cudaFreeHost(h_res_), "pinned memory");
+            ck(cudaFreeHost(h_res_), "freeing pinned memory");
             h_res_ = nullptr;
         }
         h_res_rows_ = std::min(read_rows_, (n + 4095) / 4096 * 4096);

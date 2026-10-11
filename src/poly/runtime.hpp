@@ -153,6 +153,12 @@ public:
         return it == where_.end() ? nullptr : it->second.t;
     }
     const uint8_t* data(const TensorInfo& t) const { return where_.at(t.name).file->tensor_data(t); }
+    /// The files' bytes together.
+    uint64_t bytes() const {
+        uint64_t n = 0;
+        for (const auto& f : files_) n += f->file_size();
+        return n;
+    }
     /// f(tensor) for every tensor of the model, in no order.
     template <class F>
     void each(F&& f) const {

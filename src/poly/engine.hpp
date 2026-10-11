@@ -390,6 +390,7 @@ protected:
     void* record(F&& work);
     void moe_rows(Layer& L, int il, int n);
     void stage(const Layer& L, const int32_t* experts, int m, void* stream);
+    void mind_memory();
     void follow(int written);
     void follow_loop();
     void embed(int32_t token, float* dst) const;
