@@ -369,19 +369,21 @@ strata-poly: layers 22 to 39 on card 1: 4864 of 4864 routed experts in VRAM (6.5
 
 Measured on two RTX 3080 (10 GB each, 320 W) with a Xeon Platinum 8255C under Linux, the engine built with CUDA
 12.4: a prompt of 2,727 tokens read with nothing cached, and 256 tokens written after a short prompt, in three
-starts of each.
+starts of each. The engine of 2026-10-11 ran it again, three starts on one card and three on both in turn, and read
+at 1,567-1,582 and 3,425-3,562 tokens/s and wrote at 165-177 and 217-221. A cell has the higher of the two passes.
 
 | Qwen3.6 UD-Q3_K_M | Experts in VRAM | Reads the prompt | Writes |
 | --- | ---: | ---: | ---: |
-| one RTX 3080 | 4,606 of 10,496 | 1,570-1,700 tokens/s | 159-173 tokens/s |
-| both | 10,496 of 10,496 | 3,430-3,520 tokens/s | 216-219 tokens/s |
+| one RTX 3080 | 4,606 of 10,496 | 1,570-1,700 tokens/s | 165-177 tokens/s |
+| both | 10,496 of 10,496 | 3,420-3,560 tokens/s | 217-221 tokens/s |
 
 With the cards taking turns on the prompt, as they did before, both read it at 3,070-3,090 tokens/s in two starts
 of the same test, and wrote as fast.
 
 Gemma 4 UD-Q3_K_M: a prompt of 3,527 tokens at 2,190 tokens/s on one card in one start, and at 3,600 on both in
-two starts (3,110-3,160 with the cards taking turns); writing at 178 and 189 tokens/s in one start each. One card
-already held 2,042 of its 3,840 experts, which were most of what an answer used.
+two starts (3,110-3,160 with the cards taking turns); writing at 178 and 189 tokens/s in one start each. The engine
+of 2026-10-11, two starts of each in turn, read it at 2,170 and 3,540-3,590 and wrote at 182-187 and 191-193. One
+card already held 2,042 of its 3,840 experts, which were most of what an answer used.
 
 With no expert in VRAM (`--vram-reserve-mib 20000`) and `--cpu-share 0`, and with every expert on the processor
 (`--no-gpu-experts`), both cards gave the same greedy tokens as one card, for Qwen3.6 and for Gemma 4, through a
@@ -395,17 +397,23 @@ GLM 5.3 Flash REAP50-Q3_K_M (79 GB) ran on the same two cards with 80 GB of RAM.
 weights outside the routed experts, about 12 GB, so there is no one-card row. With `"auto"` the cards took layers 0
 to 27 and 28 to 44 and held 602 of the 6,192 routed experts (6.7 GiB). A prompt of 6,087 tokens read at 397-398
 tokens/s and 256 tokens were written at 20-21 tokens/s, in two starts; with no expert in VRAM, 367-384 and 16-16.5.
+The engine of 2026-10-11 read it at 398-399 and wrote at 20-22 in two starts, and with no expert in VRAM at 386
+and 14-16 in four.
 With no expert in VRAM and `--cpu-share 0` the split at layer 28 and the split at layer 30 gave the same greedy
 tokens for a short prompt, a long one read in several calls, the prompt cache and a checkpoint; with the share at
 its default, six of the eight answers differed. The conversation cache was not compared:
 with the RAM nearly full it parked nothing in the runs split at layer 28. Of eight starts of that test, one failed
-its long prompt with `pinned memory: invalid argument` and one stopped without a message while reading it. The same
-error came in later starts, at load or in the first long prompt, with Qwen3.6 too and on one card too, so neither
-the file's size nor the split is the cause. Every failure came while a 78 GB file was being downloaded in the same
-container, or soon after. Eleven starts on both cards after the download, 8 of Qwen3.6 and 3 of GLM, all ran
-through, and so has every start on these cards since. Filling the container's memory to its limit with a file
-(`dd`), and two engines on the cards at once, did not bring it back. The cause was not found. The message now gives
-the size asked for.
+its long prompt with `pinned memory: invalid argument` and one stopped without a message while reading it. Both
+come from the container's memory: its limit is 80 GiB and the file is 73.4 GiB. With the whole file read into
+the page cache before the start, so that the container was within 2% of its limit, the engine was ended by
+SIGKILL in 3 of 6 starts of the speed test, each 17 s into the first long prompt, with no OOM kill counted by
+the kernel for the container or for the host; the 6 starts in turn with no expert in VRAM, which copy nothing
+to the cards, all ran through. The starts that lived wrote at 6 tokens/s where 20, the experts read from the
+disk again. With the cache empty at the start, the same test ran through at about the speeds above. The five
+`pinned memory: invalid argument` all came at load within five minutes, while a 78 GB download was filling the
+same container's cache; the engine now asks four times, a quarter of a second apart, before it gives up, and
+says at load when the container has less than the model's files and 8 GiB. This pod has less than setup asks
+for REAP50 beside 6.7 GiB of experts in VRAM, about 82 GB.
 
 Not done yet:
 

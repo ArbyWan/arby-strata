@@ -255,7 +255,7 @@ MODELS = {
                "file": "GLM-5.3-Flash-GSQ-RCO-3.0bit-q4kattn.gguf"},
     # Unsloth's UD-IQ2_XXS: the whole model again, in the numbered files of a split GGUF.  Its experts are i-quants,
     # which go through the card faster and through the CPU more slowly than 3.0BIT's K-quants: on the 32 GB card
-    # it reads a 28K prompt at 1,020 tokens/s (3.0BIT: 784) and writes 40-44 tokens/s (57-59)
+    # it reads a 29K prompt at 1,060-1,080 tokens/s (3.0BIT: 820) and writes 50-52 tokens/s (59-66)
     "UD-IQ2_XXS": {"about": "the whole model at about 2 bits (Unsloth): less RAM, reads faster, writes slower",
                    "download_gb": 101.8, "ram_gb": 82, "arena_gb": 92.5, "families": ("glm",), "shards": 4,
                    "file": "GLM-5.3-Flash-UD-IQ2_XXS-0000{i}-of-00004.gguf", "vram_beside_gb": 12.5,

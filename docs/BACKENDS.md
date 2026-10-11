@@ -5,7 +5,7 @@ how a model is recognized, how to add one, and how to change the model that answ
 
 One model is in memory at a time. The measurements below are from one machine: an RTX 5090 (32 GB), 24 threads of
 a Xeon Platinum 8470Q, 120 GiB of RAM, Linux, CUDA 12.8. On that card the three new models fit in VRAM whole.
-[One table](#with-8-gb-of-vram) holds the 5090 to 8 GB, and [one section](#on-a-laptop-with-8-gb-of-vram) is from
+[One section](#with-8-gb-of-vram) holds the 5090 to 8 GB, and [one section](#on-a-laptop-with-8-gb-of-vram) is from
 a second machine, a Windows laptop whose card has 8 GB.
 
 ## What runs
@@ -329,6 +329,18 @@ Tiel Coder UD-Q3_K_XL, whose short prompt comes to 200 tokens, wrote at 312 to 3
 read the long ones at 5,955 to 6,062 and 6,007 to 6,316. GLM wrote at 65 to 66, 62 to 64 and 67 to 69 and read
 prompts of 2,521 and 9,913 tokens at 568 to 572 and 764 to 766.
 
+The engine of 2ba29a383baf, the last of that day, which gives the CPU part of a small call's experts, wrote after
+the three prompts at 377 to 393, 376 to 391 and 333 to 334 tokens/s with Qwen3.6, 317 to 318, 303 to 305 and 287
+to 289 with Ornith, 352 to 353, 316 and 324 to 328 with Gemma 4 and 320 to 330, 327 to 335 and 297 to 308 with
+Tiel Coder, and read the long prompts at 4,542 to 4,547 and 5,886 to 6,104, 4,989 to 4,994 and 6,204 to 6,328,
+4,236 to 4,310 and 5,723 to 6,208, and 5,780 to 5,783 and 6,271 to 6,279. GLM wrote at 59 to 60, 59 and 64 to 66
+and read at 539 to 576 and 728 to 770. Qwen3.6 and Tiel Coder wrote up to 5% less than in the paragraph above
+and GLM 4% to 10% less, on other hours. In turn, three rounds each, the two builds wrote alike: with Qwen3.6 386
+to 393, 379 to 395 and 334 to 341 tokens/s with this one and 390 to 396, 366 to 392 and 335 to 342 with the one
+before, with Tiel Coder 332 to 345, 337 to 342 and 312 to 318 and 331 to 343, 329 to 342 and 310 to 311, and with
+GLM 58 to 60, 57 to 62 and 63 to 66 and 54 to 60, 56 to 60 and 62 to 65. The four other models have every expert
+in VRAM here, where the CPU's share does not apply, and GLM's calls while it writes are too small for it.
+
 The table has each new model's first size. The other sizes by the same benchmark, one run each, every expert
 in VRAM:
 
@@ -412,9 +424,28 @@ not fit, which is the case this engine is for.
 The same card with 24.4 GB kept free (`--vram-reserve-mib 24400`), so the engine has about 8 GB: the dense
 weights, the caches and as many experts as fit. The rest of the experts are computed on the CPU, and the cache
 follows what the answer uses. This is not an 8 GB PC: the CPU, the RAM and the card's speed are the machine's
-above. The table is from before the changes that [a laptop whose card has 8 GB](#on-a-laptop-with-8-gb-of-vram)
-brought, which were not built on this machine.
+above. The table is the engine of 2ba29a383baf, the last of 2026-10-11, one run of each.
 300-token answers, tokens per second; the two numbers are without and with guessed tokens.
+
+| Model | Experts from VRAM | Writes after a short prompt | after about 2,100 tokens | after about 7,700 | Reads about 2,100 tokens | about 7,700 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.6-35B-A3B | 61% to 76% | 157 to 162, 213 to 230 | 157, 210 | 142, 188 | 2,390 to 2,540 | 4,750 to 4,860 |
+| Ornith 1.5 | 53% to 76% | 179 to 185, 163 to 200 | 178, 207 | 171, 161 | 2,460 to 2,500 | 4,610 to 4,690 |
+| Gemma 4 26B-A4B | 67% to 82% | 177 to 182, 233 to 240 | 164, 191 | 157, 184 | 2,660 to 2,790 | 5,210 to 5,320 |
+
+The short prompts are the two of three whose answers run to 300 tokens for Qwen3.6 and Gemma 4; one of
+Ornith's two stops after 122 to 123, and its answer after the longest prompt after 245 with guesses. With
+guesses a smaller share of the experts comes from VRAM (67% to 78% against 70% to 82% for Gemma 4). Ornith wrote
+the story more slowly with guesses than without, at 163 tokens/s against 179: each of these runs is a process
+of its own, and the engine asks the block in its first rounds, before it has measured whether asking pays.
+
+More of the experts come from VRAM than in the table before, and the engine stays in its 8 GB: on Qwen3.6's
+longest prompt the card's memory peaked at 7,752 MiB of the 8,207 left to it with this engine, and at 7,806
+with the engine of 86d06703 ("poly: do not believe a round's time that is old"), of 2026-10-09, which took
+73.5% of the experts from VRAM there.
+
+The table before, from 2026-10-07 and before the changes that
+[a laptop whose card has 8 GB](#on-a-laptop-with-8-gb-of-vram) brought:
 
 | Model | Experts from VRAM | Writes after a short prompt | after about 2,100 tokens | after about 7,700 | Reads about 2,100 tokens | about 7,700 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -422,13 +453,11 @@ brought, which were not built on this machine.
 | Ornith 1.5 | 44% to 61% | 135 to 154, 137 to 166 | 137, 131 | 101, 110 | 2,270 to 2,310 | 4,050 to 4,120 |
 | Gemma 4 26B-A4B | 48% to 61% | 118 to 119, 150 to 152 | 97, 126 | 87, 93 | 2,450 to 2,540 | 4,190 to 4,660 |
 
-The short prompts are the two of three whose answers run to 300 tokens for Qwen3.6 and Gemma 4; one of
-Ornith's two stops after 122 to 123, and its answer after the longest prompt after 231 with guesses. With
-guesses a smaller share of the experts comes from VRAM (48% to 50% against 58% to 61% for Gemma 4). After
-about 2,100 tokens Ornith writes no faster with guesses than without: each of these runs is a process of its
-own, and the engine asks the block in its first rounds, before it has measured whether asking pays.
+In it Ornith's answer after the longest prompt stopped after 231 tokens with guesses, with guesses 48% to 50%
+of Gemma 4's experts came from VRAM against 58% to 61% without, and after about 2,100 tokens Ornith wrote no
+faster with guesses than without.
 
-The table is from after the last change in [What was tuned](#what-was-tuned), which is to what a guess costs.
+That table is from after the last change in [What was tuned](#what-was-tuned), which is to what a guess costs.
 The build before it wrote with guesses at 163 to 173, 137 to 172 and 146 to 155 tokens/s after a short prompt,
 152, 135 and 125 after about 2,100 tokens and 105, 90 and 98 after about 7,700. Ornith's answer after its
 longest prompt went from slower with guesses than without to faster. The rest are within what one of these
@@ -454,7 +483,7 @@ Before the changes for GLM in [What was tuned](#what-was-tuned) the three wrote 
 guesses after a short prompt and 101 to 121 with, and before the ones that begin with the experts eight at a
 time 77 to 109 and 87 to 118. Each run here is a new process, so most of the gain without guesses is the
 experts' pages being mapped before a token needs them: Qwen3.6's experts on the CPU took 5.2 to 5.8 ms a token
-and take 3.8 to 3.9. The gain with guesses is the windows' tokens going one behind the other: in the same hour
+and then 3.8 to 3.9. The gain with guesses is the windows' tokens going one behind the other: in the same hour
 the build before that wrote 134 to 135, 125 to 141 and 119 to 132 after a short prompt, and 115, 114 and 109
 after about 2,100 tokens. Ornith gained nothing from it after a short prompt.
 
@@ -467,11 +496,68 @@ cause was not found.
 
 ### A prompt of 30,000 tokens
 
-The README's numbers are this benchmark with one long prompt, `--prompt-tokens 24000`, which came to 29,154 to
-31,352 tokens by the models' tokenizers, with the engine of the ready-made release (f48fe541a646), three runs a
-size, set up as for the second table below. Qwen3.6 UD-Q3_K_M and Gemma 4 UD-Q3_K_M have the better of two such
-passes 16 and 22 minutes apart. In the other they wrote the short chat at 370 to 380 and 321 to 339 tokens/s and read
-the prompt at 5,934 to 6,109 and 7,236 to 8,135.
+The README's numbers are this benchmark with one long prompt, `--prompt-tokens 24000`, three runs a size and the
+last two in the tables, and a README cell has the highest of the passes in this section. The last two passes are
+of 2026-10-11. The documents had grown, so the prompt came to 29,364 to 31,825 tokens by the models' tokenizers.
+The first table is the current build, whose last change lets the CPU compute part of a small call's experts (the
+end of [What was tuned](#what-was-tuned)). The four smaller models ran as setup installs them and GLM's three sizes
+from hand-written configs, as for the last table below.
+
+| Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.6-35B-A3B UD-Q3_K_M | whole model on it | 31,646 | 5.0 to 5.1 | 6,270 to 6,467 | 368 to 390 | 246 to 247 | 100% |
+| Qwen3.6-35B-A3B UD-Q2_K_XL | whole model on it | 31,646 | 4.9 to 5.0 | 6,396 to 6,594 | 401 to 447 | 257 to 262 | 100% |
+| Qwen3.6-35B-A3B UD-Q4_K_M | whole model on it | 31,646 | 4.9 to 5.0 | 6,452 to 6,509 | 381 to 384 | 247 to 249 | 100% |
+| Ornith 1.5 APEX-I-Compact | whole model on it | 31,646 | 5.2 to 5.3 | 6,012 to 6,141 | 312 to 318 | 207 to 216 | 100% |
+| Ornith 1.5 APEX-I-Mini | whole model on it | 31,646 | 5.0 to 5.1 | 6,303 to 6,377 | 297 | 202 to 203 | 100% |
+| Ornith 1.5 APEX-I-Quality | whole model on it | 31,646 | 5.6 | 5,717 to 5,736 | 244 to 272 | 201 to 204 | 100% |
+| Gemma 4 26B-A4B UD-Q3_K_M | whole model on it | 31,296 | 3.9 | 8,061 to 8,136 | 353 to 356 | 233 to 246 | 100% |
+| Gemma 4 26B-A4B UD-Q2_K_XL | whole model on it | 31,296 | 4.0 to 4.2 | 7,495 to 7,848 | 326 to 333 | 242 to 243 | 100% |
+| Gemma 4 26B-A4B UD-Q4_K_M | whole model on it | 31,296 | 4.0 to 4.1 | 7,669 to 7,878 | 334 to 337 | 241 to 253 | 100% |
+| Tiel Coder 35B-A3B UD-Q3_K_XL | whole model on it | 31,825 | 4.7 to 4.9 | 6,574 to 6,827 | 337 to 345 | 220 to 226 | 100% |
+| Tiel Coder 35B-A3B UD-IQ3_XXS | whole model on it | 31,825 | 5.1 to 5.2 | 6,248 to 6,333 | 330 to 347 | 232 to 235 | 100% |
+| Tiel Coder 35B-A3B UD-Q4_K_XL | whole model on it | 31,825 | 5.0 to 5.1 | 6,390 to 6,444 | 313 to 318 | 215 to 218 | 100% |
+| GLM 5.3 Flash 3.0bit | 32 GB | 29,364 | 36.3 to 37.5 | 786 to 810 | 60 to 64 | 61 to 62 | 50% to 52% |
+| GLM 5.3 Flash UD-IQ2_XXS | 32 GB | 29,364 | 29.0 | 1,015 to 1,016 | 48 | 44 | 52% |
+| GLM 5.3 Flash REAP50-Q3_K_M | 32 GB | 29,364 | 22.8 to 22.9 | 1,289 to 1,292 | 62 | 60 to 64 | 58% to 59% |
+
+The build before that change, three hours earlier:
+
+| Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.6-35B-A3B UD-Q3_K_M | whole model on it | 31,646 | 4.9 to 5.0 | 6,485 to 6,499 | 394 to 395 | 246 to 247 | 100% |
+| Qwen3.6-35B-A3B UD-Q2_K_XL | whole model on it | 31,646 | 5.0 | 6,466 to 6,468 | 450 | 267 to 271 | 100% |
+| Qwen3.6-35B-A3B UD-Q4_K_M | whole model on it | 31,646 | 4.8 to 5.3 | 6,031 to 6,686 | 363 to 401 | 238 to 251 | 100% |
+| Ornith 1.5 APEX-I-Compact | whole model on it | 31,646 | 4.8 to 4.9 | 6,551 to 6,744 | 316 to 319 | 217 | 100% |
+| Ornith 1.5 APEX-I-Mini | whole model on it | 31,646 | 5.4 to 5.5 | 5,888 to 5,989 | 295 to 297 | 202 to 206 | 100% |
+| Ornith 1.5 APEX-I-Quality | whole model on it | 31,646 | 5.1 to 5.5 | 5,806 to 6,283 | 282 to 296 | 201 to 204 | 100% |
+| Gemma 4 26B-A4B UD-Q3_K_M | whole model on it | 31,296 | 4.1 to 4.3 | 7,396 to 7,764 | 338 to 346 | 238 to 241 | 100% |
+| Gemma 4 26B-A4B UD-Q2_K_XL | whole model on it | 31,296 | 4.0 to 4.3 | 7,382 to 8,004 | 327 to 340 | 242 to 246 | 100% |
+| Gemma 4 26B-A4B UD-Q4_K_M | whole model on it | 31,296 | 4.0 to 4.1 | 7,810 to 7,936 | 335 to 346 | 238 to 245 | 100% |
+| Tiel Coder 35B-A3B UD-Q3_K_XL | whole model on it | 31,825 | 4.8 to 5.1 | 6,344 to 6,823 | 332 to 341 | 228 to 230 | 100% |
+| Tiel Coder 35B-A3B UD-IQ3_XXS | whole model on it | 31,825 | 5.0 to 5.3 | 6,091 to 6,523 | 339 to 351 | 232 to 233 | 100% |
+| Tiel Coder 35B-A3B UD-Q4_K_XL | whole model on it | 31,825 | 4.7 to 4.8 | 6,750 to 6,871 | 316 to 322 | 209 to 216 | 100% |
+| GLM 5.3 Flash 3.0bit | 32 GB | 29,364 | 37.3 to 37.5 | 784 to 789 | 64 to 65 | 63 to 65 | 50% to 51% |
+| GLM 5.3 Flash UD-IQ2_XXS | 32 GB | 29,364 | 28.3 to 28.5 | 1,035 to 1,042 | 50 to 52 | 46 to 47 | 52% |
+| GLM 5.3 Flash REAP50-Q3_K_M | 32 GB | 29,364 | 22.5 to 22.8 | 1,294 to 1,309 | 63 to 65 | 62 to 66 | 58% to 59% |
+
+The twelve sizes of the four smaller models have every expert in VRAM, where the CPU's share is not used. Run in
+turns with the build before, three times each, the current build read the prompt at 6,833 to 6,857 tokens/s with
+Ornith APEX-I-Compact, whose row differs most, where the build before read it at 6,764 to 6,770, and at 1,062 to
+1,076 with GLM UD-IQ2_XXS where at 1,057 to 1,063; the README has these two. In those runs GLM UD-IQ2_XXS wrote the
+short chat at 50 to 51 tokens/s where 53, with its guesses right 83% to 86% of the time where 88% to 89%. Its prompt
+of 23 tokens and its answer are calls of fewer than 32 tokens, which the CPU's share does not touch. Eight rounds
+more in turn, four in each order, with 79fd2f36 and with this build at `--cpu-share 0` beside the two, wrote the
+short chat at 51.1 to 53.3 tokens/s with the build before, 50.1 to 52.4 with 79fd2f36, 49.6 to 52.3 with this build
+and 49.5 to 52.5 with it at `--cpu-share 0`, all four with 2,766 experts in VRAM. The three later builds run the
+same code for this answer, and the build before differs from 79fd2f36 there only in a lock taken once for each
+batch of work handed to the CPU's threads. The build before came out about 2% faster in both orders; with GLM
+3.0bit, in turn, it did not ([Benchmark](#benchmark)).
+
+The pass before those, with the engine of the ready-made release (f48fe541a646), came to 29,154 to 31,352 tokens,
+set up as for the last table below. Qwen3.6 UD-Q3_K_M and Gemma 4 UD-Q3_K_M have the better of two such passes 16
+and 22 minutes apart. In the other they wrote the short chat at 370 to 380 and 321 to 339 tokens/s and read the
+prompt at 5,934 to 6,109 and 7,236 to 8,135.
 
 | Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -493,7 +579,7 @@ The same engine read the benchmark's prompt without `--prompt-tokens`, 10,615 to
 with Gemma 4 UD-Q3_K_M, three runs each.
 
 Tiel Coder's three sizes were measured later, with the source of 9b8fd02fc9f7, as setup installed them: the benchmark
-without `--prompt-tokens` first, then two runs with it, which the table has; and held to 8 GB as in the second
+without `--prompt-tokens` first, then two runs with it, which the table has; and held to 8 GB as in the last
 table below, three runs of which the first started the profile, and the table has the two after it.
 
 | Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
@@ -510,9 +596,9 @@ UD-Q3_K_XL, 5,591 with UD-IQ3_XXS and 6,035 with UD-Q4_K_XL. Held to 8 GB the ca
 of the 10,496 experts. Two hours later, with the engine of 1212621baadf, the same three wrote the short chat at
 276 to 300, 288 to 296 and 235 to 273 tokens/s and read the prompt at 5,818 to 6,342. The pod is shared, and in
 that hour the release's own engine, run in turns with the new one, wrote GLM 3.0bit's short chat at 55 tokens/s
-where the table above has 59 to 66.
+where the release's table above has 59 to 66.
 
-The second table is the same benchmark with the builds before, which came to 28,000 to 31,000 tokens, twice
+The last table is the same benchmark with the builds before, which came to 28,000 to 31,000 tokens, twice
 each. The three new models ran as setup installed them, and held to
 8 GB as above but through the server, with the picture encoder on the CPU, where setup puts it for a card under
 16 GB, and a profile of the run's own that a first run had started. GLM's three sizes ran from hand-written
@@ -579,17 +665,67 @@ the prompt at 2,023, with the build before a prompt batch's attention took its r
 
 ### On a laptop with 8 GB of VRAM
 
-The kind of PC the three new models are for: an RTX 4070 Laptop with 8 GB, an i7-14700HX (8 performance cores
+The kind of PC the four smaller models are for: an RTX 4070 Laptop with 8 GB, an i7-14700HX (8 performance cores
 of two threads each and 12 efficiency cores, AVX2 and no AVX-512), 32 GB of RAM, Windows 10, driver 610.74,
-CUDA 13.0. Setup installed the nine sizes of the three models: a context of 32,768, the picture encoder on the
+CUDA 13.0. Setup installed the twelve sizes of the four models: a context of 32,768, the picture encoder on the
 CPU, and 13 threads for the experts that are not in VRAM. The numbers are the benchmark's through the server, as
 on the first machine, with a browser and the desktop on the same card and in the same RAM.
 
-The README's numbers are the README's test, `--prompt-tokens 24000`, with the ready-made engine of the source of
-1212621baadf, built on this laptop by `tools/make_poly_release.py` and installed by setup, with CUDA's libraries
-from pip, and Qwen3.6 with `--tail-skip 6` as setup installs it. Three runs a size. A size's first run is the
-first after another model was in memory, and the table has the two runs after it. The card's memory was at 7.7
-to 7.8 GiB of its 8 in every one of them.
+The last pass is the README's test, `--prompt-tokens 24000`, with the ready-made engine of the source of
+2ba29a383baf, built on this laptop by `tools/make_poly_release.py` and installed by setup, with CUDA's libraries
+from pip, and Qwen3.6 with `--tail-skip 6` as setup installs it. Three runs a size, one size after another, and the
+table has the two runs after a size's first. The card's memory was at 7.5 to 7.7 GiB of its 8 in every one of them.
+
+| Model | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM | Machine's RAM, GiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Gemma 4 26B-A4B UD-Q3_K_M | 31,325 | 15.0 | 2,095 to 2,097 | 86 to 87 | 62 to 65 | 56% to 57% | 24.0 |
+| UD-Q2_K_XL | 31,325 | 15.6 | 2,020 to 2,021 | 98 to 99 | 73 to 74 | 72% to 73% | 21.9 |
+| UD-Q4_K_M | 31,325 | 15.6 to 15.7 | 2,011 | 80 to 82 | 59 | 41% to 42% | 27.9 |
+| Qwen3.6-35B-A3B UD-Q3_K_M | 31,505 | 19.7 | 1,598 to 1,604 | 94 | 78 | 60% to 61% | 26.1 |
+| UD-Q2_K_XL | 31,515 | 21.0 | 1,503 to 1,504 | 119 to 121 | 88 to 92 | 79% | 21.8 to 21.9 |
+| UD-Q4_K_M | 31,515 | 32.1 to 32.4 | 974 to 982 | 80 to 81 | 62 to 63 | 54% | 31.1 |
+| Ornith 1.5 APEX-I-Compact | 31,515 | 20.6 | 1,531 to 1,532 | 76 to 78 | 68 to 69 | 58% to 60% | 26.6 |
+| APEX-I-Mini | 31,515 | 21.4 to 21.5 | 1,470 to 1,478 | 80 to 86 | 70 to 74 | 70% to 74% | 23.8 |
+| APEX-I-Quality | 31,515 | 26.4 to 28.1 | 1,124 to 1,194 | 48 to 50 | 46 to 50 | 44% to 45% | 31.3 to 31.4 |
+| Tiel Coder 35B-A3B UD-Q3_K_XL | 31,694 | 19.8 | 1,601 to 1,602 | 76 to 77 | 65 to 66 | 55% to 57% | 24.7 to 24.8 |
+| UD-IQ3_XXS | 31,694 | 20.9 | 1,517 to 1,518 | 93 to 95 | 70 to 74 | 68% to 69% | 21.5 to 21.6 |
+| UD-Q4_K_XL | 31,694 | 21.3 to 21.4 | 1,483 to 1,488 | 66 to 75 | 57 to 58 | 38% to 39% | 30.2 |
+
+A README cell has the higher of this pass and the one below; the one below is higher in every cell but
+APEX-I-Mini's short chat. Run in turns afterwards, two runs of each, the engine of 1212621baadf was no faster: with
+Gemma 4 UD-Q3_K_M and a prompt of 31,647 tokens, this engine read it at 1,993 to 2,084 tokens/s and wrote after it
+at 59 to 62, that one at 2,029 to 2,082 and 56 to 60; with Tiel Coder's UD-Q3_K_XL and 32,013 tokens, 1,580 to
+1,588 and 65 to 67 against 1,517 to 1,547 and 57 to 61.
+
+The runs of Qwen3.6 UD-Q4_K_M and APEX-I-Quality took the machine's RAM to 31.1 to 31.4 GiB, where part of a file
+comes from the disk again (see the pass below). Three engines in turns with Qwen3.6 UD-Q4_K_M, with Windows'
+counters logging the disk every second: the release before, this one, and this one with `--cpu-share 0`. In the
+first round each read the prompt at 1,562 to 1,563 tokens/s and nothing came from the disk. In the second the
+machine's RAM peaked higher from run to run, at 30.0, 30.9 and 31.2 GiB, and the two later runs read at 1,378 and
+1,051 tokens/s while 0.54 and 0.75 GiB came from the disk.
+
+Two more rounds of the release's engine and this one in turns with Qwen3.6 UD-Q4_K_M, the engine process's
+memory logged every second: the release read the prompt at 1,489 and 1,403 tokens/s, this engine at 1,424 and
+1,514; after the release's first run, which started from a cold file cache, the short chat came at 51 (the
+release) against 51 and 57 (this engine), the answer after the prompt at 57 against 52 and 57. Three rounds with
+APEX-I-Quality: this engine read the prompt at 1,389 and 1,445 tokens/s against the release's 1,578 and 1,554,
+and in the third round both fell to about 820 with the machine's RAM at 31.3 to 31.5 GiB; the short chat came at
+51, 53 and 56 against 55 and 60 after the release's cold first run; the answer after the prompt at 57 and 59
+against 53 and 56. This engine's process held 0.2 GB more private memory (9.9 against 9.7 GB) and 0.25 GiB more
+of the card (7.6 against 7.4 GiB, the smaller reserve), with the machine's free RAM down to 0.3 to 0.6 GB in
+every run of either. The README's 59 to 63 for that short chat is the release's pass of 2026-10-10; the two
+engines did not run in turn that day.
+
+A size's first run wrote the short chat at 28 to 92 tokens/s and after the prompt at 39 to 84, and read the prompt
+within 3% of the two runs after it, but for the two largest files (above).
+
+The benchmark without `--prompt-tokens`, the second of two runs: this engine read 10,797 tokens at 1,616 tokens/s
+with Qwen3.6 UD-Q3_K_M and 1,536 with Ornith's APEX-I-Compact, 11,214 at 2,039 with Gemma 4 UD-Q3_K_M, and
+10,976 at 1,591 with Tiel Coder's UD-Q3_K_XL.
+
+The pass before is the same test with the ready-made engine of the source of 1212621baadf, built and installed the
+same way. Three runs a size. A size's first run is the first after another model was in memory, and the table has
+the two runs after it. The card's memory was at 7.7 to 7.8 GiB of its 8 in every one of them.
 
 | Model | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM | Machine's RAM, GiB |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

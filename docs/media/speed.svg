@@ -32,14 +32,14 @@ text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Aria
 <rect x="656" y="136" width="216" height="18" rx="4" class="t"/><rect x="656" y="136" width="213" height="18" rx="4" fill="#7c9cff"/>
 <text x="880" y="150" class="v">394-395</text>
 <text x="512" y="184" class="m">Gemma 4 26B-A4B</text>
-<rect x="656" y="170" width="216" height="18" rx="4" class="t"/><rect x="656" y="170" width="176" height="18" rx="4" fill="#5ad1a4"/>
-<text x="880" y="184" class="v">326-349</text>
+<rect x="656" y="170" width="216" height="18" rx="4" class="t"/><rect x="656" y="170" width="191" height="18" rx="4" fill="#5ad1a4"/>
+<text x="880" y="184" class="v">353-356</text>
 <text x="512" y="218" class="m">Ornith 1.5</text>
 <rect x="656" y="204" width="216" height="18" rx="4" class="t"/><rect x="656" y="204" width="171" height="18" rx="4" fill="#f5b25c"/>
 <text x="880" y="218" class="v">316-319</text>
 <text x="512" y="252" class="m">Tiel Coder 35B-A3B</text>
-<rect x="656" y="238" width="216" height="18" rx="4" class="t"/><rect x="656" y="238" width="179" height="18" rx="4" fill="#67d4e6"/>
-<text x="880" y="252" class="v">332-341</text>
+<rect x="656" y="238" width="216" height="18" rx="4" class="t"/><rect x="656" y="238" width="182" height="18" rx="4" fill="#67d4e6"/>
+<text x="880" y="252" class="v">337-345</text>
 <text x="512" y="286" class="m">GLM 5.3 Flash</text>
 <rect x="656" y="272" width="216" height="18" rx="4" class="t"/><rect x="656" y="272" width="32" height="18" rx="4" fill="#e88bd0"/>
 <text x="880" y="286" class="v">59-66</text>

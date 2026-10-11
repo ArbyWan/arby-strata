@@ -46,7 +46,9 @@ RTX 4070 Ti with 12 GB, and a laptop's RTX 5060 with 8 GB. Yours can go there to
 
 With `bench/bench_vs_llama.py`, the script Strata used for its own comparison. It runs PolyStrata and llama.cpp's
 `llama-server` in turns on the same GGUF and the same prompts and prints the medians of both
-([how to run it](COMMUNITY_BENCHMARKS.md#comparing-with-llamacpp)).
+([how to run it](COMMUNITY_BENCHMARKS.md#comparing-with-llamacpp)). On the README's 8 GB laptop, with Qwen3.6
+and with Tiel Coder, PolyStrata read the prompts 2.7 to 3.5 times as fast as llama.cpp b11540 and wrote 1.5 to 1.8
+times as fast (the two runs are linked there).
 
 ### Does it run on Radeon / AMD?
 
@@ -124,12 +126,13 @@ Yes. It serves OpenAI- and Anthropic-compatible APIs on localhost, with tool cal
 
 For Claude Code, also add `"anthropic_thinking": "on_request"` and `"fit_max_tokens": true` to
 `strata-<model>.json` and restart. Claude Code first asks for a session title, and without the first setting the
-model thinks that over before it starts on your task: 17 s with Qwen3.6 on an 8 GB laptop
-([more](DETAILS.md#using-it)). The second one it needs with the 32K context setup suggests: Claude Code asks for
+model thinks that over instead, and runs out of the 512 tokens the request allows before it has a title: 5 s a
+request with Qwen3.6 on an 8 GB laptop ([more](DETAILS.md#using-it)). The second one it needs with the 32K context
+setup suggests: Claude Code asks for
 32,000 tokens of room for the answer in every request, and the server refuses a request when the prompt leaves less
 than that. With the setting the server gives it the room that is left. With `"warm_start": true` as well, the server
 keeps Claude Code's system prompt and tool list and reads them when it starts, so the first request after a restart
-reads only the rest: 2.9 s instead of 9.9 s in a test.
+reads only the rest: 3.5 s instead of 11.1 s in a test.
 
 ### Who maintains it?
 

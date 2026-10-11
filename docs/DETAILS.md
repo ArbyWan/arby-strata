@@ -782,16 +782,17 @@ print(r.choices[0].message.content)
   with no `"thinking"`, effort or budget thinks as the model's template does. `"anthropic_thinking": "on_request"` in
   `strata-<model>.json` renders a request with no `"thinking"` or budget without thinking, also when it gives an
   effort. That is Anthropic's own rule, and what Claude Code's short helper calls need; its real turns ask for
-  thinking when it is on there. Claude Code 2.1.282 asks for a session title with effort `high` and no `"thinking"`:
-  without the setting, Qwen3.6 on an 8 GB laptop thought 1,441 tokens (16.6 s) over the title before the first real
-  turn could start. An effort set with "Use for other apps too" still turns thinking on.
+  thinking when it is on there. Claude Code asks for a session title with effort `high`, no `"thinking"` and 512
+  tokens of room: without the setting, Qwen3.6 on an 8 GB laptop spent the 512 tokens thinking about the title,
+  5 s a request, and gave none. An effort set with "Use for other apps too" still turns thinking on.
 - **Reading an agent's prompt start when the server starts (opt-in).** After a restart an agent's first request
-  reads its whole prompt again. Claude Code's was 17,085 tokens in a test (9.9 s with Qwen3.6 on an 8 GB laptop),
-  and 14,504 of them were the system prompt and the tool list, which every session in the same folder sends again.
+  reads its whole prompt again. Claude Code's was 16,651 tokens in a test (11.1 s with Qwen3.6 on an 8 GB laptop),
+  and 14,452 of them were the system prompt and the tool list, which every session in the same folder sends again.
   `"warm_start": true` in `strata-<model>.json` keeps the first turn of the last request with tools (the system
   prompt with the tools, when that is 2,048 tokens or more) in `strata-<model>.warm-start` next to the config, and
-  reads it when the server starts: 8 s for those 14,504 tokens. Claude Code's first request then read 2,581 tokens
-  in 2.9 s. A request that comes in during that read stops it and goes first (one sent 3 s after the start waited
+  reads it when the server starts: 7.9 s for those 14,452 tokens. Claude Code's first request then had 12,288
+  tokens in common with the kept start and read the other 4,363 in 3.5 s. A request that comes in during that read
+  stops it and goes first (one sent 3 s after the start waited
   0.5 s), and the part read stays cached. It is off by default because the read keeps the GPU busy at every start,
   also when no agent comes.
 - **Streaming.** With `"stream": true` everything arrives as it is made: the thinking, the answer, and tool calls

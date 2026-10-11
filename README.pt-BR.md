@@ -91,7 +91,7 @@ Medido para o PolyStrata numa estação de trabalho, com uma conversa curta e um
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
 | **3.0BIT** | 59-66 tokens/s | 820 tokens/s |
-| **UD-IQ2_XXS** | 50-52 tokens/s | 1,040-1,050 tokens/s |
+| **UD-IQ2_XXS** | 50-52 tokens/s | 1,060-1,080 tokens/s |
 | **REAP50-Q3_K_M** | 59-66 tokens/s | 1,300-1,310 tokens/s |
 
 </td></tr>
@@ -121,7 +121,7 @@ de trabalho cuja placa guarda o modelo inteiro.
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
 | **UD-Q3_K_M** | 394-395 tokens/s | 6,350-6,550 tokens/s |
-| **UD-Q2_K_XL** | 450 tokens/s | 6,470 tokens/s |
+| **UD-Q2_K_XL** | 450 tokens/s | 6,400-6,590 tokens/s |
 | **UD-Q4_K_M** | 363-401 tokens/s | 6,030-6,690 tokens/s |
 
 </td></tr>
@@ -143,15 +143,15 @@ Medido do mesmo jeito, nos mesmos dois PCs.
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
 | **APEX-I-COMPACT** | 76-82 tokens/s | 1,620 tokens/s |
-| **APEX-I-MINI** | 83-84 tokens/s | 1,550-1,560 tokens/s |
+| **APEX-I-MINI** | 80-86 tokens/s | 1,550-1,560 tokens/s |
 | **APEX-I-QUALITY** | 59-63 tokens/s | 1,570-1,580 tokens/s |
 
 </td><td>
 
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
-| **APEX-I-COMPACT** | 316-319 tokens/s | 6,550-6,740 tokens/s |
-| **APEX-I-MINI** | 289-300 tokens/s | 5,940-6,170 tokens/s |
+| **APEX-I-COMPACT** | 316-319 tokens/s | 6,830-6,860 tokens/s |
+| **APEX-I-MINI** | 289-300 tokens/s | 6,300-6,380 tokens/s |
 | **APEX-I-QUALITY** | 289-298 tokens/s | 6,040-6,390 tokens/s |
 
 </td></tr>
@@ -177,7 +177,7 @@ Medido do mesmo jeito, nos mesmos dois PCs.
 
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_M** | 326-349 tokens/s | 7,880-8,230 tokens/s |
+| **UD-Q3_K_M** | 353-356 tokens/s | 7,880-8,230 tokens/s |
 | **UD-Q2_K_XL** | 327-340 tokens/s | 7,380-8,000 tokens/s |
 | **UD-Q4_K_M** | 335-346 tokens/s | 7,040-8,050 tokens/s |
 
@@ -204,7 +204,7 @@ Medido do mesmo jeito, nos mesmos dois PCs.
 
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_XL** | 332-341 tokens/s | 6,340-6,820 tokens/s |
+| **UD-Q3_K_XL** | 337-345 tokens/s | 6,570-6,830 tokens/s |
 | **UD-IQ3_XXS** | 339-351 tokens/s | 6,090-6,520 tokens/s |
 | **UD-Q4_K_XL** | 316-322 tokens/s | 6,750-6,870 tokens/s |
 
@@ -218,6 +218,8 @@ Os cinco modelos do motor próprio do PolyStrata foram medidos com o benchmark d
 ([o que ele envia e mostra](docs/BACKENDS.md#benchmark), em inglês).
 O que outras pessoas mediram nas próprias placas, e como comparar com o llama.cpp na sua:
 [resultados da comunidade](docs/COMMUNITY_BENCHMARKS.md#the-models-polystrata-adds) (em inglês).
+No notebook, o PolyStrata leu os prompts de 2.7 a 3.5 vezes mais rápido que o llama.cpp b11540 e escreveu de
+1.5 a 1.8 vezes mais rápido, com o Qwen3.6 e com o Tiel Coder ([as duas medições](docs/COMMUNITY_BENCHMARKS.md#comparing-with-llamacpp), em inglês).
 
 ## Do que você precisa
 

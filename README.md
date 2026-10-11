@@ -89,7 +89,7 @@ Measured for PolyStrata on one workstation, with a short chat and a 29K-token pr
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
 | **3.0BIT** | 59-66 tokens/s | 820 tokens/s |
-| **UD-IQ2_XXS** | 50-52 tokens/s | 1,040-1,050 tokens/s |
+| **UD-IQ2_XXS** | 50-52 tokens/s | 1,060-1,080 tokens/s |
 | **REAP50-Q3_K_M** | 59-66 tokens/s | 1,300-1,310 tokens/s |
 
 </td></tr>
@@ -119,7 +119,7 @@ whose card holds the whole model.
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
 | **UD-Q3_K_M** | 394-395 tokens/s | 6,350-6,550 tokens/s |
-| **UD-Q2_K_XL** | 450 tokens/s | 6,470 tokens/s |
+| **UD-Q2_K_XL** | 450 tokens/s | 6,400-6,590 tokens/s |
 | **UD-Q4_K_M** | 363-401 tokens/s | 6,030-6,690 tokens/s |
 
 </td></tr>
@@ -140,15 +140,15 @@ Measured the same way, on the same two PCs.
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
 | **APEX-I-COMPACT** | 76-82 tokens/s | 1,620 tokens/s |
-| **APEX-I-MINI** | 83-84 tokens/s | 1,550-1,560 tokens/s |
+| **APEX-I-MINI** | 80-86 tokens/s | 1,550-1,560 tokens/s |
 | **APEX-I-QUALITY** | 59-63 tokens/s | 1,570-1,580 tokens/s |
 
 </td><td>
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **APEX-I-COMPACT** | 316-319 tokens/s | 6,550-6,740 tokens/s |
-| **APEX-I-MINI** | 289-300 tokens/s | 5,940-6,170 tokens/s |
+| **APEX-I-COMPACT** | 316-319 tokens/s | 6,830-6,860 tokens/s |
+| **APEX-I-MINI** | 289-300 tokens/s | 6,300-6,380 tokens/s |
 | **APEX-I-QUALITY** | 289-298 tokens/s | 6,040-6,390 tokens/s |
 
 </td></tr>
@@ -174,7 +174,7 @@ Measured the same way, on the same two PCs.
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_M** | 326-349 tokens/s | 7,880-8,230 tokens/s |
+| **UD-Q3_K_M** | 353-356 tokens/s | 7,880-8,230 tokens/s |
 | **UD-Q2_K_XL** | 327-340 tokens/s | 7,380-8,000 tokens/s |
 | **UD-Q4_K_M** | 335-346 tokens/s | 7,040-8,050 tokens/s |
 
@@ -201,7 +201,7 @@ Measured the same way, on the same two PCs.
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_XL** | 332-341 tokens/s | 6,340-6,820 tokens/s |
+| **UD-Q3_K_XL** | 337-345 tokens/s | 6,570-6,830 tokens/s |
 | **UD-IQ3_XXS** | 339-351 tokens/s | 6,090-6,520 tokens/s |
 | **UD-Q4_K_XL** | 316-322 tokens/s | 6,750-6,870 tokens/s |
 
@@ -215,6 +215,8 @@ The five models of PolyStrata's own engine were measured with its benchmark, whi
 ([what it sends and prints](docs/BACKENDS.md#benchmark)).
 What others measured on their own cards, and how to compare with llama.cpp on yours:
 [community results](docs/COMMUNITY_BENCHMARKS.md#the-models-polystrata-adds).
+On the laptop PolyStrata read prompts 2.7 to 3.5 times as fast as llama.cpp b11540 and wrote 1.5 to 1.8 times
+as fast, with Qwen3.6 and with Tiel Coder ([the two runs](docs/COMMUNITY_BENCHMARKS.md#comparing-with-llamacpp)).
 
 ## What you need
 

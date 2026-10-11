@@ -88,7 +88,7 @@ PolyStrata が 1 台のワークステーションで、短いチャットと 29
 | サイズ | 回答の書き出し | プロンプトの読み込み |
 | --- | ---: | ---: |
 | **3.0BIT** | 59-66 tokens/s | 820 tokens/s |
-| **UD-IQ2_XXS** | 50-52 tokens/s | 1,040-1,050 tokens/s |
+| **UD-IQ2_XXS** | 50-52 tokens/s | 1,060-1,080 tokens/s |
 | **REAP50-Q3_K_M** | 59-66 tokens/s | 1,300-1,310 tokens/s |
 
 </td></tr>
@@ -117,7 +117,7 @@ PolyStrata が 2 台の PC で、短いチャットと 3 万〜3.2 万トーク�
 | サイズ | 回答の書き出し | プロンプトの読み込み |
 | --- | ---: | ---: |
 | **UD-Q3_K_M** | 394-395 tokens/s | 6,350-6,550 tokens/s |
-| **UD-Q2_K_XL** | 450 tokens/s | 6,470 tokens/s |
+| **UD-Q2_K_XL** | 450 tokens/s | 6,400-6,590 tokens/s |
 | **UD-Q4_K_M** | 363-401 tokens/s | 6,030-6,690 tokens/s |
 
 </td></tr>
@@ -139,15 +139,15 @@ PolyStrata が 2 台の PC で、短いチャットと 3 万〜3.2 万トーク�
 | サイズ | 回答の書き出し | プロンプトの読み込み |
 | --- | ---: | ---: |
 | **APEX-I-COMPACT** | 76-82 tokens/s | 1,620 tokens/s |
-| **APEX-I-MINI** | 83-84 tokens/s | 1,550-1,560 tokens/s |
+| **APEX-I-MINI** | 80-86 tokens/s | 1,550-1,560 tokens/s |
 | **APEX-I-QUALITY** | 59-63 tokens/s | 1,570-1,580 tokens/s |
 
 </td><td>
 
 | サイズ | 回答の書き出し | プロンプトの読み込み |
 | --- | ---: | ---: |
-| **APEX-I-COMPACT** | 316-319 tokens/s | 6,550-6,740 tokens/s |
-| **APEX-I-MINI** | 289-300 tokens/s | 5,940-6,170 tokens/s |
+| **APEX-I-COMPACT** | 316-319 tokens/s | 6,830-6,860 tokens/s |
+| **APEX-I-MINI** | 289-300 tokens/s | 6,300-6,380 tokens/s |
 | **APEX-I-QUALITY** | 289-298 tokens/s | 6,040-6,390 tokens/s |
 
 </td></tr>
@@ -173,7 +173,7 @@ PolyStrata が 2 台の PC で、短いチャットと 3 万〜3.2 万トーク�
 
 | サイズ | 回答の書き出し | プロンプトの読み込み |
 | --- | ---: | ---: |
-| **UD-Q3_K_M** | 326-349 tokens/s | 7,880-8,230 tokens/s |
+| **UD-Q3_K_M** | 353-356 tokens/s | 7,880-8,230 tokens/s |
 | **UD-Q2_K_XL** | 327-340 tokens/s | 7,380-8,000 tokens/s |
 | **UD-Q4_K_M** | 335-346 tokens/s | 7,040-8,050 tokens/s |
 
@@ -200,7 +200,7 @@ PolyStrata が 2 台の PC で、短いチャットと 3 万〜3.2 万トーク�
 
 | サイズ | 回答の書き出し | プロンプトの読み込み |
 | --- | ---: | ---: |
-| **UD-Q3_K_XL** | 332-341 tokens/s | 6,340-6,820 tokens/s |
+| **UD-Q3_K_XL** | 337-345 tokens/s | 6,570-6,830 tokens/s |
 | **UD-IQ3_XXS** | 339-351 tokens/s | 6,090-6,520 tokens/s |
 | **UD-Q4_K_XL** | 316-322 tokens/s | 6,750-6,870 tokens/s |
 
@@ -214,6 +214,8 @@ PolyStrata 独自のエンジンで動く 5 つのモデルは、付属のベン
 （[何を送り、何を表示するか](docs/BACKENDS.md#benchmark)、英語）。
 ほかの人が自分のカードで測った結果と、あなたの PC で llama.cpp と比べる方法：
 [コミュニティの測定結果](docs/COMMUNITY_BENCHMARKS.md#the-models-polystrata-adds)（英語）。
+ノート PC では Qwen3.6 でも Tiel Coder でも、PolyStrata はプロンプトを llama.cpp b11540 の 2.7〜3.5 倍の速さで読み、
+1.5〜1.8 倍の速さで書きました（[2 回の測定](docs/COMMUNITY_BENCHMARKS.md#comparing-with-llamacpp)、英語）。
 
 ## 必要なもの
 

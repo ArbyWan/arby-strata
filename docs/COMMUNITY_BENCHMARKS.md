@@ -79,7 +79,13 @@ engine, is in `<run folder>/raw/`, and the engines' logs are in the run folder.
 `--fit on` lets llama.cpp decide how many layers' experts go to the processor. A number picked by hand with
 `-ngl 99 --n-cpu-moe N` can be faster; on the README's 8 GB laptop it was N = 30 for Qwen3.6 UD-Q3_K_M. The
 context of 36,864 on both sides leaves room for the 32K prompt and its answer, and `-fa on` with the q8_0 cache is
-how Strata's comparison ran llama.cpp. The example is for Qwen3.6 UD-Q3_K_M, the size this was run with here.
+how Strata's comparison ran llama.cpp. The example is for Qwen3.6 UD-Q3_K_M.
+
+The README's laptop ran it on 2026-10-11 with the engine of 2ba29a383baf and llama.cpp b11540, for
+[Qwen3.6 UD-Q3_K_M](../bench/results/2026-10-11-laptop-qwen36-llamacpp-b11540/README.md) and
+[Tiel Coder UD-Q3_K_XL](../bench/results/2026-10-11-laptop-tiel-llamacpp-b11540/README.md). Against llama.cpp's
+fastest setting in each cell, PolyStrata read the prompts 2.7 to 3.5 times as fast and wrote 1.5 to 1.8 times as
+fast.
 
 ## Community reports
 
