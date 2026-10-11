@@ -130,7 +130,7 @@ class Switch(unittest.TestCase):
         self.svc.config_path, self.svc.models_root = str(self.a), self.root
         self.new = Stopped(self.tok, "Hi.")
         patches = [mock.patch.object(S, "load_tokenizer", lambda p: self.tok),
-                   mock.patch.object(S, "start_model", lambda cfg, tok, lazy=False: (self.new, None, {"top_k": 5}, None))]
+                   mock.patch.object(S, "start_model", lambda cfg, tok, lazy=False: (self.new, None, {"top_k": 5}, None, []))]
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
