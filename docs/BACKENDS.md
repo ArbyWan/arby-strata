@@ -17,6 +17,7 @@ a second machine, a Windows laptop whose card has 8 GB.
 | Qwen3.6-35B-A3B | `qwen35moe` | `strata-poly` | Unsloth UD-Q3_K_M, UD-Q2_K_XL and UD-Q4_K_M, 12.6 to 22.7 GB | draft block in the file |
 | Ornith 1.5 35B-A3B | `qwen35moe` | `strata-poly` | APEX-MTP-I-Compact, I-Mini and I-Quality, 14.4 to 23.7 GB | draft block in the file |
 | Gemma 4 26B-A4B | `gemma4` | `strata-poly` | Unsloth UD-Q3_K_M, UD-Q2_K_XL and UD-Q4_K_M, 10.5 to 16.9 GB | its draft model, a file of 0.46 GB |
+| Tiel Coder 35B-A3B | `qwen35moe` | `strata-poly` | peculiar-ragdoll's UD-Q3_K_XL, UD-IQ3_XXS and UD-Q4_K_XL, 13.6 to 22.7 GB | draft block in the file |
 
 `strata` is the first engine and runs Qwen3.8 only; nothing in it changed. `strata-poly` is the engine that reads a
 GGUF in place, and it now has three architectures. It was called `strata-glm`, after its first model; an install
@@ -24,7 +25,7 @@ from then keeps its engine and moves to the new name the next time setup updates
 
 ## Install
 
-Setup installs all five. The three new models are in its list of models, and each has a family name that goes
+Setup installs all six. The four new models are in its list of models, and each has a family name that goes
 straight to it:
 
 ```bash
@@ -39,6 +40,10 @@ straight to it:
 ./setup.sh --family gemma4
 ```
 
+```bash
+./setup.sh --family tiel
+```
+
 | Family | Model | File | Download | RAM beside an 8 GB card (estimate) |
 | --- | --- | --- | --- | --- |
 | `qwen36` | Qwen3.6-35B-A3B | Unsloth UD-Q3_K_M | 17.1 GB | about 21 GB |
@@ -50,14 +55,19 @@ straight to it:
 | `gemma4` | Gemma 4 26B-A4B | Unsloth UD-Q3_K_M and its draft model | 13.2 GB | about 18 GB |
 | | | Unsloth UD-Q2_K_XL and the draft model | 11.0 GB | about 15 GB |
 | | | Unsloth UD-Q4_K_M and the draft model | 17.4 GB | about 21 GB |
+| `tiel` | Tiel Coder 35B-A3B | UD-Q3_K_XL | 17.2 GB | about 21 GB |
+| | | UD-IQ3_XXS | 13.6 GB | about 18 GB |
+| | | UD-Q4_K_XL | 22.7 GB | about 27 GB |
 
 A family's first size is the one setup takes. On a PC with less RAM than that wants it takes the second, the
-smallest, and the third is by name: `--model UD-Q4_K_M`, `--model APEX-I-QUALITY`. The sizes differ in their
-routed experts. UD-Q2_K_XL has them as IQ2_XS and IQ3_XXS, for Gemma 4 as IQ2_XS and IQ4_NL; UD-Q4_K_M as Q4_K
-with Q5_K and Q6_K where they write, for Gemma 4 Q4_K and Q5_1; I-Mini as Q3_K in half its layers and IQ2_S in
-the other half; I-Quality as IQ4_XS, Q5_K and Q6_K. The i-quants are slower on the CPU than the K-quants, which
-shows when the card is small: held to 8 GB, Ornith's I-Mini writes more slowly than its I-Compact with more of
-its experts on the card.
+smallest, and the third is by name: `--model UD-Q4_K_M`, `--model APEX-I-QUALITY`, `--model UD-Q4_K_XL`. The
+sizes differ in their routed experts. UD-Q2_K_XL has them as IQ2_XS and IQ3_XXS, for Gemma 4 as IQ2_XS and
+IQ4_NL; UD-Q4_K_M as Q4_K with Q5_K and Q6_K where they write, for Gemma 4 Q4_K and Q5_1; I-Mini as Q3_K in half
+its layers and IQ2_S in the other half; I-Quality as IQ4_XS, Q5_K and Q6_K. Tiel Coder is Ornith 1.5 quantized by
+peculiar-ragdoll with an importance matrix of its own and a chat template for shorter answers: UD-Q3_K_XL has its
+routed experts as IQ3_XXS with IQ4_XS where they write, UD-IQ3_XXS as IQ2_S with IQ3_XXS, UD-Q4_K_XL as Q4_K
+with Q5_K. The i-quants are slower on the CPU than the K-quants, which shows when the card is small: held to
+8 GB, Ornith's I-Mini writes more slowly than its I-Compact with more of its experts on the card.
 
 The steps are GLM's ([GLM.md](GLM.md#install)). Setup asks the context and whether to keep several conversations in
 RAM, compiles `strata-poly`, downloads the model's file from a pinned revision (for Gemma 4 also its draft model,
@@ -81,7 +91,7 @@ installs it there.
 Each install is a model of its own: `--list-models`, `/model` and the web page's list show all of them, and
 `./setup.sh --check` has a line for each with what this PC's card and RAM make of it.
 
-The three new models read pictures. Say yes to setup's question about images, or pass `--vision yes`:
+The four new models read pictures. Say yes to setup's question about images, or pass `--vision yes`:
 
 ```bash
 ./setup.sh --family gemma4 --vision yes
@@ -95,8 +105,9 @@ a few seconds. `--vision gpu` and `--vision cpu` choose the place. GLM 5.3 Flash
 The RAM column is the experts an 8 GB card does not hold, plus 10 GB for the rest. It is setup's estimate. The
 nine sizes ran on the [laptop](#on-a-laptop-with-8-gb-of-vram), which has 32 GB. The machine's RAM in use, 9 GiB
 with no model, was at most 22.5, 26.6 and 31.3 GiB with Qwen3.6's three sizes in the benchmark there, 23.9, 26.7
-and 31.4 with Ornith's and 22.6, 24.6 and 28.6 with Gemma 4's, of its 31.8. Setup does not stop a PC below the
-32 GB that Qwen3.8 needs when one of these families is named.
+and 31.4 with Ornith's and 22.6, 24.6 and 28.6 with Gemma 4's, of its 31.8. Tiel Coder's three, measured later
+with the engine of 1212621baadf, took it to 21.8, 24.9 and 29.9 GiB. Setup does not stop a PC below the 32 GB that
+Qwen3.8 needs when one of these families is named.
 
 ## How a backend works
 
@@ -473,6 +484,26 @@ The same engine read the benchmark's prompt without `--prompt-tokens`, 10,615 to
 6,069 to 6,265 tokens/s with Qwen3.6 UD-Q3_K_M, 5,540 to 5,692 with Ornith's APEX-I-Compact and 5,466 to 6,792
 with Gemma 4 UD-Q3_K_M, three runs each.
 
+Tiel Coder's three sizes were measured later, with the source of 9b8fd02fc9f7, as setup installed them: the benchmark
+without `--prompt-tokens` first, then two runs with it, which the table has; and held to 8 GB as in the second
+table below, three runs of which the first started the profile, and the table has the two after it.
+
+| Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tiel Coder 35B-A3B UD-Q3_K_XL | whole model on it | 31,516 | 4.8 to 5.0 | 6,464 to 6,667 | 308 to 312 | 204 | 100% |
+| | held to 8 GB | | 6.7 to 6.9 | 4,608 to 4,779 | 151 to 166 | 130 to 137 | 57% to 58% |
+| Tiel Coder 35B-A3B UD-IQ3_XXS | whole model on it | 31,516 | 5.2 | 6,204 to 6,210 | 316 to 320 | 210 to 211 | 100% |
+| | held to 8 GB | | 7.8 to 7.9 | 4,050 to 4,074 | 172 to 187 | 144 to 148 | 72% to 74% |
+| Tiel Coder 35B-A3B UD-Q4_K_XL | whole model on it | 31,516 | 4.8 to 5.0 | 6,470 to 6,603 | 282 to 288 | 206 | 100% |
+| | held to 8 GB | | 6.6 to 6.7 | 4,789 to 4,793 | 162 to 163 | 131 to 137 | 40% to 43% |
+
+The first run read the benchmark's prompt without `--prompt-tokens`, 10,776 tokens, at 6,066 tokens/s with
+UD-Q3_K_XL, 5,591 with UD-IQ3_XXS and 6,035 with UD-Q4_K_XL. Held to 8 GB the card kept 2,962, 4,244 and 2,019
+of the 10,496 experts. Two hours later, with the engine of 1212621baadf, the same three wrote the short chat at
+276 to 300, 288 to 296 and 235 to 273 tokens/s and read the prompt at 5,818 to 6,342. The pod is shared, and in
+that hour the release's own engine, run in turns with the new one, wrote GLM 3.0bit's short chat at 55 tokens/s
+where the table above has 59 to 66.
+
 The second table is the same benchmark with the builds before, which came to 28,000 to 31,000 tokens, twice
 each. The three new models ran as setup installed them, and held to
 8 GB as above but through the server, with the picture encoder on the CPU, where setup puts it for a card under
@@ -546,10 +577,47 @@ CUDA 13.0. Setup installed the nine sizes of the three models: a context of 32,7
 CPU, and 13 threads for the experts that are not in VRAM. The numbers are the benchmark's through the server, as
 on the first machine, with a browser and the desktop on the same card and in the same RAM.
 
-The README's numbers are the README's test, `--prompt-tokens 24000`, with the release's ready-made engine: the
-source of f48fe541a646, built on this laptop by `tools/make_poly_release.py` and installed by setup, with CUDA's
-libraries from pip. Three runs a size. A size's first run is the first after another model was in memory, and
-the table has the two runs after it. The card's memory was at 7.3 GiB of its 8 in every one of them.
+The README's numbers are the README's test, `--prompt-tokens 24000`, with the ready-made engine of the source of
+1212621baadf, built on this laptop by `tools/make_poly_release.py` and installed by setup, with CUDA's libraries
+from pip, and Qwen3.6 with `--tail-skip 6` as setup installs it. Three runs a size. A size's first run is the
+first after another model was in memory, and the table has the two runs after it. The card's memory was at 7.7
+to 7.8 GiB of its 8 in every one of them.
+
+| Model | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM | Machine's RAM, GiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Gemma 4 26B-A4B UD-Q3_K_M | 31,063 | 13.9 to 14.0 | 2,238 to 2,243 | 92 to 93 | 64 | 56% | 23.9 |
+| UD-Q2_K_XL | 31,063 | 14.5 | 2,154 to 2,159 | 101 to 104 | 76 | 73% to 74% | 21.8 |
+| UD-Q4_K_M | 31,063 | 14.5 | 2,146 to 2,148 | 85 | 61 | 41% | 27.9 |
+| Qwen3.6-35B-A3B UD-Q3_K_M | 31,344 | 18.6 | 1,688 to 1,690 | 94 to 100 | 79 to 82 | 62% to 63% | 27.0 |
+| UD-Q2_K_XL | 31,344 | 19.8 | 1,587 to 1,589 | 123 to 124 | 92 to 95 | 78% to 79% | 22.9 |
+| UD-Q4_K_M | 31,344 | 23.0 to 25.6 | 1,228 to 1,365 | 84 to 85 | 79 | 53% | 31.2 |
+| Ornith 1.5 APEX-I-Compact | 31,344 | 19.4 | 1,618 to 1,621 | 76 to 82 | 74 to 75 | 58% | 26.7 |
+| APEX-I-Mini | 31,344 | 20.2 | 1,553 to 1,555 | 83 to 84 | 76 to 79 | 69% | 23.9 |
+| APEX-I-Quality | 31,344 | 20.0 | 1,574 to 1,575 | 51 to 52 | 62 to 65 | 42% to 45% | 31.1 to 31.2 |
+| Tiel Coder 35B-A3B UD-Q3_K_XL | 31,504 | 18.6 | 1,698 to 1,699 | 83 | 70 to 75 | 50% to 55% | 24.9 |
+| UD-IQ3_XXS | 31,504 | 19.6 | 1,613 to 1,614 | 96 to 97 | 77 to 79 | 62% to 63% | 21.6 to 21.8 |
+| UD-Q4_K_XL | 31,523 | 19.0 | 1,660 to 1,665 | 74 to 79 | 64 to 66 | 36% to 43% | 29.9 |
+
+The two largest files, Qwen3.6 UD-Q4_K_M and APEX-I-Quality, took the machine's RAM to 31.1 to 31.2 GiB of its
+32, with other programs holding about 7 GB of it. Part of a file then came from the disk again: Qwen3.6
+UD-Q4_K_M read the prompt at 1,633 tokens/s in its first run and at 1,228 and 1,365 in the two after it, and
+APEX-I-Quality wrote the short chat at 51 to 52 tokens/s where the release before wrote 59 to 63. The README
+keeps the release before's numbers for those two.
+
+A size's first run wrote the short chat at 25 to 95 tokens/s and after the prompt at 54 to 88, and read the
+prompt within 1.5% of the two runs after it, Qwen3.6 UD-Q4_K_M faster.
+
+The benchmark without `--prompt-tokens`, the second of two runs: this engine read 10,611 tokens at 1,664
+tokens/s with Qwen3.6 UD-Q3_K_M and 1,587 with Ornith's APEX-I-Compact, and 11,001 at 2,130 with Gemma 4
+UD-Q3_K_M. Tiel Coder's UD-Q3_K_XL read 10,779 at 1,670.
+
+Tiel Coder's three sizes were installed by setup afterwards, from a fresh download, and measured the same way. On
+the 8 GB card its UD-Q3_K_XL kept 2,657 of the 10,496 experts and UD-IQ3_XXS 3,855, where Ornith's APEX-I-Compact
+kept 3,091. Tiel's weights outside the experts are larger: beside the experts it takes 4.7 GB of VRAM at 32K,
+Ornith's APEX-I-Compact 4.2 (setup's figures, from the 5090).
+
+The release before, the source of f48fe541a646, built and installed the same way, measured the same way but for
+Qwen3.6, which ran without `--tail-skip`. The card's memory was at 7.3 GiB of its 8 in every run.
 
 | Model | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM | Machine's RAM, GiB |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -580,7 +648,7 @@ the prompt at 1,623 and 1,610 and wrote after it at 71.2 and 71.5; Gemma 4 at 83
 61.9 and 58.4; Ornith at 80.6 and 79.5, 1,550 and 1,547, 68.2 and 67.6. In these runs a request that was not
 counted came first after each start, and the short chat was written faster than in the table.
 
-The benchmark without `--prompt-tokens`, the second of two runs: the release's engine read 10,563 tokens at
+The benchmark without `--prompt-tokens`, the second of two runs: the release before read 10,563 tokens at
 1,619 tokens/s with Qwen3.6 UD-Q3_K_M and 1,532 with Ornith's APEX-I-Compact, and 10,949 at 2,079 with Gemma 4
 UD-Q3_K_M.
 
@@ -658,6 +726,13 @@ What guessing gains here, over the engine's protocol and from the profile the be
 | Ornith 1.5 APEX-I-Compact | 72 and 70 | 62 and 65 |
 
 Ornith's second answer ends after 332 tokens with guesses and after 122 without.
+
+Tiel Coder's UD-Q3_K_XL was measured another way, with the engine of 1212621baadf: the README's short chat, 256
+tokens, after three fresh starts with guesses and three with `--no-draft`, in turns. It wrote at 80 to 86 tokens/s
+with guesses and 66 to 68 without, with 72% to 78% of the guesses right. Ornith's APEX-I-Compact, measured the
+same way, wrote at 89 to 90 and 78 to 80, with 79% to 88% right. Its guesses are right more often, but it gains
+less from them: without them it already writes faster than Tiel, with 3,091 experts on the card where Tiel has
+2,657.
 
 Without guesses and over the engine's protocol, against llama.cpp's 64 tokens after the five prompts of
 [the check](#how-each-backend-was-checked), whose references are from the first machine:

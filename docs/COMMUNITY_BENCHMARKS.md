@@ -23,7 +23,7 @@ leaves out.
 | [u/hope_it_helps](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf1lr00/) | RTX 4070 Ti 12 GB | not stated | Ornith 1.5 APEX-I-Compact | not stated | not stated | about 90, 60 at the slowest | not stated | usually 40 before, engine not stated |
 | [u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) | RTX 5060 Laptop 8 GB | Core Ultra 9 275HX; 32 GB DDR5; system not stated | Tiel Coder 35B-A3B, file not stated | not stated | not stated | maybe 20% faster than before, no figure | 1,000 to 1,500; 1,016 at the slowest on a large read, over 1,400 in an auto-compact | 200 to 350 reading before, engine not stated |
 
-The HauhauCS file and Tiel Coder are not among the files setup offers. How to give setup such a file is in the
+Setup offers Tiel Coder now (`--family tiel`), and not the HauhauCS file. How to give setup such a file is in the
 [FAQ](FAQ.md#can-i-run-a-fine-tune-or-another-model-with-the-same-architecture).
 
 To add yours, open an issue at [VecSzn/PolyStrata](https://github.com/VecSzn/PolyStrata/issues) with what
