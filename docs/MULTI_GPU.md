@@ -368,8 +368,8 @@ starts of each.
 
 | Qwen3.6 UD-Q3_K_M | Experts in VRAM | Reads the prompt | Writes |
 | --- | ---: | ---: | ---: |
-| one RTX 3080 | 4,606 of 10,496 | 1,570-1,700 tokens/s | 157-164 tokens/s |
-| both | 10,496 of 10,496 | 3,100-3,160 tokens/s | 215-216 tokens/s |
+| one RTX 3080 | 4,606 of 10,496 | 1,570-1,700 tokens/s | 159-173 tokens/s |
+| both | 10,496 of 10,496 | 3,100-3,160 tokens/s | 219-221 tokens/s |
 
 Gemma 4 UD-Q3_K_M in one start each: a prompt of 3,527 tokens at 2,190 tokens/s on one card and 3,090 on both,
 and writing at 178 and 189 tokens/s. One card already held 2,042 of its 3,840 experts, which were most of what an
@@ -381,9 +381,23 @@ calls, the prompt cache, a checkpoint, the conversation cache and a request stop
 VRAM the answers can differ a little, as they do between two starts on one card: which experts run on a card and
 which on the processor changes the rounding.
 
+GLM 5.3 Flash REAP50-Q3_K_M (79 GB) ran on the same two cards with 80 GB of RAM. One 10 GB card cannot hold the
+weights outside the routed experts, about 12 GB, so there is no one-card row. With `"auto"` the cards took layers 0
+to 27 and 28 to 44 and held 602 of the 6,192 routed experts (6.7 GiB). A prompt of 6,087 tokens read at 397-398
+tokens/s and 256 tokens were written at 20-21 tokens/s, in two starts; with no expert in VRAM, 367-384 and 16-16.5.
+With no expert in VRAM the split at layer 28 and the split at layer 30 gave the same greedy tokens for a short
+prompt, a long one read in several calls, the prompt cache and a checkpoint. The conversation cache was not compared:
+with the RAM nearly full it parked nothing in the runs split at layer 28. Of eight starts of that test, one failed
+its long prompt with `pinned memory: invalid argument` and one stopped without a message while reading it. The same
+error came in later starts, at load or in the first long prompt, with Qwen3.6 too and on one card too, so neither
+the file's size nor the split is the cause. Every failure came while a 78 GB file was being downloaded in the same
+container, or soon after. Eleven starts on both cards after the download, 8 of Qwen3.6 and 3 of GLM, all ran
+through, and so has every start on these cards since. Filling the container's memory to its limit with a file
+(`dd`), and two engines on the cards at once, did not bring it back. The cause was not found. The message now gives
+the size asked for.
+
 Not done yet:
 
-- Only two cards under Linux have run it. Three cards and Windows were not tried, and GLM 5.3 Flash was not run on
-  two cards.
+- Only two cards under Linux have run it. Three cards and Windows were not tried.
 - The cards never work on a prompt at the same time. The other engine's chunk pipeline, `--pipeline-windows`,
   `"split_skip_if_fits"` and its `STRATA_*` variables are not in strata-poly.

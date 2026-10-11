@@ -86,7 +86,7 @@ NVIDIA：Q2_0 用的是引擎 0.1.36，其他各行用的是 0.1.26（4K 回答�
 | 规格 | 写回答 | 读提示 |
 | --- | ---: | ---: |
 | **3.0BIT** | 59-66 tokens/s | 820 tokens/s |
-| **UD-IQ2_XXS** | 47-50 tokens/s | 1,040-1,050 tokens/s |
+| **UD-IQ2_XXS** | 50-52 tokens/s | 1,040-1,050 tokens/s |
 | **REAP50-Q3_K_M** | 59-66 tokens/s | 1,300-1,310 tokens/s |
 
 </td></tr>
@@ -107,20 +107,20 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 | --- | ---: | ---: |
 | **UD-Q3_K_M** | 94-100 tokens/s | 1,690 tokens/s |
 | **UD-Q2_K_XL** | 123-124 tokens/s | 1,590 tokens/s |
-| **UD-Q4_K_M** | 84-85 tokens/s | 1,560-1,570 tokens/s |
+| **UD-Q4_K_M** | 82-86 tokens/s | 1,560-1,570 tokens/s |
 
 </td><td>
 
 | 规格 | 写回答 | 读提示 |
 | --- | ---: | ---: |
-| **UD-Q3_K_M** | 385-393 tokens/s | 6,350-6,550 tokens/s |
-| **UD-Q2_K_XL** | 410-438 tokens/s | 5,970-6,440 tokens/s |
-| **UD-Q4_K_M** | 328-393 tokens/s | 6,230-6,580 tokens/s |
+| **UD-Q3_K_M** | 394-395 tokens/s | 6,350-6,550 tokens/s |
+| **UD-Q2_K_XL** | 450 tokens/s | 6,470 tokens/s |
+| **UD-Q4_K_M** | 363-401 tokens/s | 6,030-6,690 tokens/s |
 
 </td></tr>
 </table>
 
-10,000 个 token 的提示，笔记本每秒读 1,660 个，工作站每秒读 6,100 个。
+10,000 个 token 的提示，笔记本每秒读 1,660 个，工作站每秒读 6,300 个。
 把工作站的显卡限制到 8 GB 的那组数字是笔记本测出来之前的替身，现在放在 [docs/BACKENDS.md](docs/BACKENDS.md#with-8-gb-of-vram)（英文）里。
 
 ### Ornith 1.5
@@ -141,14 +141,14 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 
 | 规格 | 写回答 | 读提示 |
 | --- | ---: | ---: |
-| **APEX-I-COMPACT** | 303-315 tokens/s | 6,080-6,360 tokens/s |
+| **APEX-I-COMPACT** | 316-319 tokens/s | 6,550-6,740 tokens/s |
 | **APEX-I-MINI** | 289-300 tokens/s | 5,940-6,170 tokens/s |
 | **APEX-I-QUALITY** | 289-298 tokens/s | 6,040-6,390 tokens/s |
 
 </td></tr>
 </table>
 
-10,000 个 token 的提示，笔记本每秒读 1,590 个，工作站每秒读 5,600 个。
+10,000 个 token 的提示，笔记本每秒读 1,590 个，工作站每秒读 6,400 个。
 
 ### Gemma 4 26B-A4B
 
@@ -169,8 +169,8 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 | 规格 | 写回答 | 读提示 |
 | --- | ---: | ---: |
 | **UD-Q3_K_M** | 326-349 tokens/s | 7,880-8,230 tokens/s |
-| **UD-Q2_K_XL** | 316-331 tokens/s | 7,120-7,860 tokens/s |
-| **UD-Q4_K_M** | 316-338 tokens/s | 7,040-8,050 tokens/s |
+| **UD-Q2_K_XL** | 327-340 tokens/s | 7,380-8,000 tokens/s |
+| **UD-Q4_K_M** | 335-346 tokens/s | 7,040-8,050 tokens/s |
 
 </td></tr>
 </table>
@@ -195,14 +195,14 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 
 | 规格 | 写回答 | 读提示 |
 | --- | ---: | ---: |
-| **UD-Q3_K_XL** | 308-312 tokens/s | 6,460-6,670 tokens/s |
-| **UD-IQ3_XXS** | 316-320 tokens/s | 6,200-6,210 tokens/s |
-| **UD-Q4_K_XL** | 282-288 tokens/s | 6,470-6,600 tokens/s |
+| **UD-Q3_K_XL** | 332-341 tokens/s | 6,340-6,820 tokens/s |
+| **UD-IQ3_XXS** | 339-351 tokens/s | 6,090-6,520 tokens/s |
+| **UD-Q4_K_XL** | 316-322 tokens/s | 6,750-6,870 tokens/s |
 
 </td></tr>
 </table>
 
-10,000 个 token 的提示，笔记本每秒读 1,670 个，工作站每秒读 6,100 个。
+10,000 个 token 的提示，笔记本每秒读 1,670 个，工作站每秒读 6,300 个。
 
 用 PolyStrata 自己引擎的这五个模型，都是用它自带的跑分测的，你也可以在自己的电脑上跑：
 `python polystrata.py benchmark --model <name> --prompt-tokens 24000`

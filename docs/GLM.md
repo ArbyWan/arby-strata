@@ -234,15 +234,18 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
 | `--max-context N` | 8192 | tokens a conversation can hold |
 | `--threads N` | all usable | CPU threads for the experts that are not in VRAM |
 | `--vram-reserve-mib N` | a thirty-second of the card, 256 to 768, and half of that after the first request | VRAM left free beside the expert cache |
+| `--layer-split S` | the first card alone | the model's layers across the cards the engine sees: `auto` (by each card's free VRAM) or the first layer of each later card, as `20` or `20,30` ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)) |
 | `--expert-profile FILE` | | expert use counts, read at the start and written back after an answer, every 10 seconds at most, and at the end |
 | `--no-gpu-experts` | | keep every routed expert on the CPU |
 | `--any-node` | | on a PC with several NUMA nodes, let the CPU threads run on any of them |
 | `--no-graphs` | | launch a token's kernels one by one, not as the CUDA graph a layer that is recorded at the first token |
-| `--expert-swaps N` | 16 | while an answer is written, experts on their way into VRAM at a time, each in place of a cached one the answer uses less; 0 = the cache stays as it was loaded |
-| `--window N` | 4; 8 for the three smaller models | the most tokens that go through the model together while an answer is written: the known one and guesses after it: the draft block's three at most, and more than three only from a repeat of eight tokens or more; 1 = no guesses |
+| `--expert-swaps N` | 64 | while an answer is written, experts on their way into VRAM at a time, each in place of a cached one the answer uses less; 0 = the cache stays as it was loaded |
+| `--window N` | 4; 8 for the other models | the most tokens that go through the model together while an answer is written: the known one and guesses after it: the draft block's three at most, and more than three only from a repeat of eight tokens or more; 1 = no guesses |
 | `--lookup N` | 3 | guess what followed an earlier repeat of the last N or more tokens; 0 = never |
 | `--no-draft` | | do not run the block that guesses ahead |
 | `--draft-model FILE.gguf` | | a file of the same model to take that block from, when `--model` has none; setup passes the one it downloaded |
+| `--draft-vocab N` | 131072 for Qwen3.6, Ornith and Tiel Coder, all of it for the others | the block guesses among the vocabulary's first N tokens; 0 = all |
+| `--kv-whole` | | give the attention caches VRAM for the whole context at load, not as the conversation grows |
 | `--prompt-batch N` | 1024 | prompt tokens read at a time, 1 to 4096; about 1.4 MiB of VRAM each |
 | `--stage-mib N` | 2048 | VRAM the experts outside the cache pass through while a prompt is read |
 | `--stage-ahead N` | 1024 | from N tokens, a batch copies those experts before the layer has chosen, as does every batch of a prompt of N tokens or more that is read several at a time; 0 = never |
@@ -253,6 +256,7 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
 | `--conversation-cache-min-tokens N` | 1024 | a shorter conversation is not parked |
 | `--conversation-cache-min-free-mib N` | 2560 | park only while this much physical RAM stays free |
 | `--eos-ids ID,ID,...` | from the GGUF | tokens that end a reply |
+| `--tail-skip N` | 0; setup gives Qwen3.6 6 | an expert outside VRAM that every token of a window ranks at place N+1 or later among its experts is left out: faster, and the answers move a little |
 
 `strata-poly` with no arguments prints the list, with the options for running it without the server.
 
@@ -261,11 +265,11 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
 - Other files of the model. The engine reads the layouts of four converters (neurall's llama.cpp fork,
   patrickbdevaney's, antirez's and Unsloth's), a model in several files, and the weight types llama.cpp's kernels
   have. Only the three sizes above have been run: setup offers no other.
-- Release builds of `strata-poly`: setup compiles it.
+- A ready-made `strata-poly` off Windows, or for a driver older than CUDA 13's: setup compiles it there.
 - GLM on Windows. The engine compiles there and runs the three smaller models of this engine, but GLM has not
   been run on Windows: no PC with the RAM for it was at hand. Setup asks before it installs it there.
-- AMD and Intel cards. Two NVIDIA cards can share the model ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)),
-  which has run with the smaller models of this engine and not yet with GLM.
+- AMD and Intel cards. Two NVIDIA cards can share the model ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)):
+  REAP50 has run on two 10 GB cards under Linux.
 - Pictures. The model's image input is not read.
 - Several requests decoded together (`"parallel"`). Requests wait their turn.
 - `--prompt-cache-root` and `--turn-token`. Checkpoints are taken by position.

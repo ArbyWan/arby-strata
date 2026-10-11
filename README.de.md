@@ -93,7 +93,7 @@ Gemessen für PolyStrata auf einer Workstation, mit einem kurzen Chat und einem 
 | Größe | Schreibt Antworten | Liest deinen Prompt |
 | --- | ---: | ---: |
 | **3.0BIT** | 59-66 Tokens/s | 820 Tokens/s |
-| **UD-IQ2_XXS** | 47-50 Tokens/s | 1,040-1,050 Tokens/s |
+| **UD-IQ2_XXS** | 50-52 Tokens/s | 1,040-1,050 Tokens/s |
 | **REAP50-Q3_K_M** | 59-66 Tokens/s | 1,300-1,310 Tokens/s |
 
 </td></tr>
@@ -116,20 +116,20 @@ eine Workstation, deren Karte das ganze Modell hält.
 | --- | ---: | ---: |
 | **UD-Q3_K_M** | 94-100 Tokens/s | 1,690 Tokens/s |
 | **UD-Q2_K_XL** | 123-124 Tokens/s | 1,590 Tokens/s |
-| **UD-Q4_K_M** | 84-85 Tokens/s | 1,560-1,570 Tokens/s |
+| **UD-Q4_K_M** | 82-86 Tokens/s | 1,560-1,570 Tokens/s |
 
 </td><td>
 
 | Größe | Schreibt Antworten | Liest deinen Prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_M** | 385-393 Tokens/s | 6,350-6,550 Tokens/s |
-| **UD-Q2_K_XL** | 410-438 Tokens/s | 5,970-6,440 Tokens/s |
-| **UD-Q4_K_M** | 328-393 Tokens/s | 6,230-6,580 Tokens/s |
+| **UD-Q3_K_M** | 394-395 Tokens/s | 6,350-6,550 Tokens/s |
+| **UD-Q2_K_XL** | 450 Tokens/s | 6,470 Tokens/s |
+| **UD-Q4_K_M** | 363-401 Tokens/s | 6,030-6,690 Tokens/s |
 
 </td></tr>
 </table>
 
-Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,660 Tokens/s gelesen und auf der Workstation mit 6,100.
+Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,660 Tokens/s gelesen und auf der Workstation mit 6,300.
 Die Zahlen der auf 8 GB begrenzten
 Workstation-Karte, ein Ersatz aus der Zeit vor der Messung auf dem Laptop, stehen in
 [docs/BACKENDS.md](docs/BACKENDS.md#with-8-gb-of-vram) (englisch).
@@ -152,14 +152,14 @@ Genauso gemessen, auf denselben zwei PCs.
 
 | Größe | Schreibt Antworten | Liest deinen Prompt |
 | --- | ---: | ---: |
-| **APEX-I-COMPACT** | 303-315 Tokens/s | 6,080-6,360 Tokens/s |
+| **APEX-I-COMPACT** | 316-319 Tokens/s | 6,550-6,740 Tokens/s |
 | **APEX-I-MINI** | 289-300 Tokens/s | 5,940-6,170 Tokens/s |
 | **APEX-I-QUALITY** | 289-298 Tokens/s | 6,040-6,390 Tokens/s |
 
 </td></tr>
 </table>
 
-Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,590 Tokens/s gelesen und auf der Workstation mit 5,600.
+Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,590 Tokens/s gelesen und auf der Workstation mit 6,400.
 
 ### Gemma 4 26B-A4B
 
@@ -180,8 +180,8 @@ Genauso gemessen, auf denselben zwei PCs.
 | Größe | Schreibt Antworten | Liest deinen Prompt |
 | --- | ---: | ---: |
 | **UD-Q3_K_M** | 326-349 Tokens/s | 7,880-8,230 Tokens/s |
-| **UD-Q2_K_XL** | 316-331 Tokens/s | 7,120-7,860 Tokens/s |
-| **UD-Q4_K_M** | 316-338 Tokens/s | 7,040-8,050 Tokens/s |
+| **UD-Q2_K_XL** | 327-340 Tokens/s | 7,380-8,000 Tokens/s |
+| **UD-Q4_K_M** | 335-346 Tokens/s | 7,040-8,050 Tokens/s |
 
 </td></tr>
 </table>
@@ -206,14 +206,14 @@ Genauso gemessen, auf denselben zwei PCs.
 
 | Größe | Schreibt Antworten | Liest deinen Prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_XL** | 308-312 Tokens/s | 6,460-6,670 Tokens/s |
-| **UD-IQ3_XXS** | 316-320 Tokens/s | 6,200-6,210 Tokens/s |
-| **UD-Q4_K_XL** | 282-288 Tokens/s | 6,470-6,600 Tokens/s |
+| **UD-Q3_K_XL** | 332-341 Tokens/s | 6,340-6,820 Tokens/s |
+| **UD-IQ3_XXS** | 339-351 Tokens/s | 6,090-6,520 Tokens/s |
+| **UD-Q4_K_XL** | 316-322 Tokens/s | 6,750-6,870 Tokens/s |
 
 </td></tr>
 </table>
 
-Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,670 Tokens/s gelesen und auf der Workstation mit 6,100.
+Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,670 Tokens/s gelesen und auf der Workstation mit 6,300.
 
 Die fünf Modelle der eigenen Engine von PolyStrata wurden mit ihrem Benchmark gemessen, den du auch auf deinem PC
 laufen lassen kannst: `python polystrata.py benchmark --model <name> --prompt-tokens 24000`

@@ -321,6 +321,14 @@ The build of 2026-10-10, the first with the laptop's changes on Linux, wrote aft
 two long ones, then 2,743 to 2,847 and 10,609 to 10,988 tokens, at 4,606 to 4,953 and 5,454 to 5,946. GLM wrote
 at 59, 56 and 62 and read at 555 and 769.
 
+The build of 2026-10-11, which adds Tiel Coder, wrote after the three prompts at 395 to 396, 393 and 338 to 341
+tokens/s with Qwen3.6 (with `--tail-skip 6`, as setup installs it), 319, 301 to 302 and 289 to 291 with Ornith
+and 348 to 354, 310 to 316 and 315 to 328 with Gemma 4, in two runs each. The documents had grown, so the two
+long prompts were 2,739 to 2,843 and 10,793 to 11,209 tokens; it read them at 4,177 to 4,982 and 5,739 to 6,397.
+Tiel Coder UD-Q3_K_XL, whose short prompt comes to 200 tokens, wrote at 312 to 345, 342 to 347 and 295 to 308 and
+read the long ones at 5,955 to 6,062 and 6,007 to 6,316. GLM wrote at 65 to 66, 62 to 64 and 67 to 69 and read
+prompts of 2,521 and 9,913 tokens at 568 to 572 and 764 to 766.
+
 The table has each new model's first size. The other sizes by the same benchmark, one run each, every expert
 in VRAM:
 
@@ -1586,14 +1594,26 @@ experts on the CPU do not write the same tokens.
 | | 7 | 87.5 | x1.022, 8 faster | 0.0083 | 98.1% |
 | | 6 | 88.5 | x1.058, 9 faster | 0.0159 | 97.2% |
 | | 5 | 88.4 | x1.063, 9 faster | 0.0296 | 96.6% |
+| Tiel Coder UD-Q3_K_XL | 0, a second run | 72.3 | | 0.0110 | 97.6% |
+| | 7 | 74.0 | x1.020, 7 faster | 0.0224 | 96.2% |
+| | 6 | 79.2 | x1.030, 8 faster | 0.0342 | 94.7% |
+| | 5 | 79.6 | x1.038, 8 faster | 0.0492 | 94.0% |
+| GLM 5.3 Flash 3.0BIT, RTX 5090 | 0, a second run | 55.1 | | 0.0058 | 98.4% |
+| | 7 | 58.2 | x1.076, 9 faster | 0.0120 | 97.0% |
+| | 6 | 62.3 | x1.149, 12 faster | 0.0196 | 96.6% |
+| | 5 | 67.4 | x1.226, 12 faster | 0.0275 | 95.8% |
 
 The Strata project measured its default at a KL of 0.003 to 0.006 with the same most likely token 97.7% to
 98.2% of the time, for answers 13% to 16% faster. Qwen3.6 at 6 moves its answers about as much, and setup
 gives its three sizes `--tail-skip 6`. Ornith at 7 moves them five times its noise for 3%, and its answer
 to the story prompt by 0.059 to 0.091 at the three settings; Gemma 4 at 6 moves them five times its noise for 6%. Both stay
-at 0. `STRATA_ROUTE_TAIL_SKIP` in the environment is read over `--tail-skip`, and `=0` turns it off. With
-every expert in VRAM nothing is left out, so the RTX 5090 rows do not change. The other sizes of the three
-families were not measured.
+at 0. Tiel Coder gains 2% to 4%: on the laptop its time goes to the card, which reads the weights beside the
+experts at about all the bandwidth it has, and its CPU experts take 2 to 3 ms of a token. GLM 5.3 Flash was
+measured the same way on the RTX 5090, with the reserve it gets by default and 400 tokens of thinking an answer,
+where the CPU's experts are most of a token's time: 8% faster at 7 and 23% at 5, for answers moved two to five
+times their noise, further than the Strata project's default moves its own. Both stay at 0 too. `STRATA_ROUTE_TAIL_SKIP`
+in the environment is read over `--tail-skip`, and `=0` turns it off. With every expert in VRAM nothing is left
+out, so the RTX 5090 rows of the small models do not change. The other sizes of the families were not measured.
 
 ## Adding a model of an architecture that is there
 
