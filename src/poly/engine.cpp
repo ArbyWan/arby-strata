@@ -826,7 +826,8 @@ void Engine::fill_expert_cache() {
     if (!opt_.gpu_experts || n_moe_ == 0) return;
     size_t free_b = 0, total_b = 0;
     ck(cudaMemGetInfo(&free_b, &total_b), "cudaMemGetInfo");
-    reserve_mib_ = opt_.vram_reserve_mib >= 0 ? opt_.vram_reserve_mib : default_reserve_mib(total_b);
+    // 256 MiB at least, whatever was asked: the launches recorded later take theirs out of the reserve (mind_vram())
+    reserve_mib_ = opt_.vram_reserve_mib >= 0 ? std::max(opt_.vram_reserve_mib, 256) : default_reserve_mib(total_b);
     const size_t reserve = size_t(reserve_mib_) << 20;
     if (free_b <= reserve) return;
 
