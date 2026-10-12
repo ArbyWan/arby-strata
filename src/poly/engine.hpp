@@ -223,6 +223,9 @@ public:
     /// context.  logits() is left alone.  An architecture may guess with a small model of its own instead of a
     /// block (draft_step()); the calls are the same.
     bool drafts() const { return next_ ? next_->drafts() : draft_; }
+    /// Test only: the calls read()'s layer-major path gave the draft block's rows (draft_rows()) on the card that has
+    /// the block, since load.  Two or more in one read are back-to-back refills of its pinned input rows.
+    int64_t read_draft_calls_for_test() const { return next_ ? next_->read_draft_calls_for_test() : read_draft_calls_; }
     int32_t draft(int32_t token, int i, float* prob);
     /// Whether a call since the last time this was asked recorded launches for replaying, which takes far longer
     /// than the call does afterwards: its time says nothing of the calls to come.
@@ -444,6 +447,7 @@ protected:
     int end_ = -1;                        ///< what open() asked for hi_; -1: the model's end
     bool split_ = false;                  ///< one of several engines: a call sets its card first
     std::unique_ptr<Engine> next_;
+    int64_t read_draft_calls_ = 0;               ///< read_draft_calls_for_test()
     const float* pass_ = nullptr;
     int64_t pass_at_ = 0;
     float* h_pass_ = nullptr;             ///< pinned; h_pass_rows_ tokens' rows
@@ -568,6 +572,7 @@ protected:
     void* up_ = nullptr;                          ///< the stream of the uploads that start before the routing
     void* ev_ahead_ = nullptr;                    ///< marks the last of them
     void* ev_free_ = nullptr;                     ///< marks a layer's last read of the staging buffer
+    void* ev_hr_ = nullptr;                       ///< marks the card's last read of h_r_ by draft_input()
     int staged_il_ = -1;                          ///< the layer whose experts the buffer holds for its next call, or -1
     std::vector<int32_t> staged_;                 ///< those experts, in the buffer's order: one round of the layer's
     double ahead_ms_ = 0, route_ms_ = 0;          ///< what that layer's copy ahead took, and the card to its routing
