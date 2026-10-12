@@ -262,7 +262,7 @@ La liste complète : [docs/GLM.md](docs/GLM.md#what-you-need) (en anglais).
 
 | | |
 | --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. |
+| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sous Linux, une carte AMD le fait tourner aussi, en bêta : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
 | **RAM** | Environ **17, 21 ou 27 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les deux plus petites. Les trois tailles ont tourné sur un portable de 32 Go. |
 | **Disque** | 13, 17 ou 23 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
 | **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
@@ -270,13 +270,13 @@ La liste complète : [docs/GLM.md](docs/GLM.md#what-you-need) (en anglais).
 L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
 de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
 version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus.
+installer. Pas encore : les cartes AMD sous Windows, deux cartes sous Windows, trois cartes ou plus.
 
 ### Ornith 1.5
 
 | | |
 | --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 4 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. |
+| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 4 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sous Linux, une carte AMD le fait tourner aussi, en bêta : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
 | **RAM** | Environ **18, 22 ou 28 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les deux plus petites. Les trois tailles ont tourné sur un portable de 32 Go. |
 | **Disque** | 14, 17 ou 24 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
 | **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
@@ -284,13 +284,13 @@ installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes o
 L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
 de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
 version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus.
+installer. Pas encore : les cartes AMD sous Windows, deux cartes sous Windows, trois cartes ou plus.
 
 ### Gemma 4 26B-A4B
 
 | | |
 | --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 6 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. |
+| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 6 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sous Linux, une carte AMD le fait tourner aussi, en bêta : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
 | **RAM** | Environ **15, 18 ou 21 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. D'après la même estimation, une carte de 16 Go contient en entier les deux plus petites. Les trois tailles ont tourné sur un portable de 32 Go. |
 | **Disque** | 11, 13 ou 17 Go pour le fichier du modèle et son modèle brouillon, 1 Go de plus pour lire les images. |
 | **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
@@ -298,13 +298,13 @@ installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes o
 L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
 de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
 version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus.
+installer. Pas encore : les cartes AMD sous Windows, deux cartes sous Windows, trois cartes ou plus.
 
 ### Tiel Coder 35B-A3B
 
 | | |
 | --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. |
+| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sous Linux, une carte AMD le fait tourner aussi, en bêta : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
 | **RAM** | Environ **18, 21 ou 27 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les trois tailles. Les trois tailles ont tourné sur un portable de 32 Go. |
 | **Disque** | 14, 17 ou 23 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
 | **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
@@ -312,7 +312,7 @@ installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes o
 L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
 de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
 version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus.
+installer. Pas encore : les cartes AMD sous Windows, deux cartes sous Windows, trois cartes ou plus.
 
 Ce qu'il faut à chacun des quatre et comment il a été vérifié : [docs/BACKENDS.md](docs/BACKENDS.md#install) (en anglais).
 

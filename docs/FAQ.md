@@ -52,9 +52,12 @@ times as fast (the two runs are linked there).
 
 ### Does it run on Radeon / AMD?
 
-Not the five added models yet. Their engine is CUDA only, so it needs an NVIDIA card. On a Radeon with 12 GB or
-more, PolyStrata runs Qwen3.8-Flash-Next through Strata's AMD backend. I want AMD support for the other models too,
-but I don't have an AMD card to test on yet.
+Qwen3.8-Flash-Next, yes: on a Radeon with 12 GB or more it runs through Strata's AMD backend. The five added
+models run on AMD under Linux since 0.1.42-poly.4, as a beta: setup compiles their engine for the card on your PC
+(there is no ready-made AMD engine, so not on Windows), a contributor's port tested with Qwen3.6 UD-Q2_K_XL and
+Ornith APEX-I-Mini on an RX 7600 (64 and 35 tokens/s). Gemma 4, Tiel Coder and GLM have not been tried on an AMD
+card, and setup says so when you pick them. I don't have an AMD card myself, so reports from one help; see
+[AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta).
 
 ### Will it run on a 6 GB card, or 4 GB?
 

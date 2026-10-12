@@ -264,7 +264,7 @@ Die vollständige Liste: [docs/GLM.md](docs/GLM.md#what-you-need) (englisch).
 
 | | |
 | --- | --- |
-| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 5 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. |
+| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 5 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Unter Linux läuft es als Beta auch auf einer AMD-Karte: Setup kompiliert die Engine auf deinem PC; bisher nur mit Qwen3.6 und Ornith auf einer RX 7600 getestet. |
 | **RAM** | Etwa **17, 21 oder 27 GB** neben einer 8-GB-Karte für die drei Größen, nach der Schätzung des Installers. Eine Karte mit 24 GB hält die beiden kleineren Größen ganz. Alle drei Größen liefen auf einem Laptop mit 32 GB. |
 | **Festplatte** | 13, 17 oder 23 GB für die Modelldatei, 1 GB mehr, um Bilder zu lesen. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |
@@ -272,13 +272,13 @@ Die vollständige Liste: [docs/GLM.md](docs/GLM.md#what-you-need) (englisch).
 Alles andere richtet der Installer ein, wie bei GLM 5.3 Flash. Unter Windows lädt er die Engine fertig aus dem
 neuesten Release. Auf einem Prozessor ohne AVX2, oder in einer Kopie, deren Engine sich seit diesem Release geändert
 hat, kompiliert er sie stattdessen mit dem 2022er Compiler von Visual Studio und dem CUDA-Toolkit und bietet an, beides
-zu installieren. Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten oder mehr.
+zu installieren. Noch nicht: AMD-Karten unter Windows, zwei Karten unter Windows, drei Karten oder mehr.
 
 ### Ornith 1.5
 
 | | |
 | --- | --- |
-| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 4 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. |
+| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 4 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Unter Linux läuft es als Beta auch auf einer AMD-Karte: Setup kompiliert die Engine auf deinem PC; bisher nur mit Qwen3.6 und Ornith auf einer RX 7600 getestet. |
 | **RAM** | Etwa **18, 22 oder 28 GB** neben einer 8-GB-Karte für die drei Größen, nach der Schätzung des Installers. Eine Karte mit 24 GB hält die beiden kleineren Größen ganz. Alle drei Größen liefen auf einem Laptop mit 32 GB. |
 | **Festplatte** | 14, 17 oder 24 GB für die Modelldatei, 1 GB mehr, um Bilder zu lesen. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |
@@ -286,13 +286,13 @@ zu installieren. Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten 
 Alles andere richtet der Installer ein, wie bei GLM 5.3 Flash. Unter Windows lädt er die Engine fertig aus dem
 neuesten Release. Auf einem Prozessor ohne AVX2, oder in einer Kopie, deren Engine sich seit diesem Release geändert
 hat, kompiliert er sie stattdessen mit dem 2022er Compiler von Visual Studio und dem CUDA-Toolkit und bietet an, beides
-zu installieren. Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten oder mehr.
+zu installieren. Noch nicht: AMD-Karten unter Windows, zwei Karten unter Windows, drei Karten oder mehr.
 
 ### Gemma 4 26B-A4B
 
 | | |
 | --- | --- |
-| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 6 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. |
+| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 6 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Unter Linux läuft es als Beta auch auf einer AMD-Karte: Setup kompiliert die Engine auf deinem PC; bisher nur mit Qwen3.6 und Ornith auf einer RX 7600 getestet. |
 | **RAM** | Etwa **15, 18 oder 21 GB** neben einer 8-GB-Karte für die drei Größen, nach der Schätzung des Installers. Nach derselben Schätzung hält eine Karte mit 16 GB die beiden kleineren Größen ganz. Alle drei Größen liefen auf einem Laptop mit 32 GB. |
 | **Festplatte** | 11, 13 oder 17 GB für die Modelldatei und ihr Entwurfsmodell, 1 GB mehr, um Bilder zu lesen. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |
@@ -300,13 +300,13 @@ zu installieren. Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten 
 Alles andere richtet der Installer ein, wie bei GLM 5.3 Flash. Unter Windows lädt er die Engine fertig aus dem
 neuesten Release. Auf einem Prozessor ohne AVX2, oder in einer Kopie, deren Engine sich seit diesem Release geändert
 hat, kompiliert er sie stattdessen mit dem 2022er Compiler von Visual Studio und dem CUDA-Toolkit und bietet an, beides
-zu installieren. Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten oder mehr.
+zu installieren. Noch nicht: AMD-Karten unter Windows, zwei Karten unter Windows, drei Karten oder mehr.
 
 ### Tiel Coder 35B-A3B
 
 | | |
 | --- | --- |
-| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 5 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. |
+| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 5 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Unter Linux läuft es als Beta auch auf einer AMD-Karte: Setup kompiliert die Engine auf deinem PC; bisher nur mit Qwen3.6 und Ornith auf einer RX 7600 getestet. |
 | **RAM** | Etwa **18, 21 oder 27 GB** neben einer 8-GB-Karte für die drei Größen, nach der Schätzung des Installers. Eine Karte mit 24 GB hält alle drei Größen ganz. Alle drei Größen liefen auf einem Laptop mit 32 GB. |
 | **Festplatte** | 14, 17 oder 23 GB für die Modelldatei, 1 GB mehr, um Bilder zu lesen. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |
@@ -314,7 +314,7 @@ zu installieren. Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten 
 Alles andere richtet der Installer ein, wie bei GLM 5.3 Flash. Unter Windows lädt er die Engine fertig aus dem
 neuesten Release. Auf einem Prozessor ohne AVX2, oder in einer Kopie, deren Engine sich seit diesem Release geändert
 hat, kompiliert er sie stattdessen mit dem 2022er Compiler von Visual Studio und dem CUDA-Toolkit und bietet an, beides
-zu installieren. Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten oder mehr.
+zu installieren. Noch nicht: AMD-Karten unter Windows, zwei Karten unter Windows, drei Karten oder mehr.
 
 Was jedes der vier braucht und wie es geprüft wurde: [docs/BACKENDS.md](docs/BACKENDS.md#install) (englisch).
 

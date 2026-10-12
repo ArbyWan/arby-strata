@@ -284,8 +284,10 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
   ([issue 10](https://github.com/VecSzn/PolyStrata/issues/10)): 1,483 experts in VRAM, 26 to 30 tokens/s after
   a short prompt, 10K tokens read at 375 to 395. The context set to 1,048,576 in the run config loaded and
   answered, and one request of 557K tokens was read at 286 tokens/s with the three facts planted in it found.
-- AMD and Intel cards. Two NVIDIA cards can share the model ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)):
-  REAP50 has run on two 10 GB cards under Linux.
+- Intel cards, and AMD cards on Windows. On Linux setup compiles the engine for an AMD card
+  ([AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta)), a beta tested with Qwen3.6 and Ornith on an RX 7600; GLM
+  itself has not been tried on one, and setup says so. Two NVIDIA cards can share the model
+  ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)): REAP50 has run on two 10 GB cards under Linux.
 - Pictures. The model's image input is not read.
 - Several requests decoded together (`"parallel"`). Requests wait their turn.
 - `--prompt-cache-root` and `--turn-token`. Checkpoints are taken by position.
