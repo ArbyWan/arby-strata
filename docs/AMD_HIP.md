@@ -368,20 +368,37 @@ an RX 9070 XT 16 GB and a Radeon AI PRO R9700 32 GB (both gfx1201), a Ryzen 9 39
 The four smaller models of PolyStrata's own engine (Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder) and GLM 5.3 Flash
 run through `strata-poly`, which is CUDA-shaped code; since 0.1.42-poly.4 it compiles for an AMD card through the
 same `hip_compat` headers as the main engine, with the CUDA driver's virtual memory calls mapped onto HIP's
-(`hip_compat/cuda.h`), so the attention caches grow with the conversation there too. Linux only: there is no
-ready-made AMD engine, and setup refuses these models on an AMD card under Windows.
+(`hip_compat/cuda.h`). Linux only: there is no ready-made AMD engine, and setup refuses these models on an AMD
+card under Windows.
 
 - Install as for NVIDIA: `./setup.sh --family qwen36` (or `ornith`, `gemma4`, `tiel`, `glm`). Setup compiles the
   engine for the card into `engine-poly/` (`build_engine_poly_hip`), with ROCm from a system install or AMD's
   wheels in `.venv`, as for the main engine, and compiles again after a `git pull` that changed the engine.
 - Images stay off: the image encoder is a CUDA program.
-- Tested by the port's author on an RX 7600 (gfx1102, 8 GB): Qwen3.6 UD-Q2_K_XL writes 64 tokens/s at steady state
-  with 5,125 of 10,496 experts in VRAM, Ornith APEX-I-Mini 35 tokens/s with 4,517; the first tokens after a load
-  come slower while the expert cache fills. Gemma 4, Tiel Coder and GLM have not been tried on an AMD card, and
-  setup warns so. The long prompt path has not been measured on HIP yet. A report with the README's benchmark
-  (`polystrata.py benchmark --model <name> --prompt-tokens 24000`) is welcome in an issue.
-- The same greedy tokens as on CUDA are not promised across backends, as above. On CUDA the port changes nothing:
-  the same tokens and speed as before on an RTX 5090.
+- The attention caches take their VRAM at load on an AMD card (`--kv-whole`; setup writes it into the config and
+  adds it to an older one on update). On NVIDIA they grow with the conversation, and the expert cache gives VRAM
+  up to them as it grows; on ROCm the VRAM that `hipMemUnmap` and `hipMemRelease` give back never returns to the
+  free pool (an RX 7600 showed 48 MiB free after releasing 1 GiB, [#13](https://github.com/VecSzn/PolyStrata/issues/13)), so a long prompt was refused
+  with "no VRAM for the attention cache". With the caches whole, 32K of context fits on 8 GB beside 4,592 of
+  Qwen3.6's 10,496 experts (4.4 GiB).
+- Measured by the port's author on an RX 7600 (gfx1102, 8 GB; Ryzen 5 5600X, 30 GB of RAM) with the README's
+  benchmark, `--kv-whole` on ([#13](https://github.com/VecSzn/PolyStrata/issues/13)):
+
+  | Model | Short chat, writes | After a 32K prompt, reads / writes |
+  | --- | --- | --- |
+  | Qwen3.6-35B-A3B UD-Q2_K_XL | 74 tokens/s | 481 / 53 tokens/s |
+  | Ornith 1.5 APEX-I-Mini | 40 tokens/s | 444 / 43 tokens/s |
+
+  The first tokens after a load come slower while the expert cache fills (the port's own steady-state figures
+  were 64 and 35 tokens/s, with 5,125 and 4,517 experts in VRAM). Gemma 4, Tiel Coder and GLM have not been tried
+  on an AMD card, and setup warns so.
+- The same greedy tokens as on CUDA are not promised across backends, as above, and the card's experts and the
+  CPU's do not give the same ones on either: with every expert on the CPU (`--no-gpu-experts`) a greedy answer
+  parts from the card's after 15 to 50 tokens on the RX 7600, and after 11 to 70 on an RTX 5090 (Qwen3.6
+  UD-Q2_K_XL and UD-Q3_K_M, a 24-token and a 1.2K-token prompt, 256 tokens, mean KL of the top 40 before the
+  parting 0.0001 to 0.005; each side gives itself the same tokens in a second round). The two sum an expert's
+  products in a different order, and a near tie goes the other way. On CUDA the port changes nothing: the same
+  tokens and speed as before on an RTX 5090.
 
 ## Community-validated cards
 

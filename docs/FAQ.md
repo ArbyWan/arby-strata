@@ -55,8 +55,9 @@ times as fast (the two runs are linked there).
 Qwen3.8-Flash-Next, yes: on a Radeon with 12 GB or more it runs through Strata's AMD backend. The five added
 models run on AMD under Linux since 0.1.42-poly.4, as a beta: setup compiles their engine for the card on your PC
 (there is no ready-made AMD engine, so not on Windows), a contributor's port tested with Qwen3.6 UD-Q2_K_XL and
-Ornith APEX-I-Mini on an RX 7600 (64 and 35 tokens/s). Gemma 4, Tiel Coder and GLM have not been tried on an AMD
-card, and setup says so when you pick them. I don't have an AMD card myself, so reports from one help; see
+Ornith APEX-I-Mini on an RX 7600 with 8 GB: 74 and 40 tokens/s in a short chat, 53 and 43 after a 32K prompt,
+read at 481 and 444. Gemma 4, Tiel Coder and GLM have not been tried on an AMD card, and setup says so when you
+pick them. I don't have an AMD card myself, so reports from one help; see
 [AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta).
 
 ### Will it run on a 6 GB card, or 4 GB?
