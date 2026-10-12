@@ -4488,6 +4488,7 @@ def update_install(have: list, a) -> int:
         if poly_config(cfg):
             update_poly_engine(cfg, cfg_path=cfg_path)
             poly_tail_skip(cfg, cfg_path)
+            poly_kv_whole(cfg, cfg_path)
         if "--mtp" in cfg["args"][:-1]:
             refresh_draft_vocab(Path(cfg["args"][cfg["args"].index("--mtp") + 1]), cfg.get("draft_vocab", "cjk"))
         if cfg.get("backend") == "hip" and WIN:
@@ -4539,6 +4540,7 @@ def start(cfg_path: Path, port: int | None, gpu: int | list | None = None, open_
             cfg["gpu"] = gpu
         update_poly_engine(cfg, yes, cfg_path)
         poly_tail_skip(cfg, cfg_path)
+        poly_kv_whole(cfg, cfg_path)
     keep = {k: v for k, v in (keep or {}).items() if v is not None}
     reserve = keep.pop("vram_reserve_mib", None)       # #493: an engine argument, kept in the config's args
     if reserve is not None:
@@ -5329,6 +5331,24 @@ def poly_tail_skip(cfg: dict, cfg_path: Path | None = None) -> None:
         write_config(cfg_path, cfg)
 
 
+def poly_kv_whole(cfg: dict, cfg_path: Path | None = None) -> None:
+    """A config of strata-poly on an AMD card gets --kv-whole: ROCm keeps the VRAM that cuMemUnmap() and
+    cuMemRelease() gave back (issue #13), so the attention caches take theirs at load instead of as the
+    conversation grows, where the expert cache's VRAM would be lost to them.  A config that has it keeps it."""
+    a = cfg["args"]
+    try:
+        meta = json.loads((Path(cfg["exe"]).parent / "BUILD.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if meta.get("backend") != "hip" or "--kv-whole" in a:
+        return
+    a.append("--kv-whole")
+    ok("AMD card: --kv-whole, the attention caches take their VRAM at load (ROCm keeps what the expert cache gives "
+       "back, so a long prompt was refused VRAM later)")
+    if cfg_path is not None:
+        write_config(cfg_path, cfg)
+
+
 def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, adopted) -> int:
     """Steps 2 to 7 for a model of strata-poly (docs/GLM.md, docs/BACKENDS.md): its questions, the Python
     packages, the engine (ready-made or compiled here), the model file, its tokenizer and expert profile, the run
@@ -5616,6 +5636,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
                          "max_tokens": vt}
         if vision == "cpu":
             cfg["vision"]["threads"] = max(1, (os.cpu_count() or 8) // 2)
+    poly_kv_whole(cfg)
     write_setup_config(cfg_path, cfg, earlier)
     script = write_run_script(tag, cfg_path, port, cfg.get("open_browser") is not False)
     ok(f"start script: {script.name}")
