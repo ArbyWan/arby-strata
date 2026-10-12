@@ -2647,6 +2647,7 @@ bool Engine::read(const int32_t* tokens, int n, const Mark* marks, int n_marks,
                 } else {
                     output_rows(0, call.m, hn_ + n_embd_);
                     draft_rows(tokens + call.at, ahead_pos_ == pos_ && tokens[call.at] == ahead_tok_ ? 1 : 0, call.m);
+                    ++read_draft_calls_;
                 }
                 if (uint8_t* state = call.mark >= 0 ? marks[call.mark].state : nullptr) {
                     ck(cudaStreamSynchronize(cs(st_)), "read");

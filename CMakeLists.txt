@@ -1691,6 +1691,16 @@ if(STRATA_NATIVE_EXPERTS AND (STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP) AND NOT S
   target_link_libraries(poly_expert_parity PRIVATE strata_poly_mmq strata_kernels ggml-cpu ggml-base
                                                   ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target}
                                                   Threads::Threads)
+  # a read with the draft block repeats bit for bit; needs the model file, so it is run by hand:
+  # poly_draft_race_test MODEL.gguf [RUNS] [LAYER_SPLIT]
+  add_executable(poly_draft_race_test src/poly/draft_race_test.cpp src/poly/engine.cpp src/poly/glm5next.cpp
+                                      src/poly/qwen35.cpp src/poly/gemma4.cpp src/poly/cpu_experts.cpp
+                                      src/poly/kernels.cu src/core/conversation_memory.cpp)
+  target_include_directories(poly_draft_race_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+                                                         ${_strata_gpu_include_directories})
+  target_link_libraries(poly_draft_race_test PRIVATE strata_poly_mmq strata_kernels strata_spec ggml-cpu ggml-base
+                                                    ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target}
+                                                    ${_strata_poly_driver} Threads::Threads)
   # the pool of the CPU experts, without a model
   add_executable(poly_workers_test src/poly/workers_test.cpp src/poly/cpu_experts.cpp)
   target_include_directories(poly_workers_test PRIVATE ${_strata_gg}/include)
