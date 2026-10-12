@@ -374,7 +374,7 @@ Engine::~Engine() {
     for (Kv& k : kv_) vmm_free(k);
     vmm_free(arena_);
     for (void* p : host_allocs_) cudaFreeHost(p);
-    for (void* e : {ev_stage_[0], ev_stage_[1], ev_ahead_, ev_free_, ev_in_[0], ev_in_[1], ev_out_[0], ev_out_[1]})
+    for (void* e : {ev_stage_[0], ev_stage_[1], ev_ahead_, ev_free_, ev_in_[0], ev_in_[1], ev_out_[0], ev_out_[1], ev_hr_})
         if (e) cudaEventDestroy((cudaEvent_t) e);
     for (void* e : ev_row_)
         if (e) cudaEventDestroy((cudaEvent_t) e);
@@ -2820,12 +2820,23 @@ void Engine::keep(int n) {
 // residual, and leaves its normed attention input in xn_ and xq_.  r_ is free between the model's calls, and the
 // block works in it: n rows of the two halves, then the residual.
 //
-// h_r_ is free to write: every call that copied out of it has waited for the card since.
+// h_r_ is written once the card has read the last copy out of it (ev_hr_): read()'s draft turn calls this for one
+// call after another without waiting for the card in between.
 float* Engine::draft_input(const int32_t* tokens, int64_t row, const float* h, int n) {
     const size_t e = (size_t) n_embd_, rows = (size_t) n;
+    // read()'s draft turn calls this for one call after another without waiting for the card: the copy of the call
+    // before may still be reading h_r_, so the host waits for it before writing the next call's rows
+    if (!ev_hr_) {
+        cudaEvent_t ev = nullptr;
+        ck(cudaEventCreateWithFlags(&ev, cudaEventDisableTiming), "cudaEventCreate");
+        ev_hr_ = ev;
+    } else {
+        ck(cudaEventSynchronize((cudaEvent_t) ev_hr_), "embed");
+    }
     for (int t = 0; t < n; ++t) input(tokens[t], row + t, h_r_ + (size_t) t * e);
     if (n < kStageRows) copy2(h_r_, cur_, n * n_embd_, nullptr, nullptr, 0, st_);
     else ck(cudaMemcpyAsync(cur_, h_r_, rows * e * sizeof(float), cudaMemcpyHostToDevice, cs(st_)), "embed");
+    ck(cudaEventRecord((cudaEvent_t) ev_hr_, cs(st_)), "embed");
     rms_norm(cur_, fp(d_enorm_), r_, n_embd_, n, rms_eps_, st_, 2 * n_embd_);
     rms_norm(h, fp(d_hnorm_), r_ + e, n_embd_, n, rms_eps_, st_, 2 * n_embd_);
     float* x = r_ + 2 * rows * e;
