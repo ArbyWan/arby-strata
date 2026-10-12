@@ -59,6 +59,7 @@
 #define cudaGraphExecDestroy hipGraphExecDestroy
 #define cudaGraphExec_t hipGraphExec_t
 #define cudaGraphGetNodes hipGraphGetNodes
+#define cudaGraphInstantiateWithFlags hipGraphInstantiateWithFlags
 #define cudaGraphLaunch hipGraphLaunch
 #define cudaGraphUpload hipGraphUpload
 #define cudaGraph_t hipGraph_t
@@ -94,6 +95,7 @@ hipError_t mem_get_info(size_t* free_bytes, size_t* total_bytes);
 #define cudaMemGetInfo hipMemGetInfo
 #endif
 #define cudaMemcpy hipMemcpy
+#define cudaMemcpy2D hipMemcpy2D
 #define cudaMemcpy2DAsync hipMemcpy2DAsync
 #define cudaMemcpyAsync hipMemcpyAsync
 #define cudaMemcpyPeerAsync hipMemcpyPeerAsync
