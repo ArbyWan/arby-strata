@@ -1483,6 +1483,8 @@ void bf16_to_f32(const uint16_t* w, float* out, size_t n, void* stream) {
 
 void rms_norm(const float* x, const float* w, float* y, int n, int rows, float eps, void* stream, int y_stride) {
     rms_norm_kernel<<<rows, sum_threads(n), 0, cs(stream)>>>(x, w, y, n, eps, y_stride ? y_stride : n);
+    if (const cudaError_t e = cudaGetLastError(); e != cudaSuccess)
+        throw std::runtime_error(std::string("rms_norm: ") + cudaGetErrorString(e));
 }
 
 void layer_norm(const float* x, const float* w, const float* b, float* y, int n, int rows, float eps, void* stream) {
@@ -1629,6 +1631,8 @@ void axpy(const float* x, float a, float* acc, int n, bool add, void* stream) {
 void copy2(const void* x0, void* y0, int n0, const void* x1, void* y1, int n1, void* stream) {
     copy2_kernel<<<grid(n0 + n1, 256), 256, 0, cs(stream)>>>((const uint32_t*) x0, (uint32_t*) y0, n0,
                                                              (const uint32_t*) x1, (uint32_t*) y1, n1);
+    if (const cudaError_t e = cudaGetLastError(); e != cudaSuccess)
+        throw std::runtime_error(std::string("copy2: ") + cudaGetErrorString(e));
 }
 
 void add_scaled(const ScaledRows& rows, int count, int n, void* stream) {

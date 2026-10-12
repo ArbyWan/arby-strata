@@ -1629,16 +1629,31 @@ endif()
 # ---- strata-poly: GLM 5.3 Flash (llama.cpp's glm5-next), read from its GGUF ----
 #
 # A second engine beside `strata`.  It shares the quantized matvec kernels and the GGUF reader, and takes the
-# CPU experts' dot products from ggml-cpu.
-if(STRATA_ENABLE_CUDA AND STRATA_NATIVE_EXPERTS AND NOT STRATA_ENABLE_HIP AND NOT STRATA_HIP_GFX906)
+# CPU experts' dot products from ggml-cpu.  On HIP it is the same CUDA-shaped code through the hip_compat headers
+# (the wave32 RDNA backend; gfx906's wave64 compat layer is not supported here).
+if(STRATA_NATIVE_EXPERTS AND (STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP) AND NOT STRATA_HIP_GFX906)
   # The prompt path's quantized products: llama.cpp's MMQ kernels (ggml-cuda, MIT) for the types the model's
   # GGUFs keep their matrices in (the list in src/poly/mmq.cu), from the checkout strata_mmq is compiled from and
   # with the same host symbols.  A library of its own, so that what `strata` multiplies with MMQ stays as it is.
+  if(NOT _strata_mmq)   # a HIP build without STRATA_PREFILL_MMQ has not set these up yet
+    if(STRATA_GGML_DIR)
+      set(_strata_gg ${STRATA_GGML_DIR}/ggml)
+    else()
+      set(_strata_gg ${strata_llamacpp_SOURCE_DIR}/ggml)
+    endif()
+    set(_strata_mmq ${_strata_gg}/src/ggml-cuda)
+  endif()
   set(_strata_poly_mmq_instances "")
   foreach(_t q4_0 q4_1 q5_0 q5_1 q8_0 q2_k q3_k q4_k q5_k q6_k iq1_s iq2_xxs iq2_xs iq2_s iq3_xxs iq3_s iq4_nl
              iq4_xs)
     list(APPEND _strata_poly_mmq_instances ${_strata_mmq}/template-instances/mmq-instance-${_t}.cu)
   endforeach()
+  if(STRATA_ENABLE_HIP)
+    # CMake does not infer HIP from the .cu suffixes outside src/ (and drops a .cu source it has no language
+    # for), and ggml's MMQ sources take its native HIP path (vendors/hip.h) instead of the hip_compat headers,
+    # as strata_mmq's does.
+    set_source_files_properties(${_strata_mmq}/quantize.cu ${_strata_poly_mmq_instances} PROPERTIES LANGUAGE HIP)
+  endif()
   add_library(strata_poly_mmq STATIC src/poly/mmq.cu src/prefill/ggml_cuda_host.cu ${_strata_mmq}/quantize.cu
               ${_strata_poly_mmq_instances})
   target_include_directories(strata_poly_mmq PRIVATE ${_strata_gg}/include ${_strata_gg}/src ${_strata_mmq}
@@ -1647,15 +1662,27 @@ if(STRATA_ENABLE_CUDA AND STRATA_NATIVE_EXPERTS AND NOT STRATA_ENABLE_HIP AND NO
   if(MSVC)
     target_compile_options(strata_poly_mmq PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/bigobj>)
   endif()
-  target_link_libraries(strata_poly_mmq PUBLIC ggml-base ${_strata_gpu_runtime_target})
+  if(STRATA_ENABLE_HIP)
+    target_compile_definitions(strata_poly_mmq PRIVATE GGML_USE_HIP=1)
+    target_link_libraries(strata_poly_mmq PUBLIC ggml-base hip::host)
+  else()
+    target_link_libraries(strata_poly_mmq PUBLIC ggml-base ${_strata_gpu_runtime_target})
+  endif()
 
   add_executable(strata-poly src/poly/main.cpp src/poly/engine.cpp src/poly/glm5next.cpp src/poly/qwen35.cpp
                             src/poly/gemma4.cpp src/poly/cpu_experts.cpp src/poly/kernels.cu
                             src/core/conversation_memory.cpp)
   target_include_directories(strata-poly PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${_strata_gpu_include_directories})
-  # the driver's virtual memory calls: the attention caches grow with the conversation
+  # the driver's virtual memory calls: the attention caches grow with the conversation; on HIP they are HIP's
+  # memory management calls, which the HIP runtime itself provides (hip_compat/cuda.h)
+  if(STRATA_ENABLE_HIP)
+    set(_strata_poly_driver "")
+  else()
+    set(_strata_poly_driver CUDA::cuda_driver)
+  endif()
   target_link_libraries(strata-poly PRIVATE strata_poly_mmq strata_kernels strata_spec ggml-cpu ggml-base
-                                           ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target} CUDA::cuda_driver
+                                           ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target}
+                                           ${_strata_poly_driver}
                                            Threads::Threads)
   # needs the model file, so it is run by hand: poly_expert_parity MODEL.gguf
   add_executable(poly_expert_parity src/poly/expert_parity.cpp src/poly/cpu_experts.cpp src/poly/kernels.cu)

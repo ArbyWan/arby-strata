@@ -5056,13 +5056,13 @@ def poly_ram_need(d, vram_gb) -> float:
 
 def poly_fits(d, ram, vram_gb, hip) -> bool:
     """Whether a size of strata-poly's models runs on this PC with its experts in RAM, by setup's estimate."""
-    return not hip and vram_gb >= poly_beside_gb(d) + 2 and ram >= poly_ram_need(d, vram_gb) - 4
+    return not (hip and WIN) and vram_gb >= poly_beside_gb(d) + 2 and ram >= poly_ram_need(d, vram_gb) - 4
 
 
 def poly_verdict(d, ram, vram_gb, hip, windows=False) -> str:
     """--check's line for a size of strata-poly's models.  `windows`: its family has run there (FAMILIES)."""
-    if hip:
-        return "does not run on AMD cards (its engine is a CUDA program)"
+    if hip and WIN:
+        return "does not run on AMD cards on Windows yet (its HIP engine is compiled on Linux)"
     if vram_gb < poly_beside_gb(d) + 2:
         return f"does not fit: it takes about {poly_beside_gb(d)} GB of VRAM before any expert"
     need = poly_ram_need(d, vram_gb)
@@ -5215,6 +5215,49 @@ def build_engine_poly(gpu, yes, llama, vision="none", toolkit=13) -> Path:
     return eng
 
 
+def build_engine_poly_hip(gpu, llama) -> Path:
+    """Compile strata-poly for this AMD GPU into engine-poly/ (again only when its source changed: a `git pull`).
+    ROCm comes from rocm_root: a system ROCm 7 or AMD's TheRock wheels in .venv, as for the main engine's HIP
+    build.  There is no ready-made AMD engine and no HIP image encoder: images stay off."""
+    eng = ROOT / ENGINE_POLY_DIR
+    eng.mkdir(exist_ok=True)
+    stamp = eng / "BUILD.json"
+    meta = json.loads(stamp.read_text(encoding="utf-8")) if stamp.exists() else {}
+    src = source_hash(ENGINE_SOURCES)
+    archs = sorted(set(gpu.get("archs") or [gpu["arch"]]))
+    engine_ok = meta.get("backend") == "hip" and (eng / POLY_EXE).exists() and meta.get("src") == src and \
+        set(archs) <= set(meta.get("archs", []))
+    if engine_ok:
+        ok("strata-poly already built for this PC")
+        return eng
+    if not (shutil.which("c++") or shutil.which("g++")) or not shutil.which("git"):
+        fail("a C++ compiler and git are needed to compile the AMD strata-poly",
+             "Ubuntu/Debian: sudo apt install build-essential git   Fedora: sudo dnf install gcc-c++ git")
+    root, dirs = rocm_root(archs)
+    libs = [str(Path(d).parent) for d in dirs[1:]]
+    bitcode = next((p for p in (root / "lib" / "llvm" / "amdgcn" / "bitcode", root / "amdgcn" / "bitcode") if p.is_dir()),
+                   root / "amdgcn" / "bitcode")
+    os.environ.update({"HIP_PLATFORM": "amd", "HIP_COMPILER": "clang", "HIP_RUNTIME": "rocclr", "ROCM_PATH": str(root),
+                       "HIP_PATH": str(root)})
+    os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(dirs + [os.environ.get("LD_LIBRARY_PATH", "")]).rstrip(os.pathsep)
+    os.environ["PATH"] = os.pathsep.join([str(root / "bin"), str(root / "llvm" / "bin"), os.environ.get("PATH", "")])
+    say("  strata-poly's source changed: compiling it again (only what changed, a few minutes) ..."
+        if meta.get("backend") == "hip" and (eng / POLY_EXE).exists()
+        else f"  Compiling the strata-poly engine for your AMD GPU ({', '.join(archs)}; some minutes, once) ...")
+    cmake_build(ROOT, ROOT / "build-poly-hip", "strata-poly",
+                ["-DSTRATA_ENABLE_HIP=ON", "-DSTRATA_ENABLE_CUDA=OFF", "-DSTRATA_BUILD_TESTS=OFF",
+                 "-DCMAKE_HIP_ARCHITECTURES=" + ";".join(archs),
+                 f"-DCMAKE_HIP_COMPILER={root / 'llvm' / 'bin' / 'clang++'}", f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={root}",
+                 "-DCMAKE_PREFIX_PATH=" + ";".join([str(root), *libs]),
+                 f"-DCMAKE_HIP_FLAGS=--rocm-path={root} --rocm-device-lib-path={bitcode}",
+                 f"-DSTRATA_GGML_DIR={llama}"], None, "")
+    shutil.copy2(ROOT / "build-poly-hip" / POLY_EXE, eng / POLY_EXE)
+    stamp.write_text(json.dumps({"source": "local-hip", "backend": "hip", "version": source_version(),
+                                 "archs": archs, "vision": "none", "lib_dirs": dirs, "src": src}, indent=1))
+    ok(f"strata-poly compiled: {eng / POLY_EXE}")
+    return eng
+
+
 def update_poly_engine(cfg: dict, yes=False, cfg_path: Path | None = None) -> None:
     """Before a model of strata-poly starts: the engine setup installed is replaced when its source changed (a `git
     pull`) or the card is another generation, a ready-made one by the release's for the new source, one compiled here
@@ -5231,6 +5274,16 @@ def update_poly_engine(cfg: dict, yes=False, cfg_path: Path | None = None) -> No
         return
     try:
         meta = json.loads(stamp.read_text()) if stamp.exists() else {}
+        if meta.get("backend") == "hip":   # the AMD engine compiled here: the same way again when the source moved
+            if not (meta.get("src") == source_hash(ENGINE_SOURCES) and (eng / POLY_EXE).exists()):
+                build_engine_poly_hip({"arch": (meta.get("archs") or [""])[0], "archs": meta.get("archs")},
+                                      get_llama_cpp())
+                cfg["lib_dirs"] = engine_lib_dirs(eng)
+            if renamed:
+                cfg["exe"] = str(eng / POLY_EXE)
+                if cfg_path is not None:
+                    cfg_path.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
+            return
         picks = cfg["gpu"] if isinstance(cfg.get("gpu"), list) else [cfg["gpu"] if isinstance(cfg.get("gpu"), int) else None]
         gpu = gpu_info(picks[0])
         if gpu is None:
@@ -5282,9 +5335,11 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     config and the start script."""
     fam = FAMILIES[family]
     title = fam["title"]
-    if hip:
-        fail(f"{title} runs on NVIDIA cards only: its engine is a CUDA program",
-             "choose another model for the AMD card")
+    if hip and WIN:
+        fail(f"{title} has no AMD engine for Windows: its HIP engine is compiled on Linux",
+             "choose another model for this card, or run setup on Linux")
+    if hip and family in ("glm", "gemma4", "tiel"):   # the engine runs on the AMD card, these three models not yet
+        warn(f"{title} on the AMD card has not been tried: the engine runs there, this model was not")
     if cuda_tk == 12:
         warn(f"{title}'s engine with CUDA 12 is compiled here (the ready-made one is CUDA 13)" +
              (": on Pascal / Volta it is untested" if int(gpu["arch"]) < CUDA13_MIN_ARCH else ""))
@@ -5293,6 +5348,9 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
                      "there", bool(a.family), a.yes, f"{title} has not been tried on Windows",
                      f"use Linux, or --family {family} --yes to try it here")
     sees = fam.get("vision") is True
+    if sees and hip:   # the image encoder is a CUDA program: no HIP build of it yet (as for the main engine)
+        say("  Images: the image encoder is a CUDA program: on the AMD card images are off (text answers).")
+        sees = False
     unused = [flag for flag, given in (
         ("--vision", not sees and a.vision not in (None, "no", "none")),
         ("--vision-tokens", not sees and a.vision_tokens is not None),
@@ -5449,9 +5507,9 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     step(4, "the strata-poly engine")
     llama = get_llama_cpp()
     ok(f"llama.cpp {LLAMA_CPP_COMMIT[:7]} (gguf-py, ggml)")
-    if not a.build and cuda_tk != 12:
+    if not a.build and not hip and cuda_tk != 12:
         get_poly_prebuilt(gpu)
-    eng = build_engine_poly(gpu, a.yes, llama, vision, cuda_tk)
+    eng = build_engine_poly_hip(gpu, llama) if hip else build_engine_poly(gpu, a.yes, llama, vision, cuda_tk)
     lib_dirs = engine_lib_dirs(eng)
     ok(f"engine: {eng / POLY_EXE}")
 

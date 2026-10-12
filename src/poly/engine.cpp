@@ -474,7 +474,16 @@ void Engine::vmm_map(Mapped& m, size_t bytes, size_t piece, const char* what) {
         cu_ck(mapped, "mapping VRAM");
         m.pieces.emplace_back(h, n);
         m.mapped += n;
-        cu_ck(cuMemSetAccess(at, n, &access, 1), "mapping VRAM");
+        const CUresult acc = cuMemSetAccess(at, n, &access, 1);
+        if (acc != CUDA_SUCCESS) {   // HIP hands out the physical pages here, not at create: the card may not have
+            cuMemUnmap(at, n);       // them even though the addresses do.  Leave m as it was and say no.
+            cuMemRelease(h);
+            m.pieces.pop_back();
+            m.mapped -= n;
+            (void) cudaGetLastError();   // HIP's failed SetAccess leaves a sticky error: do not let it escape with the throw
+            throw std::runtime_error("no VRAM for " + std::string(what) + " (" + std::to_string(n >> 20) +
+                                     " MiB more)");
+        }
     }
 }
 
@@ -963,11 +972,16 @@ void Engine::fill_expert_cache() {
     n_trade_ = (int) sizes.size();
     // sized again (resize_cache()), it is no larger than load() made it, or than its addresses with VMM
     const size_t most = vmm_ ? std::min(all, total_b) : full_bytes_ > 0 ? full_bytes_ : all;
-    const size_t arena = std::min({all, free_b - reserve, arena_.base ? arena_.reserved - 256 : most});
+    size_t arena = std::min({all, free_b - reserve, arena_.base ? arena_.reserved - 256 : most});
     if (arena == 0) return;
     if (vmm_) {   // in pieces, so that it can give some up to the attention caches (shrink_cache()) and grow
         if (!arena_.base) vmm_reserve(arena_, most + 256);   // addresses only: grow_cache() maps more of them
-        vmm_map(arena_, arena + 256, kArenaPiece, "the expert cache");
+        try {
+            vmm_map(arena_, arena + 256, kArenaPiece, "the expert cache");
+        } catch (const std::runtime_error&) {   // the card may not have it all (grow_cache() is just as tolerant)
+            arena = arena_.mapped > 256 ? arena_.mapped - 256 : 0;
+            if (arena == 0) return;
+        }
         exp_ = (uint8_t*) arena_.base;
         budget_ = free_b - reserve;   // when it holds every expert, what is left over goes to the rows first
         for (const Kv& k : kv_) budget_ += k.mapped;
