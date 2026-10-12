@@ -249,7 +249,8 @@ PolyStrata 独自のエンジンで動く 5 つのモデルは、付属のベン
 | **OS** | Linux と、最新の NVIDIA ドライバー。 |
 
 ほかはすべてインストーラーが用意します。エンジンはあなたの PC でコンパイルされ、足りないもの（g++ と CUDA ツールキット）は
-インストーラーが入れるか尋ねます。未対応：Windows、AMD のカード、複数のカード、画像。
+インストーラーが入れるか尋ねます。未対応：AMD のカード、Windows での 2 枚、3 枚以上、画像。
+Windows で 24 GB のカード 1 枚と 128 GB の RAM で動かしたユーザーの[報告](https://github.com/VecSzn/PolyStrata/issues/10)があります。
 
 全体の一覧：[docs/GLM.md](docs/GLM.md#what-you-need)（英語）。
 

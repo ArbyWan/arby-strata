@@ -253,7 +253,8 @@ La liste complète : [docs/INSTALL.md](docs/INSTALL.md#what-you-need).
 | **Système** | Linux, et un pilote NVIDIA récent. |
 
 L'installeur s'occupe de tout le reste. Il compile le moteur sur votre PC et propose d'installer ce qu'il faut pour cela
-(g++ et le CUDA Toolkit). Pas encore : Windows, les cartes AMD, plusieurs cartes, les images.
+(g++ et le CUDA Toolkit). Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus, les images.
+Un utilisateur le fait tourner sous Windows avec une carte de 24 Go et 128 Go de RAM ([rapport](https://github.com/VecSzn/PolyStrata/issues/10)).
 
 La liste complète : [docs/GLM.md](docs/GLM.md#what-you-need) (en anglais).
 

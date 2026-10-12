@@ -255,7 +255,8 @@ Die vollständige Liste: [docs/INSTALL.md](docs/INSTALL.md#what-you-need).
 | **System** | Linux und ein aktueller NVIDIA-Treiber. |
 
 Alles andere richtet der Installer ein. Er kompiliert die Engine auf deinem PC und bietet an, zu installieren,
-was dafür fehlt (g++ und das CUDA-Toolkit). Noch nicht: Windows, AMD-Karten, mehrere Karten, Bilder.
+was dafür fehlt (g++ und das CUDA-Toolkit). Noch nicht: AMD-Karten, zwei Karten unter Windows, drei Karten oder mehr, Bilder.
+Ein Nutzer betreibt es unter Windows mit einer 24-GB-Karte und 128 GB RAM ([Bericht](https://github.com/VecSzn/PolyStrata/issues/10)).
 
 Die vollständige Liste: [docs/GLM.md](docs/GLM.md#what-you-need) (englisch).
 

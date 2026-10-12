@@ -4,7 +4,8 @@ PolyStrata adds a second engine, `strata-poly`, that runs GLM 5.3 Flash. It sits
 Qwen3.8-Flash-Next as before. The server, the web app and the API are the same for both: a run config names the
 engine it starts.
 
-It is early. It has been built and run on one machine, with Linux and one NVIDIA card.
+It is early. This project has built and run it on one machine, with Linux and one NVIDIA card, and on two RTX
+3080s; a user runs it on Windows with a 24 GB card and 128 GB of RAM ([issue 10](https://github.com/VecSzn/PolyStrata/issues/10)).
 
 ## What it was measured on
 
@@ -278,8 +279,11 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
   patrickbdevaney's, antirez's and Unsloth's), a model in several files, and the weight types llama.cpp's kernels
   have. Only the three sizes above have been run: setup offers no other.
 - A ready-made `strata-poly` off Windows, or for a driver older than CUDA 13's: setup compiles it there.
-- GLM on Windows. The engine compiles there and runs the three smaller models of this engine, but GLM has not
-  been run on Windows: no PC with the RAM for it was at hand. Setup asks before it installs it there.
+- GLM on Windows, by this project: no PC with the RAM for it was at hand, and setup asks before it installs it
+  there. A user ran 3.0BIT on Windows 10 with an RTX 5090 D v2 (24 GB) and 128 GB of RAM
+  ([issue 10](https://github.com/VecSzn/PolyStrata/issues/10)): 1,483 experts in VRAM, 26 to 30 tokens/s after
+  a short prompt, 10K tokens read at 375 to 395. The context set to 1,048,576 in the run config loaded and
+  answered, and one request of 557K tokens was read at 286 tokens/s with the three facts planted in it found.
 - AMD and Intel cards. Two NVIDIA cards can share the model ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)):
   REAP50 has run on two 10 GB cards under Linux.
 - Pictures. The model's image input is not read.
