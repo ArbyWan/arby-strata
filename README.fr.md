@@ -358,6 +358,8 @@ Les six figurent dans la liste des modèles de l'installeur. `./setup.sh --famil
 deux fois. Fermez sa fenêtre pour arrêter le modèle. `UPDATE.bat` (`./update.sh`) met PolyStrata à jour sans le démarrer.
 Mises à jour, Docker, plusieurs cartes, emplacement des fichiers et toutes les options : [docs/INSTALL.md](docs/INSTALL.md).
 
+**C'est rapide sur votre PC ?** Lancez `BENCH.bat` (`./bench.sh`) : 5 à 10 minutes environ ; il mesure le chat, des prompts de 4K/16K et une session de type agent avec vos propres réglages, et écrit un rapport à partager ([comment](docs/COMMUNITY_BENCHMARKS.md#run-the-benchmark)).
+
 ## Quel modèle choisir ?
 
 ### Qwen3.8-Flash-Next

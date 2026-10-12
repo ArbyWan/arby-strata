@@ -341,6 +341,8 @@ PolyStrata 的 [MCP 服务器](docs/MCP_SERVER.md)来安装、启动和停止 Po
 `UPDATE.bat`（`./update.sh`）只更新 PolyStrata，不启动。更新、Docker、多张显卡、文件存放位置以及所有选项：
 [docs/INSTALL.md](docs/INSTALL.md)。
 
+**想知道在你电脑上快不快？** 运行 `BENCH.bat`（`./bench.sh`）：大约 5 到 10 分钟，用你自己的设置测聊天、4K/16K 提示和一段代理式会话，并写出一份可以分享的报告（[怎么做](docs/COMMUNITY_BENCHMARKS.md#run-the-benchmark)）。
+
 ## 该选哪个模型
 
 ### Qwen3.8-Flash-Next

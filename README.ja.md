@@ -353,6 +353,8 @@ PolyStrata のインストール、起動、停止もできます。
 モデルを止めるときはウィンドウを閉じます。`UPDATE.bat`（`./update.sh`）を使うと、PolyStrata を起動せずに更新できます。
 更新、Docker、複数のカード、ファイルの保存場所、すべてのオプションについて：[docs/INSTALL.md](docs/INSTALL.md)。
 
+**自分の PC で速いか知りたいときは** `BENCH.bat`（`./bench.sh`）を実行します。5〜10 分ほどで、チャット、4K/16K のプロンプト、エージェント風のセッションを自分の設定のまま測り、共有できるレポートを書き出します（[やり方](docs/COMMUNITY_BENCHMARKS.md#run-the-benchmark)）。
+
 ## どのモデルを選べばいい
 
 ### Qwen3.8-Flash-Next

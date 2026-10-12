@@ -361,6 +361,8 @@ doppelt herunter. Schließ das Fenster, um das Modell zu stoppen. `UPDATE.bat` (
 ohne es zu starten. Updates, Docker, mehrere Karten, wo die Dateien landen und alle Optionen:
 [docs/INSTALL.md](docs/INSTALL.md).
 
+**Läuft es auf deinem PC schnell?** Starte `BENCH.bat` (`./bench.sh`): etwa 5-10 Minuten; es misst Chat, 4K/16K-Prompts und eine Sitzung im Agenten-Stil mit deinen eigenen Einstellungen und schreibt einen Bericht zum Teilen ([wie](docs/COMMUNITY_BENCHMARKS.md#run-the-benchmark)).
+
 ## Welches Modell soll ich nehmen?
 
 ### Qwen3.8-Flash-Next
