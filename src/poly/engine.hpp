@@ -509,6 +509,7 @@ protected:
     size_t budget_ = 0;          ///< their VRAM and the expert cache's together, as the cache was filled
     int asked_reserve_mib_ = -1; ///< Options::vram_reserve_mib as load() got it
     int reserve_mib_ = 0;        ///< what the cache was sized to leave free
+    bool ram_tight_ = false;     ///< the machine's RAM is within 4 GiB of the model's files (fill_expert_cache())
     int minds_ = 0;              ///< mind_vram()'s calls
     int full_cached_ = 0;        ///< the cache as load() filled it: its experts and their bytes
     size_t full_bytes_ = 0;

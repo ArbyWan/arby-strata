@@ -1266,7 +1266,7 @@ picture in its place, and a prompt without pictures after them.
 | | the same after 7,709 tokens, the engine started from a shell | 48 to 50 in four runs of six | 66 to 72 |
 | A checkpoint where the prompt's last turn begins, the place sent by the server | Qwen3.6 on the laptop under Claude Code, one task: tokens read by a request after the first, on average | 1,442 over six | 399 over nine |
 | | the same: seconds reading such a request, on average | 1.9 | 1.5 |
-| The reserve a thirty-second of the card, 256 to 768 MiB, half of it kept from the second request on, and VRAM that comes free taken back | Qwen3.6 UD-Q3_K_M on the laptop: experts in VRAM at a start | 2,449 | 2,642 |
+| The reserve a thirty-second of the card, 256 to 768 MiB, half of it kept from the second request on (a sixteenth, 512 to 1,024, kept whole, when the PC's free RAM is within 4 GiB of the model's files), and VRAM that comes free taken back | Qwen3.6 UD-Q3_K_M on the laptop: experts in VRAM at a start | 2,449 | 2,642 |
 | | the same, writing after a 31,337-token prompt | 77.7 | 80.6 |
 | | Qwen3.6 UD-Q3_K_M on an RTX 3080 under Linux: experts in VRAM once 2 GiB another program held came free | 2,880 | 4,368 |
 | | the same, writing | 159 | 169 to 177 |
@@ -1588,7 +1588,14 @@ and goes on: started with a reserve of 96 MiB the engine had no VRAM free after 
 1,108 tokens/s where it reads at 1,387 to 1,450 and wrote after it at 13 where it writes at 28 to 31. The reserve
 became a sixteenth of the card, between 512 and 1,024 MiB, and then a thirty-second, between 256 and 768: the
 launches take 180 MiB of the 8 GB card, most of it in the first request, and with 256 the laptop had 159 MiB free
-with Qwen3.6 at its fullest, against 418 with 512, and no memory moved to the system's. From the second request on
+with Qwen3.6 at its fullest, against 418 with 512, and no memory moved to the system's. When the PC's free RAM is
+within 4 GiB of the model's files it is a sixteenth again: with 256 the laptop's two largest files read a
+24,000-token prompt 7% to 13% slower than with 512 (APEX-I-Quality at 1,392 and 1,138 tokens/s against 1,532 and
+1,451, in turns with the release that kept 512, at 1,496 and 1,311), and the smaller files read as fast either
+way. The whole of it stays free then from the second request on, where half of it did: with half kept the same
+file read at 1,487 and 1,165 against the release's 1,603 and 1,349, with the whole at 1,477 and 1,591 against
+1,305 and 1,532, writing the answer after the prompt at 63 and 64 against 46 and 61. Otherwise, from the second
+request on
 the engine keeps half the reserve free, 128 MiB at least. It looks before each request: when another program has
 taken VRAM and less than half of that is free, the cache gives up its least used experts, and when 64 MiB more
 than that has come free, it takes the most used experts it lacks. Sized again whole, as it was, it went down with

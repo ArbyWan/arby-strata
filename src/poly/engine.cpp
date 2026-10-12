@@ -308,8 +308,33 @@ std::vector<int> layer_starts(const std::string& split, const Shards& file, int 
     return starts;
 }
 
-// The reserve when none is asked for: a thirty-second of the card, 256 to 768 MiB
-int default_reserve_mib(size_t total_b) { return (int) std::clamp<size_t>(total_b >> 25, 256, 768); }
+// The reserve when none is asked for: a thirty-second of the card, 256 to 768 MiB.  When the machine's RAM is
+// tight for the model, a sixteenth, 512 to 1,024: on an 8 GB laptop with 32 GB, Ornith's APEX-I-Quality (23 GB)
+// read a 24,000-token prompt at 1,392 and 1,138 tokens/s with 256 MiB kept free and at 1,532 and 1,451 with 512,
+// in turns with the build that kept 512 (1,496 and 1,311); the smaller files read as fast either way.  Under
+// Windows what the card is short of moves to the system's RAM, which the file then has less of.
+int default_reserve_mib(size_t total_b, bool ram_tight) {
+    if (ram_tight) return (int) std::clamp<size_t>(total_b >> 24, 512, 1024);
+    return (int) std::clamp<size_t>(total_b >> 25, 256, 768);
+}
+
+// The RAM the machine has free for the model's file, or 0 when it cannot tell.
+size_t ram_available() {
+#ifdef _WIN32
+    MEMORYSTATUSEX st{};
+    st.dwLength = sizeof(st);
+    return GlobalMemoryStatusEx(&st) ? (size_t) st.ullAvailPhys : 0;
+#else
+    size_t kb = 0;
+    if (FILE* f = std::fopen("/proc/meminfo", "r")) {
+        char line[128];
+        while (std::fgets(line, sizeof(line), f))
+            if (std::sscanf(line, "MemAvailable: %zu kB", &kb) == 1) break;
+        std::fclose(f);
+    }
+    return kb << 10;
+#endif
+}
 
 }  // namespace
 
@@ -886,14 +911,18 @@ int64_t Engine::vram_free_mib() const {
 // The cache takes what is free but for a reserve.  What the engine allocates after it comes out of the reserve:
 // the recorded launches and a library's work space took 180 MiB of an 8 GB card in the first request.  Unless the
 // caller names it, the reserve is a thirty-second of the card, between 256 and 768 MiB (mind_vram() keeps what is
-// free near half of it later).  Under Windows a card that is asked for more than it has does not refuse: memory
+// free near half of it later), or a sixteenth when the machine's RAM is within 4 GiB of the model's files
+// (default_reserve_mib()).  Under Windows a card that is asked for more than it has does not refuse: memory
 // moves to the system's, and an answer came at 13 tokens/s where it comes at 30.
 void Engine::fill_expert_cache() {
     if (!opt_.gpu_experts || n_moe_ == 0) return;
     size_t free_b = 0, total_b = 0;
     ck(cudaMemGetInfo(&free_b, &total_b), "cudaMemGetInfo");
+    const size_t ram = ram_available(), files = gg_->bytes() + (dg_ ? dg_->bytes() : 0);
+    ram_tight_ = ram > 0 && files + (4ULL << 30) > ram;
     // 256 MiB at least, whatever was asked: the launches recorded later take theirs out of the reserve (mind_vram())
-    reserve_mib_ = opt_.vram_reserve_mib >= 0 ? std::max(opt_.vram_reserve_mib, 256) : default_reserve_mib(total_b);
+    reserve_mib_ = opt_.vram_reserve_mib >= 0 ? std::max(opt_.vram_reserve_mib, 256)
+                                             : default_reserve_mib(total_b, ram_tight_);
     const size_t reserve = size_t(reserve_mib_) << 20;
     if (free_b <= reserve) return;
 
@@ -1031,10 +1060,11 @@ void Engine::resize_card_cache(int mib) {
 
 // The launches the engine records as it runs take VRAM after the cache was sized: 180 to 200 MiB of an 8 GB card,
 // most of it in the first request.  That is what the reserve is for.  From the second request on the cache keeps
-// `keep` free: the reserve the caller named, else half the one it was filled for and 128 MiB at least.  It gives
-// back what another program took, its least used experts, and takes VRAM that came free again for the most used
-// experts it lacks.  Filled again whole it went down with every program that held VRAM a moment, and never came
-// back up.
+// `keep` free: the reserve the caller named, else half the one it was filled for and 128 MiB at least, or the
+// whole of it when the PC's RAM is tight for the model (default_reserve_mib(): with the reserve named, the laptop
+// read as the release did; with half of it kept, 7% to 14% slower).  It gives back what another program took, its
+// least used experts, and takes VRAM that came free again for the most used experts it lacks.  Filled again
+// whole it went down with every program that held VRAM a moment, and never came back up.
 bool Engine::mind_vram() {
     bool changed = false;
     for (Engine* e = this; e; e = e->next_.get()) changed = e->mind_card_vram() || changed;
@@ -1053,7 +1083,7 @@ bool Engine::mind_card_vram() {
         return true;
     }
     if (minds_++ == 0) return false;   // nothing is recorded before the first request
-    const int64_t keep = opt_.vram_reserve_mib >= 0 ? reserve_mib_ : std::max(reserve_mib_ / 2, 128);
+    const int64_t keep = opt_.vram_reserve_mib >= 0 || ram_tight_ ? reserve_mib_ : std::max(reserve_mib_ / 2, 128);
     if (free < keep / 2) {
         shrink_cache(size_t(keep - free) << 20);
         held_is_budget();
@@ -1374,7 +1404,7 @@ void Engine::load(const Options& o) {
     if (split_ && !exp_) {
         size_t free_b = 0, total_b = 0;
         ck(cudaMemGetInfo(&free_b, &total_b), "cudaMemGetInfo");
-        const int need = default_reserve_mib(total_b);
+        const int need = default_reserve_mib(total_b, ram_tight_);
         if (free_b <= (size_t(need) << 20))
             throw std::runtime_error("layers " + std::to_string(lo_) + " to " + std::to_string(hi_ - 1) + " leave " +
                                      std::to_string(free_b >> 20) + " MiB of VRAM free, less than the " +

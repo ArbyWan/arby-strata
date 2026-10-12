@@ -244,7 +244,7 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
 | `--serve` | | take requests from the server (the server passes this) |
 | `--max-context N` | 8192 | tokens a conversation can hold |
 | `--threads N` | all usable | CPU threads for the experts that are not in VRAM |
-| `--vram-reserve-mib N` | a thirty-second of the card, 256 to 768, and half of that after the first request | VRAM left free beside the expert cache |
+| `--vram-reserve-mib N` | a thirty-second of the card, 256 to 768, or a sixteenth, 512 to 1024, kept whole, when the PC's free RAM is within 4 GiB of the model's files; else half of it after the first request | VRAM left free beside the expert cache |
 | `--layer-split S` | the first card alone | the model's layers across the cards the engine sees: `auto` (by each card's free VRAM) or the first layer of each later card, as `20` or `20,30` ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)) |
 | `--expert-profile FILE` | | expert use counts, read at the start and written back after an answer, every 10 seconds at most, and at the end |
 | `--no-gpu-experts` | | keep every routed expert on the CPU |
