@@ -84,6 +84,13 @@ class Reasoning(unittest.TestCase):
             pieces = [text[i:i + size] for i in range(0, len(text), size)]
             self.assertEqual(self.events(pieces), ("The user asks for a capital.", "Paris."))
 
+    def test_an_answer_right_after_a_quote_is_content(self):
+        # a thought that ends on a backtick: its answer follows <channel|> at once, as in every Gemma turn
+        text = "<|channel>thought\nOutput: `«x» 🙂`<channel|>«x» 🙂"
+        for size in (1, 3, len(text)):
+            pieces = [text[i:i + size] for i in range(0, len(text), size)]
+            self.assertEqual(self.events(pieces), ("Output: `«x» 🙂`", "«x» 🙂"))
+
     def test_a_reply_without_a_thought_is_content(self):
         self.assertEqual(self.events(["Par", "is."]), ("", "Paris."))
         self.assertEqual(self.events(["<|chan", "ged> x"]), ("", "<|changed> x"))
