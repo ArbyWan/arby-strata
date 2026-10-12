@@ -232,6 +232,11 @@ class ServiceForGemma(unittest.TestCase):
         self.assertEqual(text, "<bos><|turn>user\n1+2?<turn|>\n<|turn>model\n<|channel>thought\n<channel|>")
         self.assertEqual(self.svc.encode_prompt(*openai_to_messages({"messages": self.ASKED[:1]}))[0], 256)   # <bos>
 
+    def test_no_messages_is_refused(self):
+        # its template renders a prompt for none, where Qwen's raises: the request is a 400 either way
+        with self.assertRaisesRegex(ValueError, "No messages provided"):
+            self.prompt({"messages": []})
+
     def test_answers_go_in_the_order_of_their_calls_under_their_names(self):
         # sent sub's first: the model reads answers by position, so they are put back in the calls' order
         text, _ = self.prompt({"messages": self.ASKED, "chat_template_kwargs": {"enable_thinking": False}})
