@@ -262,6 +262,10 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
 就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
 
+[Strata](https://github.com/Niko1221/Strata) 从 0.1.44 起也能用它自己的引擎跑 Qwen3.6，UD-Q4_K_XL 及以上（`--family qwen36-strata`，要 32 GB 以上内存）。
+在 RTX 5090 上用 UD-Q4_K_XL 比，它读 4K 提示比 strata-poly 快 1.6 倍，读 31K 提示和写字两边差不多（[测法](docs/BACKENDS.md#qwen36-on-two-engines)，英文）。
+更小的尺寸、8 GB 显卡还是用 strata-poly。
+
 ### Ornith 1.5
 
 | | |

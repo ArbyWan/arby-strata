@@ -1840,6 +1840,32 @@ the laptop, with Qwen3.6 UD-Q3_K_M as setup runs it, six turns of 188 tokens beh
 with either value, two rounds of each in turn. The new prompts of 300, 500 and 800 tokens after them took 499 to
 844 ms with 1,024 and 1,276 to 1,432 with 256, where their calls copy ahead and the CPU takes no share.
 
+### Qwen3.6 on two engines
+
+Since its 0.1.44 the [Strata](https://github.com/Niko1221/Strata) project runs Qwen3.6-35B-A3B on an engine path of
+its own, strata-q36: setup installs it with `--family qwen36-strata` (UD-Q4_K_XL, UD-Q6_K_XL and Q8_0, 32 GB of RAM or more).
+That engine refuses files with Q3_K experts, which Qwen3.6's UD-Q2_K_XL and UD-Q3_K_M and every Tiel Coder size have
+(a few layers each), so those stay on strata-poly (`--family qwen36`, `--family tiel`).
+
+Both engines on the same file, UD-Q4_K_XL, on the RTX 5090 with 25 cores of a Xeon Platinum 8470Q: greedy, the two
+in turn, two rounds each. strata-q36 ran with `--mtp 2`, as its setup writes it; strata-poly with its draft
+block and repeats. "3 GiB of experts" gives both the same expert budget (strata-q36's `--expert-vram 3.0`, strata-poly's
+`--vram-reserve-mib 25000`, 1,684 experts). It is not an 8 GB card: strata-q36 keeps more beside the experts
+(its attention caches in fp32), so on a real 8 GB card it would hold fewer.
+
+| Tokens/s | strata-q36 | strata-poly |
+| --- | ---: | ---: |
+| Writing, every expert on the card | 378.9, 379.5 | 402.1, 400.3 |
+| Writing, 3 GiB of experts | 195.5, 200.9 | 179.6, 183.2 |
+| Reading 4,035 tokens, every expert on the card | 8,958, 8,957 | 5,666, 5,497 |
+| Reading 4,035 tokens, 3 GiB of experts | 5,347, 5,351 | 3,299, 3,277 |
+| Reading 31,167 tokens, every expert on the card | 6,621, 6,602 | 6,339, 6,402 |
+| Reading 31,167 tokens, 3 GiB of experts | 5,236, 5,232 | 5,650, 5,561 |
+
+Writing is a 256-token answer to a 45-token code prompt (strata-poly's answers ended at token 243); the prompts are
+that one repeated. strata-q36 reads a short prompt 1.6 times as fast; at 31K the two are close, and with the
+smaller expert budget strata-poly is ahead. The time strata-poly loses on a short prompt is the next thing to look at.
+
 ## Adding a model of an architecture that is there
 
 Setup knows the files in the table above. Another file of one of these architectures runs after these steps:

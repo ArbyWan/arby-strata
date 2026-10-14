@@ -270,6 +270,11 @@ from the latest release. On a processor without AVX2, or in a copy whose engine 
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
 yet: AMD cards on Windows, two cards on Windows, three cards or more.
 
+Since its 0.1.44 the [Strata](https://github.com/Niko1221/Strata) project's own engine runs Qwen3.6 too, from UD-Q4_K_XL up
+(`--family qwen36-strata`, 32 GB of RAM or more). On an RTX 5090 with UD-Q4_K_XL it read a 4K prompt 1.6 times as fast
+as strata-poly; a 31K prompt and writing came out about even ([measured](docs/BACKENDS.md#qwen36-on-two-engines)). The smaller sizes, for
+8 GB cards, stay on strata-poly.
+
 ### Ornith 1.5
 
 | | |

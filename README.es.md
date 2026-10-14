@@ -272,6 +272,11 @@ El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows d
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
 tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
 
+Desde la 0.1.44, el propio motor de [Strata](https://github.com/Niko1221/Strata) también ejecuta Qwen3.6, a partir de
+UD-Q4_K_XL (`--family qwen36-strata`, 32 GB de RAM o más). En una RTX 5090 con UD-Q4_K_XL leyó un prompt de 4K 1,6
+veces más rápido que strata-poly; con un prompt de 31K y al escribir quedaron casi iguales ([medido](docs/BACKENDS.md#qwen36-on-two-engines),
+en inglés). Los tamaños más pequeños, para tarjetas de 8 GB, siguen en strata-poly.
+
 ### Ornith 1.5
 
 | | |
