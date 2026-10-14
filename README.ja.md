@@ -338,6 +338,8 @@ PolyStrata のインストール、起動、停止もできます。
 - コンテキストをどのくらいにするか（モデルが覚えておけるテキストの量）
 - 画像を読ませるかどうか（GLM 5.3 Flash は画像を読めません）
 
+**Mac（Apple シリコン、M1〜M5、macOS 15 以降）：** まず一度だけ Apple の Command Line Tools をインストールします（ターミナルで `xcode-select --install`。Xcode 本体は不要です）。次に PolyStrata フォルダーでターミナルを開き、**`./setup.sh`** を実行します。Mac 用エンジンをお使いの Mac 上でビルドし（約 7 分）、同じ質問をしてからモデルをダウンロードして起動します。次回からは `./setup.sh` ですぐに起動します。どのサイズが Mac に合うかと速度：[docs/MAC.md](docs/MAC.md)。
+
 毎回 Enter を押せば、おすすめの答えになります。そのあとモデル（Qwen3.8-Flash-Next は約 70 GB、GLM 5.3 Flash は 79〜114 GB、ほかの 4 つは 11〜24 GB）をダウンロードして起動します。
 ダウンロードが止まったら、もう一度実行してください。続きから再開します。ブラウザーで PolyStrata アプリが
 `http://127.0.0.1:8080` に開きます。
@@ -376,8 +378,10 @@ PolyStrata のインストール、起動、停止もできます。
   ほぼ同じ品質のまま、答えが早く返ってきます。
 - **[Unsloth UD-IQ4_XS](docs/MODELS.md#unsloth-ud-iq4_xs)：** Unsloth の約 4-bit 版で、品質は IQ3_S と UD-Q4_K_XL の間です。
   ダウンロードは 94 GB。RAM が約 80 GB 未満だと、答えている間に PolyStrata がその一部を SSD から読むので遅くなります（NVMe SSD が有効です）。
-- **[Unsloth UD-Q4_K_XL](docs/MODELS.md#unsloth-ud-q4_k_xl-experimental)**（試験的）：フルモデルにいちばん近いものです。
-  ただし答えている間、PolyStrata はその大部分を SSD から読むので、64 GB の PC では毎秒 7-8.5 トークンしか書き出せません。
+- **[Unsloth UD-Q4_K_XL / UD-Q5_K_XL / UD-Q6_K_XL / Q8_0](docs/MODELS.md#unsloths-files-ud-iq4_xs-to-q8_0)：** 4〜8 ビットで、フルモデルにより近いモデルです
+  （次のトークンが Q8_0 と一致する割合は 93〜95%）。すべてのエキスパートが RAM に収まる場合（UD-Q4_K_XL で約 88 GB、
+  Q8_0 で約 136 GB）は高速です。RAM が足りない場合は回答の生成中に一部を SSD から読み込むため、大幅に遅くなります
+  （RAM が 64 GB の PC で UD-Q4_K_XL は毎秒 7-8.5 トークン程度）。
 - **[OrcaRouter's Uncensored IQ3_XXS](docs/MODELS.md#orcarouter-uncensored-iq3_xxs)：** 手動でセットアップします。
   インストーラーのメニューにはありません。
 
@@ -490,6 +494,20 @@ GLM 5.3 Flash のほかの量子化にはまだ対応していません：[足�
 | **長いプロンプト** | PolyStrata はチャットの最初のメッセージをすべて読みます。30,000 トークンあたり約 1 分かかります。2 通目以降のメッセージは数秒で始まります。 | 最初のメッセージはすべて読みます。30,000 トークンあたり約 40 秒かかります。 | 最初のメッセージは全部読みます。30,000 トークンで、ワークステーションは 4〜5 秒、8 GB のノート PC は 14〜20 秒です。 |
 
 詳しくは：[チャットの保存場所](docs/INSTALL.md#where-things-are-stored)、[API](docs/DETAILS.md#using-it)。
+
+### オプション：モデル全体が RAM に収まる場合、GPU 1 枚でさらに高速化
+
+2 つのオプトイン設定です（RubenTorney 氏による #1904 と #1905）。GPU を 1 枚使い、RAM にすべてのエキスパートが収まる場合（PolyStrata の arena モード。例：64 GB の PC で Q2_0 や IQ3_XXS）に効果があります。PolyStrata のデータフォルダーにある設定ファイル `strata-<model>.json`（[場所](docs/INSTALL.md#where-things-are-stored)）を開き、次を追加します：
+
+- **生成の高速化：** `"args"` リストに `"--adapt-async", "1"`。エキスパートキャッシュの更新が回答を止めずに補助スレッドで行われます。RTX 5070（Windows、Q2_0）での実測：生成 +4〜5%、コードや長文では +7〜10%。回答はデフォルトとわずかに異なる場合があります（実行ごとには同じです）。
+- **Windows でのプロンプト読み込みの高速化：** `"env"` ブロックに `"STRATA_PIN_BY_NEED": "1"`。Windows はGPU 用に RAM の約半分しか固定できないため、この設定で GPU が本当に必要とするエキスパートから先に固定します。RTX 5070 での実測：プロンプト読み込み +4.4%。
+
+```json
+"args": [ ..., "--adapt-async", "1" ],
+"env": { "STRATA_PIN_BY_NEED": "1" }
+```
+
+変更後は PolyStrata を再起動してください（`START-HERE.bat` または `./setup.sh`）。元に戻すには、2 つの項目を削除します。
 
 ## うまくいかないとき
 

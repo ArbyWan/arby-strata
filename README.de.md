@@ -337,6 +337,8 @@ startet er es und sagt dir, wie du deine Apps verbindest. KI-Tools können PolyS
 [Lade PolyStrata herunter](https://github.com/VecSzn/PolyStrata/archive/refs/heads/main.zip) und entpacke es (oder nutze
 `git clone`). **Windows:** Doppelklick auf **`START-HERE.bat`**. **Linux:** Führe im PolyStrata-Ordner **`./setup.sh`** aus.
 
+**Mac (Apple Silicon, M1 bis M5, macOS 15 oder neuer):** Installiere einmal Apples Command Line Tools (`xcode-select --install` im Terminal; Xcode selbst brauchst du nicht). Öffne dann das Terminal im PolyStrata-Ordner und führe **`./setup.sh`** aus. Es baut die Mac-Engine auf deinem Mac (etwa 7 Minuten), stellt dieselben Fragen, lädt das Modell und startet es. Beim nächsten Mal startet `./setup.sh` sofort. Welche Größe zu deinem Mac passt und wie schnell es ist: [docs/MAC.md](docs/MAC.md).
+
 Die Schritte sind für NVIDIA und AMD gleich. Der Installer erkennt deine Karte und richtet die passende Engine
 dafür ein. Er stellt dir ein paar Fragen:
 
@@ -386,9 +388,10 @@ stark komprimiert. Kleinere Größen sind schneller. Größere sind etwas klüge
 - **[Unsloth UD-IQ4_XS](docs/MODELS.md#unsloth-ud-iq4_xs):** die ~4-Bit-Version von Unsloth, in der Qualität
   zwischen IQ3_S und UD-Q4_K_XL. 94 GB Download. Mit weniger als ~80 GB RAM liest PolyStrata einen Teil davon während
   der Antwort von der SSD, dort ist es also langsamer (eine NVMe-SSD hilft).
-- **[Unsloth UD-Q4_K_XL](docs/MODELS.md#unsloth-ud-q4_k_xl-experimental)** (experimentell): am nächsten am vollen
-  Modell. Aber PolyStrata liest das meiste davon während der Antwort von der SSD, deshalb schreibt es auf einem PC mit
-  64 GB nur 7-8.5 Tokens/s.
+- **[Unsloth UD-Q4_K_XL, UD-Q5_K_XL, UD-Q6_K_XL und Q8_0](docs/MODELS.md#unsloths-files-ud-iq4_xs-to-q8_0):** 4 bis 8 Bit, näher am vollen Modell
+  (93-95 % das gleiche nächste Token wie Q8_0). Schnell, wenn alle Experten in den RAM passen (~88 GB für UD-Q4_K_XL
+  bis ~136 GB für Q8_0); mit weniger RAM liest PolyStrata einen Teil davon während der Antwort von der SSD, was viel
+  langsamer ist (7-8.5 Tokens/s für UD-Q4_K_XL auf einem PC mit 64 GB).
 - **[OrcaRouter's Uncensored IQ3_XXS](docs/MODELS.md#orcarouter-uncensored-iq3_xxs):** Das richtest du von Hand
   ein. Es steht nicht im Menü des Installers.
 
@@ -503,6 +506,20 @@ Wo sie sich unterscheiden:
 | **Lange Prompts** | PolyStrata liest die erste Nachricht eines Chats komplett, etwa 1 Minute pro 30,000 Tokens. Folgenachrichten starten in Sekunden. | Die erste Nachricht wird komplett gelesen, etwa 40 Sekunden pro 30,000 Tokens. | Die erste Nachricht wird ganz gelesen: 30,000 Tokens dauern auf der Workstation 4 bis 5 Sekunden und auf dem 8-GB-Laptop 14 bis 20 Sekunden. |
 
 Mehr: [wo deine Chats gespeichert werden](docs/INSTALL.md#where-things-are-stored), [die API](docs/DETAILS.md#using-it).
+
+### Optional: mehr Tempo mit einer Grafikkarte, wenn das ganze Modell in den RAM passt
+
+Zwei Opt-in-Einstellungen (von RubenTorney, #1904 und #1905). Sie helfen, wenn du eine Grafikkarte nutzt und dein RAM alle Experten hält (Stratas Arena-Modus, zum Beispiel Q2_0 oder IQ3_XXS auf einem PC mit 64 GB). Öffne deine Konfiguration `strata-<model>.json` im PolyStrata-Datenordner ([wo](docs/INSTALL.md#where-things-are-stored)) und füge hinzu:
+
+- **Schnellere Ausgabe:** `"--adapt-async", "1"` in die Liste `"args"`. Der Experten-Cache wird dann in einem Hilfs-Thread aktualisiert, statt die Antwort anzuhalten. Gemessen auf einer RTX 5070 (Windows, Q2_0): +4-5 % Ausgabe, +7-10 % bei Code und langen Dokumenten. Antworten können leicht vom Standard abweichen (sie bleiben von Lauf zu Lauf gleich).
+- **Schnelleres Prompt-Lesen unter Windows:** `"STRATA_PIN_BY_NEED": "1"` im Block `"env"`. Windows kann nur etwa den halben RAM für die Grafikkarte sperren; damit werden zuerst die Experten gesperrt, die die Karte wirklich braucht. Gemessen auf der RTX 5070: +4,4 % Prompt-Lesen.
+
+```json
+"args": [ ..., "--adapt-async", "1" ],
+"env": { "STRATA_PIN_BY_NEED": "1" }
+```
+
+Starte PolyStrata danach neu (`START-HERE.bat` oder `./setup.sh`). Zum Rückgängigmachen entferne die beiden Einträge.
 
 ## Etwas ist schiefgelaufen?
 

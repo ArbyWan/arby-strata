@@ -34,6 +34,7 @@ KEEP = "|".join((
     r"Desktop[\\/]Strata",                              # a path on a developer's own PC
     r"\\\(Strata SYCL engine",                          # a label the Intel page strips; another program writes it
     r'replace\("Strata ",',                             # the engine's own build_info, which the benchmark strips
+    r"NVFP4(?:-GPTQ)?-Strata",                          # the NVFP4 packs' Hugging Face repositories
 ))
 WORD = re.compile(f"{KEEP}|(?<![A-Za-z0-9_])(Strata)(?![A-Za-z0-9_])")
 
