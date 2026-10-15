@@ -1863,6 +1863,11 @@ if(STRATA_NATIVE_EXPERTS AND (STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP) AND NOT S
   target_include_directories(poly_workers_test PRIVATE ${_strata_gg}/include)
   target_link_libraries(poly_workers_test PRIVATE ggml-cpu ggml-base Threads::Threads)
   add_test(NAME poly_workers_test COMMAND poly_workers_test)
+  # MXFP4 experts converted to Q5_0 at load, against ggml-cpu's arithmetic on random blocks, without a model
+  add_executable(poly_mxfp4_test src/poly/mxfp4_test.cpp src/poly/cpu_experts.cpp)
+  target_include_directories(poly_mxfp4_test PRIVATE ${_strata_gg}/include)
+  target_link_libraries(poly_mxfp4_test PRIVATE ggml-cpu ggml-base Threads::Threads)
+  add_test(NAME poly_mxfp4_test COMMAND poly_mxfp4_test)
 endif()
 
 if(STRATA_BUILD_TESTS)
