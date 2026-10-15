@@ -1550,6 +1550,30 @@ __device__ __forceinline__ uint32_t half2_bits(float lo, float hi) {
     const __half2 h = __floats2half2_rn(lo, hi);
     return *reinterpret_cast<const uint32_t*>(&h);
 }
+
+// 16 bytes from global to shared memory, or zeros where `whole` is false; asynchronous from Ampere on (cp.async: a
+// thread's copies are a group from flash_commit() on, waited for by flash_wait()), a plain load and store on Turing.
+__device__ __forceinline__ void flash_copy(half* dst, const half* src, bool whole) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+    asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;\n"
+                 :: "r"((unsigned) __cvta_generic_to_shared(dst)), "l"(src), "r"(whole ? 16 : 0));
+#else
+    *reinterpret_cast<uint4*>(dst) = whole ? *reinterpret_cast<const uint4*>(src) : make_uint4(0, 0, 0, 0);
+#endif
+}
+
+__device__ __forceinline__ void flash_commit() {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+    asm volatile("cp.async.commit_group;\n" ::);
+#endif
+}
+
+// Wait until at most `ahead` of the thread's groups are still on their way.
+template <int ahead> __device__ __forceinline__ void flash_wait() {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+    asm volatile("cp.async.wait_group %0;\n" :: "n"(ahead));
+#endif
+}
 #endif
 
 // attend_batch() for heads of 64 values in groups of 4 (LFM2's), the way FlashAttention-2 goes: a launch block takes
@@ -1557,7 +1581,8 @@ __device__ __forceinline__ uint32_t half2_bits(float lo, float hi) {
 // the keys FLASH_KEYS at a time on the tensor cores, keeping each row's softmax as it goes, so no score leaves the
 // registers.  The queries and the weights are rounded to halves and the products sum floats, as with the cuBLAS
 // products.  Fragment layouts are PTX's for mma.m16n8k16: a thread holds rows gid and gid + 8, columns 2 tig and
-// 2 tig + 1 of each block of 8.
+// 2 tig + 1 of each block of 8.  The next block of keys and values is copied in while one is worked on, two buffers
+// in turn.
 // FLASH_ROW: a cache row in shared memory, in halves; 16-byte aligned, and ldmatrix's eight rows on different banks.
 constexpr int FLASH_TOKENS = 16, FLASH_KEYS = 64, FLASH_ROW = 64 + 8;
 __global__ void __launch_bounds__(4 * WARP)
@@ -1565,7 +1590,7 @@ attn_flash64_kernel(const float* __restrict__ q, const half* __restrict__ kcache
                     float* __restrict__ out, int rows, int n_head, int kv_heads, long long pos, float scale_log2) {
 #if STRATA_POLY_MMA
     constexpr int DIM = 64, G = 4;
-    __shared__ __align__(16) half ks[FLASH_KEYS][FLASH_ROW], vs[FLASH_KEYS][FLASH_ROW];
+    __shared__ __align__(16) half ks[2][FLASH_KEYS][FLASH_ROW], vs[2][FLASH_KEYS][FLASH_ROW];
     const int g = blockIdx.y, t0 = blockIdx.x * FLASH_TOKENS, lane = threadIdx.x % WARP, w = threadIdx.x / WARP;
     const int gid = lane / 4, tig = lane % 4;
     int tok[2], head[2];   // the thread's rows gid and gid + 8 of the warp's
@@ -1587,18 +1612,24 @@ attn_flash64_kernel(const float* __restrict__ q, const half* __restrict__ kcache
     float o[8][4], m[2] = {-INFINITY, -INFINITY}, l[2] = {0.0f, 0.0f};
     for (int n = 0; n < 8; ++n) o[n][0] = o[n][1] = o[n][2] = o[n][3] = 0.0f;
     const int n_keys = int(pos) + min(t0 + FLASH_TOKENS, rows);   // the block's last token attends rows [0, n_keys)
-    for (int k0 = 0; k0 < n_keys; k0 += FLASH_KEYS) {
-        __syncthreads();
+    const auto fetch = [&](int buf, int k0) {
         for (int i = threadIdx.x; i < FLASH_KEYS * DIM / 8; i += 4 * WARP) {
             const int r = i / (DIM / 8), c = 8 * (i % (DIM / 8));
-            uint4 kx = make_uint4(0, 0, 0, 0), vx = kx;
-            if (k0 + r < n_keys) {
-                const size_t at = (size_t(k0 + r) * kv_heads + g) * DIM + c;
-                kx = *reinterpret_cast<const uint4*>(kcache + at);
-                vx = *reinterpret_cast<const uint4*>(vcache + at);
-            }
-            *reinterpret_cast<uint4*>(&ks[r][c]) = kx;
-            *reinterpret_cast<uint4*>(&vs[r][c]) = vx;
+            const bool whole = k0 + r < n_keys;
+            const size_t at = whole ? (size_t(k0 + r) * kv_heads + g) * DIM + c : 0;
+            flash_copy(&ks[buf][r][c], kcache + at, whole);
+            flash_copy(&vs[buf][r][c], vcache + at, whole);
+        }
+        flash_commit();
+    };
+    fetch(0, 0);
+    for (int k0 = 0, buf = 0; k0 < n_keys; k0 += FLASH_KEYS, buf ^= 1) {
+        __syncthreads();   // the buffer the last block was worked on in is free
+        if (k0 + FLASH_KEYS < n_keys) {
+            fetch(buf ^ 1, k0 + FLASH_KEYS);
+            flash_wait<1>();
+        } else {
+            flash_wait<0>();
         }
         __syncthreads();
         float s[8][4];
@@ -1606,7 +1637,7 @@ attn_flash64_kernel(const float* __restrict__ q, const half* __restrict__ kcache
             s[n][0] = s[n][1] = s[n][2] = s[n][3] = 0.0f;
             for (int k = 0; k < 4; k += 2) {
                 uint32_t b[4];   // keys 8 n.., values 16 k.. and 16 (k + 1)..
-                ldmatrix_x4(b, &ks[8 * n + lane % 8][16 * k + 8 * (lane / 8)], false);
+                ldmatrix_x4(b, &ks[buf][8 * n + lane % 8][16 * k + 8 * (lane / 8)], false);
                 mma16816(s[n], qa[k], b);
                 mma16816(s[n], qa[k + 1], b + 2);
             }
@@ -1640,7 +1671,7 @@ attn_flash64_kernel(const float* __restrict__ q, const half* __restrict__ kcache
                                     half2_bits(s[2 * k + 1][2], s[2 * k + 1][3])};
             for (int n = 0; n < 8; n += 2) {
                 uint32_t b[4];   // keys 16 k.., values 8 n.. and 8 (n + 1)..
-                ldmatrix_x4(b, &vs[16 * k + lane % 8 + 8 * (lane / 8 % 2)][8 * n + 8 * (lane / 16)], true);
+                ldmatrix_x4(b, &vs[buf][16 * k + lane % 8 + 8 * (lane / 8 % 2)][8 * n + 8 * (lane / 16)], true);
                 mma16816(o[n], pa, b);
                 mma16816(o[n + 1], pa, b + 2);
             }
