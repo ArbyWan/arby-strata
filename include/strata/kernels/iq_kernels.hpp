@@ -26,9 +26,12 @@ void quantize_q8_1_rows(const float* x, int64_t n_rows, int64_t n_cols, void* y,
 void iq_mmvq(int ggml_type, const void* w, const void* x_q8_1, float* y, int n_in, int n_out, int ncols, void* stream);
 
 struct MmvqSlots;   // native_mmvq.hpp
+struct MmvqIds;
 /// iq_mmvq for `count` matrices of one type and shape in one launch, each with one column of its own: what
-/// iq_mmvq(..., ncols = 1) gives for each.  native_mmvq_slots() is the entry point.
+/// iq_mmvq(..., ncols = 1) gives for each; iq_mmvq_ids the same for MmvqIds.  native_mmvq_slots() and
+/// native_mmvq_ids() are the entry points.
 void iq_mmvq_slots(int ggml_type, const MmvqSlots& slots, int count, int n_in, int n_out, void* stream);
+void iq_mmvq_ids(int ggml_type, const MmvqIds& ids, int count, int n_in, int n_out, void* stream);
 
 /// Dequantize `n` contiguous values (n a multiple of 256) to fp16 / fp32; fp16 times `*scale` when given (device:
 /// an NVFP4 expert's s_down, read by the kernel itself so the source may be released right after it).

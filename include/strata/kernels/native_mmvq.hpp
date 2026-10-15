@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace strata::kernels {
 
@@ -140,6 +141,22 @@ struct MmvqSlots {
     float* y[8];
 };
 bool native_mmvq_slots(int ggml_type, const MmvqSlots& slots, int count, int n_in, int n_out, void* stream);
+// native_mmvq_slots with the matrices the card picked, so that the launch needs nothing of the host (a decode
+// step's routed experts when every one of them is in VRAM): matrix j is table[ids[j]] + offset bytes, times the
+// Q8_1 column x + (j / x_every) * x_stride bytes, into y + j * y_stride floats.  count may pass 8.  False, with
+// nothing launched: there is no kernel for the format (native_mmvq_ids_supported() says so beforehand).
+struct MmvqIds {
+    const void* const* table;
+    const int32_t* ids;
+    std::size_t offset;
+    const void* x;
+    std::size_t x_stride;
+    int x_every;
+    float* y;
+    std::size_t y_stride;
+};
+bool native_mmvq_ids_supported(int ggml_type);
+bool native_mmvq_ids(int ggml_type, const MmvqIds& ids, int count, int n_in, int n_out, void* stream);
 
 // Storage/dispatch helpers take stable GGML type IDs, avoiding a ggml runtime
 // dependency in the engine: Q4_0=2, Q5_0=6, Q8_0=8, Q2_K=10, Q3_K=11, Q4_K=12, Q5_K=13,
