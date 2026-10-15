@@ -264,6 +264,25 @@ __global__ void hc_post_kernel(const float* __restrict__ x, const float* __restr
     for (int s = 0; s < HC; ++s) r[size_t(s) * n_embd + i] = out[s];
 }
 
+// DeepSeek V4's output read: hc weights from mix (hc_mix_kernel's, n_mix = HC), then their sum of the streams.
+__global__ void hc_head_kernel(const float* __restrict__ r, const float* __restrict__ mix,
+                               const float* __restrict__ scale, const float* __restrict__ base, float* __restrict__ y,
+                               int n_embd, float norm_eps, float hc_eps) {
+    __shared__ float pre[HC];
+    r += size_t(blockIdx.y) * HC * n_embd;
+    mix += size_t(blockIdx.y) * (HC + 1);
+    if (threadIdx.x == 0) {
+        const float rs = 1.0f / sqrtf(mix[HC] / float(HC * n_embd) + norm_eps);
+        for (int h = 0; h < HC; ++h) pre[h] = sigmoid(mix[h] * rs * scale[0] + base[h]) + hc_eps;
+    }
+    __syncthreads();
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n_embd) return;
+    float s = 0.0f;
+    for (int h = 0; h < HC; ++h) s += r[size_t(h) * n_embd + i] * pre[h];
+    y[size_t(blockIdx.y) * n_embd + i] = s;
+}
+
 __global__ void hc_mean_kernel(const float* __restrict__ r, float* __restrict__ y, int n_embd) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n_embd) return;
@@ -1695,6 +1714,13 @@ void hc_post(const float* x, const float* hcw, float* r, int n_embd, int rows, v
 
 void hc_mean(const float* r, float* y, int n_embd, int rows, void* stream) {
     hc_mean_kernel<<<dim3(grid(n_embd, 256), rows), 256, 0, cs(stream)>>>(r, y, n_embd);
+}
+
+void hc_head(const float* r, const float* fn, const float* scale, const float* base, float* mix, float* y,
+             int n_embd, int rows, float norm_eps, float hc_eps, void* stream) {
+    hc_mix_kernel<<<dim3(HC + 1, rows), sum_threads(HC * n_embd), 0, cs(stream)>>>(r, fn, mix, HC * n_embd, HC);
+    hc_head_kernel<<<dim3(grid(n_embd, 256), rows), 256, 0, cs(stream)>>>(r, mix, scale, base, y, n_embd, norm_eps,
+                                                                         hc_eps);
 }
 
 void kda_conv(const float* proj, float* state, const float* wq, const float* wk, const float* wv, float* out,

@@ -2,6 +2,7 @@
 // routed experts (the cache, the CPU, a prompt batch), the sequence's state, and the calls that feed tokens.
 #include "engine.hpp"
 
+#include "deepseek4.hpp"
 #include "gemma4.hpp"
 #include "glm5next.hpp"
 #include "mmq.hpp"
@@ -774,6 +775,7 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
         if (name == "glm5-next" || name == "glm5next") return std::make_unique<Glm5Next>();   // Unsloth: no hyphen
         if (name == "qwen35moe") return std::make_unique<Qwen35>();
         if (name == "gemma4") return std::make_unique<Gemma4>();
+        if (name == "deepseek4") return std::make_unique<DeepSeek4>();
         throw std::runtime_error(o.model + " is a '" + name + "' model, which this engine does not run");
     };
     int cards = 1;

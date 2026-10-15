@@ -41,6 +41,10 @@ void hc_pre(const float* r, const float* fn, const float* scale, const float* ba
 void hc_post(const float* x, const float* hcw, float* r, int n_embd, int rows, void* stream);
 /// y = mean over the hc streams, token by token.
 void hc_mean(const float* r, float* y, int n_embd, int rows, void* stream);
+/// DeepSeek V4's output read of the streams: y = sum_h r[h] * (sigmoid(fn[h] . r * rs * scale + base[h]) + hc_eps),
+/// rs the flat RMS norm's scale.  fn: hc rows of hc * n_embd.  mix: hc + 1 floats a token of scratch.
+void hc_head(const float* r, const float* fn, const float* scale, const float* base, float* mix, float* y,
+             int n_embd, int rows, float norm_eps, float hc_eps, void* stream);
 
 /// The three causal convolutions of a KDA layer and their SiLU.  proj: the q projections of every row, then the k,
 /// then the v (3 * rows * d_inner); out has the same layout.  state: 3 * d_inner * (d_conv - 1) past inputs, oldest
@@ -208,5 +212,59 @@ void conv4_silu(const float* x, float* state, const float* w, float* out, int ch
 void gdn_step(float* qkv, float* alpha, float* beta, const float* dt, const float* a, float* s,
               const float* z, const float* o_norm, float* out, int dim, int n_head, int k_heads, int rows,
               float norm_eps, void* stream, float* snap = nullptr, size_t stride = 0, unsigned snaps = 0);
+
+// ---- DeepSeek V4 (deepseek4): one key head that is its value too, a window of raw rows, rows compressed 4 or 128
+// to one, and an indexer that picks among the 4-to-1 rows
+
+/// ggml_rope_ext's turn in the normal pairing (value i with i + 1), with YaRN.  corr0 and corr1 are what
+/// ggml_rope_yarn_corr_dims() gives; attn_factor is the magnitude the turn starts from.
+struct Rope {
+    float theta_scale = 1.f;   ///< freq_base^(-2 / n_rot)
+    float freq_scale = 1.f, ext_factor = 0.f, attn_factor = 1.f;
+    float corr0 = 0.f, corr1 = 0.f;
+};
+/// For `rows` tokens of `heads` heads of dim values: with norm, each head RMS-normed without weights; then the
+/// n_rot values from `off` turned by the position and the others kept.  Token t's position is pos + t * step.
+/// back: the turn the other way (ggml_rope_ext_back).  y may be x.  With `at` (step 1), token t's position is what
+/// the card holds at at[2 * t] when the launch runs: a launch recorded once is replayed for every position.  The
+/// kernels below take `at` the same way.
+void dsv4_rope(const float* x, float* y, int dim, int heads, int off, int n_rot, const Rope& r, int64_t pos,
+               int step, int rows, bool norm, float eps, bool back, void* stream, const long long* at = nullptr);
+/// A compressor's rows into its rings, position p at ring row p % ring: kv as it is, and score plus
+/// ape[p % ratio].  width values a row.
+void dsv4_state(const float* kv, const float* score, const float* ape, float* ring_kv, float* ring_score, int ring,
+                int width, int ratio, int64_t pos, int rows, void* stream, const long long* at = nullptr);
+/// For each of the `rows` tokens from position pos that ends a block of ratio positions, the block's compressed row
+/// into `cache` (fp16, dim values a block, at the block's index): value d is the sum over the block's rows of
+/// softmax(score) * kv, RMS-normed with `norm` (dim weights), its last n_rot values turned by the block's first
+/// position.  Block b's rows are the ratio from position b * ratio, with their first dim values.  With overlap a
+/// row is 2 * dim values: the block's rows give their second dim, and the ratio rows before the block their first
+/// dim (a row before the sequence is left out).  dim is a multiple of 32 up to 1024.
+void dsv4_squeeze(const float* ring_kv, const float* ring_score, int ring, int dim, int ratio, bool overlap,
+                  const float* norm, float eps, const Rope& r, int n_rot, int64_t pos, int rows, uint16_t* cache,
+                  void* stream, const long long* at = nullptr);
+/// The indexer's scores of the tokens from position pos: score[b] = scale * sum_h w[h] * relu(q[h] . key[b]) for
+/// the compressed rows b < (pos + t + 1) / ratio.  q: n_head * dim a token; w: n_head; keys: fp16, dim a row.  A
+/// token's scores start score_stride apart.  dim must be 128.  Throws std::invalid_argument, and
+/// std::runtime_error when the card's shared memory has no room for a token's queries.
+/// With `at`, the launch is sized for the tokens of positions below `room`.
+void dsv4_idx_score(const float* q, const float* w, const uint16_t* keys, float* score, int score_stride, int dim,
+                    int n_head, int ratio, int64_t pos, int rows, float scale, void* stream,
+                    const long long* at = nullptr, int room = 0);
+/// For each token from position pos, its compressed rows to attend, in their order: the n_top with the highest
+/// scores, the lower row first among equals, or all of them when it sees n_top or fewer.  sel_stride apart.
+void dsv4_select(const float* score, int score_stride, int32_t* sel, int sel_stride, int n_top, int ratio,
+                 int64_t pos, int rows, void* stream, const long long* at = nullptr);
+/// The attention of the tokens from position pos.  Token t (position p) attends the raw rows of the `window`
+/// positions up to p (row p at p % ring of `raw`), then compressed rows of `comp`: with sel, the
+/// min((p + 1) / ratio, top) of its list; without, every one below (p + 1) / ratio; with comp null, none.  The
+/// keys are fp16, dim values a row, and each key is its value too.  q: n_head * dim a token; sinks: a logit a
+/// head that takes part in the softmax with no value.  out: n_head * dim a token.  Throws std::runtime_error when
+/// a token's keys do not fit the card's shared memory.  With `at`, the launch is sized for positions below `room`.
+void dsv4_attend(const float* q, const uint16_t* raw, int ring, int window, const uint16_t* comp, int ratio,
+                 const int32_t* sel, int sel_stride, int top, const float* sinks, float* out, int dim, int n_head,
+                 float scale, int64_t pos, int rows, void* stream, const long long* at = nullptr, int room = 0);
+/// y[g][t] = x[t][g] for `rows` tokens of `groups` groups of n values; with back, y[t][g] = x[g][t].
+void permute_groups(const float* x, float* y, int n, int groups, int rows, bool back, void* stream);
 
 }  // namespace strata::poly
