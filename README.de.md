@@ -290,9 +290,9 @@ anderen.
 
 | Größe | Schreibt Antworten | Liest deinen Prompt |
 | --- | ---: | ---: |
-| **Q4_K_M** | 35-36 Tokens/s | 1,260-1,270 Tokens/s |
-| **mix_q3gud_im** | 43-44 Tokens/s | 1,280 Tokens/s |
-| **Q6_K** | 15-23 Tokens/s | 770-800 Tokens/s |
+| **Q4_K_M** | 64 Tokens/s | 1,150 Tokens/s |
+| **mix_q3gud_im** | 59 Tokens/s | 1,130-1,150 Tokens/s |
+| **Q6_K** | 40 Tokens/s | 960-980 Tokens/s |
 
 </td><td>
 
@@ -305,7 +305,7 @@ anderen.
 </td></tr>
 </table>
 
-Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,370 Tokens/s gelesen und auf der Workstation mit 8,790. Auf dem
+Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,260 Tokens/s gelesen und auf der Workstation mit 8,790. Auf dem
 Laptop füllt Q6_K die 32 GB RAM, deshalb ist es dort langsam.
 
 Die acht Modelle der eigenen Engine von PolyStrata wurden mit ihrem Benchmark gemessen, den du auch auf deinem PC
@@ -682,7 +682,7 @@ Wo sie sich unterscheiden:
 | **Bilder** | Antworte im Setup mit Ja auf „Images?“. Klick dann im Chat auf **Picture** oder hänge Bilder in deiner App an. AMD-Karten lesen Bilder unter Linux über den Prozessor; unter Windows geht das noch nicht. | Noch nicht. | Es liest nur Text. | Es liest nur Text. | Antworte im Setup mit Ja auf „Images?“, dann wie bei Qwen3.8-Flash-Next. Auf einer Karte mit weniger als 16 GB läuft der Bild-Encoder auf dem Prozessor, und ein Bild dauert ein paar Sekunden. |
 | **Eine Anfrage nach der anderen** | Standardmäßig beantwortet PolyStrata eine Anfrage, die anderen warten. Um mehrere gleichzeitig zu beantworten, setz `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). Auf einer 12-GB-Karte wird dadurch jede Antwort langsamer. | Eine nach der anderen, die anderen warten. | Eine nach der anderen, die anderen warten. | Eine nach der anderen, die anderen warten. | Eine nach der anderen, die anderen warten. |
 | **Mehrere Unterhaltungen** | Die letzte bleibt erhalten, Folgenachrichten starten also in Sekunden. Zwei Engine-Argumente halten mehrere im RAM ([Details](docs/DETAILS.md#using-it)). | Die letzte bleibt erhalten. Das Setup fragt, ob mehrere im RAM bleiben sollen, damit ein Agent und seine Subagenten sich abwechseln, ohne dass ihre Prompts neu gelesen werden ([wie](docs/GLM.md#several-conversations-at-once)). | Wie GLM 5.3 Flash. | Wie GLM 5.3 Flash. | Wie GLM 5.3 Flash. |
-| **Lange Prompts** | PolyStrata liest die erste Nachricht eines Chats komplett, etwa 1 Minute pro 30,000 Tokens. Folgenachrichten starten in Sekunden. | Die erste Nachricht wird komplett gelesen, etwa 40 Sekunden pro 30,000 Tokens. | Die erste Nachricht wird komplett gelesen, etwa 29 Sekunden pro 30,000 Tokens. | Die erste Nachricht wird komplett gelesen: 30,000 Tokens brauchen 1,3 bis 1,5 Sekunden auf der Workstation und 8 bis 10 Sekunden auf dem 8-GB-Laptop. | Die erste Nachricht wird ganz gelesen: 30,000 Tokens dauern auf der Workstation 4 bis 5 Sekunden und auf dem 8-GB-Laptop 14 bis 25 Sekunden. |
+| **Lange Prompts** | PolyStrata liest die erste Nachricht eines Chats komplett, etwa 1 Minute pro 30,000 Tokens. Folgenachrichten starten in Sekunden. | Die erste Nachricht wird komplett gelesen, etwa 40 Sekunden pro 30,000 Tokens. | Die erste Nachricht wird komplett gelesen, etwa 29 Sekunden pro 30,000 Tokens. | Die erste Nachricht wird komplett gelesen: 30,000 Tokens brauchen 1,3 bis 1,5 Sekunden auf der Workstation und 8 bis 10 Sekunden auf dem 8-GB-Laptop. | Die erste Nachricht wird ganz gelesen: 30,000 Tokens dauern auf der Workstation 4 bis 5 Sekunden und auf dem 8-GB-Laptop 14 bis 27 Sekunden. |
 
 Mehr: [wo deine Chats gespeichert werden](docs/INSTALL.md#where-things-are-stored), [die API](docs/DETAILS.md#using-it).
 

@@ -286,9 +286,9 @@ Measured the same way, on the same two PCs. Its file has no draft block, so it w
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **Q4_K_M** | 35-36 tokens/s | 1,260-1,270 tokens/s |
-| **mix_q3gud_im** | 43-44 tokens/s | 1,280 tokens/s |
-| **Q6_K** | 15-23 tokens/s | 770-800 tokens/s |
+| **Q4_K_M** | 64 tokens/s | 1,150 tokens/s |
+| **mix_q3gud_im** | 59 tokens/s | 1,130-1,150 tokens/s |
+| **Q6_K** | 40 tokens/s | 960-980 tokens/s |
 
 </td><td>
 
@@ -301,7 +301,7 @@ Measured the same way, on the same two PCs. Its file has no draft block, so it w
 </td></tr>
 </table>
 
-A prompt of 10,000 tokens is read at 1,370 tokens/s on the laptop and at 8,790 on the workstation. On the laptop Q6_K
+A prompt of 10,000 tokens is read at 1,260 tokens/s on the laptop and at 8,790 on the workstation. On the laptop Q6_K
 fills the 32 GB of RAM, which is what makes it slow there.
 
 The eight models of PolyStrata's own engine were measured with its benchmark, which you can run on your PC:
@@ -681,7 +681,7 @@ Where they differ:
 | **Pictures** | Say yes to "Images?" in setup. Then click **Picture** in the chat, or attach pictures in your app. AMD cards read pictures on Linux through the processor; on Windows they can't yet. | Not yet. | It reads text only. | It reads text only. | Say yes to "Images?" in setup, then as with Qwen3.8-Flash-Next. On a card with less than 16 GB the picture encoder runs on the processor, and a picture takes a few seconds. |
 | **Several requests** | One at a time by default, the others wait. `"parallel": 2` answers several at once ([BATCHING.md](docs/BATCHING.md)); on a 12 GB card each answer gets slower. | One at a time, the others wait. | One at a time, the others wait. | One at a time, the others wait. | One at a time, the others wait. |
 | **Several conversations** | The last one is kept, so follow-up messages start in seconds. Two engine arguments keep several in RAM ([details](docs/DETAILS.md#using-it)). | The last one is kept. Setup asks whether to keep several in RAM, so that an agent and its subagents take turns without their prompts being read again ([how](docs/GLM.md#several-conversations-at-once)). | As GLM 5.3 Flash. | As GLM 5.3 Flash. | As GLM 5.3 Flash. |
-| **Long prompts** | The first message of a chat is read in full, about 1 minute per 30,000 tokens. | The first message is read in full, about 40 seconds per 30,000 tokens. | The first message is read in full, about 29 seconds per 30,000 tokens. | The first message is read in full: 30,000 tokens take 1.3 to 1.5 seconds on the workstation and 8 to 10 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take 4 to 5 seconds on the workstation and 14 to 25 seconds on the 8 GB laptop. |
+| **Long prompts** | The first message of a chat is read in full, about 1 minute per 30,000 tokens. | The first message is read in full, about 40 seconds per 30,000 tokens. | The first message is read in full, about 29 seconds per 30,000 tokens. | The first message is read in full: 30,000 tokens take 1.3 to 1.5 seconds on the workstation and 8 to 10 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take 4 to 5 seconds on the workstation and 14 to 27 seconds on the 8 GB laptop. |
 
 More: [where your chats are stored](docs/INSTALL.md#where-things-are-stored), [the API](docs/DETAILS.md#using-it).
 

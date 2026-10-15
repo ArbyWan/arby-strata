@@ -289,9 +289,9 @@ Mesuré de la même façon, sur les deux mêmes PC. Son fichier n'a pas de bloc 
 
 | Taille | Écrit les réponses | Lit votre prompt |
 | --- | ---: | ---: |
-| **Q4_K_M** | 35-36 tokens/s | 1,260-1,270 tokens/s |
-| **mix_q3gud_im** | 43-44 tokens/s | 1,280 tokens/s |
-| **Q6_K** | 15-23 tokens/s | 770-800 tokens/s |
+| **Q4_K_M** | 64 tokens/s | 1,150 tokens/s |
+| **mix_q3gud_im** | 59 tokens/s | 1,130-1,150 tokens/s |
+| **Q6_K** | 40 tokens/s | 960-980 tokens/s |
 
 </td><td>
 
@@ -304,7 +304,7 @@ Mesuré de la même façon, sur les deux mêmes PC. Son fichier n'a pas de bloc 
 </td></tr>
 </table>
 
-Un prompt de 10,000 tokens est lu à 1,370 tokens/s sur le portable et à 8,790 sur la station de travail. Sur le
+Un prompt de 10,000 tokens est lu à 1,260 tokens/s sur le portable et à 8,790 sur la station de travail. Sur le
 portable, Q6_K remplit les 32 Go de RAM, c'est ce qui le ralentit là.
 
 Les huit modèles du moteur propre à PolyStrata ont été mesurés avec son benchmark, que vous pouvez lancer sur votre
@@ -680,7 +680,7 @@ Là où ils diffèrent :
 | **Images** | Répondez oui à « Images? » pendant l'installation. Ensuite cliquez sur **Picture** dans le chat, ou joignez des images dans votre application. Les cartes AMD lisent les images sous Linux via le processeur ; sous Windows, pas encore. | Pas encore. | Il ne lit que du texte. | Il ne lit que du texte. | Répondez oui à « Images? » pendant l'installation, puis comme avec Qwen3.8-Flash-Next. Sur une carte de moins de 16 Go, l'encodeur d'images tourne sur le processeur, et une image prend quelques secondes. |
 | **Une requête à la fois** | Par défaut, PolyStrata répond à une requête et les autres attendent. Pour répondre à plusieurs en même temps, mettez `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). Sur une carte de 12 Go, chaque réponse devient alors plus lente. | Une à la fois, les autres attendent. | Une à la fois, les autres attendent. | Une à la fois, les autres attendent. | Une à la fois, les autres attendent. |
 | **Plusieurs discussions** | La dernière est conservée, donc les messages suivants démarrent en quelques secondes. Deux arguments du moteur en gardent plusieurs en RAM ([détails](docs/DETAILS.md#using-it)). | La dernière est conservée. L'installation demande s'il faut en garder plusieurs en RAM, pour qu'un agent et ses sous-agents se relaient sans que leurs prompts soient relus ([comment](docs/GLM.md#several-conversations-at-once)). | Comme GLM 5.3 Flash. | Comme GLM 5.3 Flash. | Comme GLM 5.3 Flash. |
-| **Longs prompts** | PolyStrata lit en entier le premier message d'une discussion, environ 1 minute pour 30,000 tokens. Les messages suivants démarrent en quelques secondes. | Le premier message est lu en entier, environ 40 secondes pour 30,000 tokens. | Le premier message est lu en entier, environ 29 secondes pour 30,000 tokens. | Le premier message est lu en entier : 30,000 tokens prennent 1,3 à 1,5 seconde sur la station de travail et 8 à 10 secondes sur le portable de 8 Go. | Le premier message est lu en entier : 30,000 tokens prennent 4 à 5 secondes sur la station de travail et 14 à 25 secondes sur le portable de 8 Go. |
+| **Longs prompts** | PolyStrata lit en entier le premier message d'une discussion, environ 1 minute pour 30,000 tokens. Les messages suivants démarrent en quelques secondes. | Le premier message est lu en entier, environ 40 secondes pour 30,000 tokens. | Le premier message est lu en entier, environ 29 secondes pour 30,000 tokens. | Le premier message est lu en entier : 30,000 tokens prennent 1,3 à 1,5 seconde sur la station de travail et 8 à 10 secondes sur le portable de 8 Go. | Le premier message est lu en entier : 30,000 tokens prennent 4 à 5 secondes sur la station de travail et 14 à 27 secondes sur le portable de 8 Go. |
 
 Plus d'infos : [où sont stockées vos discussions](docs/INSTALL.md#where-things-are-stored), [l'API](docs/DETAILS.md#using-it).
 

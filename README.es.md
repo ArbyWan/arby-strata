@@ -287,9 +287,9 @@ Medido de la misma manera, en los mismos dos PC. Su archivo no tiene bloque borr
 
 | Tamaño | Escribe respuestas | Lee tu prompt |
 | --- | ---: | ---: |
-| **Q4_K_M** | 35-36 tokens/s | 1,260-1,270 tokens/s |
-| **mix_q3gud_im** | 43-44 tokens/s | 1,280 tokens/s |
-| **Q6_K** | 15-23 tokens/s | 770-800 tokens/s |
+| **Q4_K_M** | 64 tokens/s | 1,150 tokens/s |
+| **mix_q3gud_im** | 59 tokens/s | 1,130-1,150 tokens/s |
+| **Q6_K** | 40 tokens/s | 960-980 tokens/s |
 
 </td><td>
 
@@ -302,7 +302,7 @@ Medido de la misma manera, en los mismos dos PC. Su archivo no tiene bloque borr
 </td></tr>
 </table>
 
-Un prompt de 10,000 tokens se lee a 1,370 tokens/s en el portátil y a 8,790 en la estación de trabajo. En el portátil
+Un prompt de 10,000 tokens se lee a 1,260 tokens/s en el portátil y a 8,790 en la estación de trabajo. En el portátil
 Q6_K llena los 32 GB de RAM, y por eso allí es lento.
 
 Los ocho modelos del motor propio de PolyStrata se midieron con su benchmark, que puedes ejecutar en tu PC:
@@ -676,7 +676,7 @@ En qué se diferencian:
 | **Imágenes** | Responde que sí a "Images?" en la instalación. Luego haz clic en **Picture** en el chat, o adjunta imágenes en tu aplicación. Las tarjetas AMD leen imágenes en Linux a través del procesador; en Windows todavía no. | Todavía no. | Solo lee texto. | Solo lee texto. | Responde que sí a "Images?" en la instalación, y luego como con Qwen3.8-Flash-Next. En una tarjeta de menos de 16 GB el codificador de imágenes funciona en el procesador, y una imagen tarda unos segundos. |
 | **Una petición cada vez** | Por defecto PolyStrata responde una petición y las demás esperan. Para responder varias a la vez, pon `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). En una tarjeta de 12 GB, cada respuesta va más lenta. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. |
 | **Varias conversaciones** | La última se conserva, así que los mensajes siguientes empiezan en segundos. Dos argumentos del motor guardan varias en RAM ([detalles](docs/DETAILS.md#using-it)). | La última se conserva. La instalación pregunta si guardar varias en RAM, para que un agente y sus subagentes se turnen sin que se vuelvan a leer sus prompts ([cómo](docs/GLM.md#several-conversations-at-once)). | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. |
-| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan de 1,3 a 1,5 segundos en la estación de trabajo y de 8 a 10 segundos en el portátil de 8 GB. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 25 segundos en el portátil de 8 GB. |
+| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan de 1,3 a 1,5 segundos en la estación de trabajo y de 8 a 10 segundos en el portátil de 8 GB. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 27 segundos en el portátil de 8 GB. |
 
 Más: [dónde se guardan tus chats](docs/INSTALL.md#where-things-are-stored), [la API](docs/DETAILS.md#using-it).
 
