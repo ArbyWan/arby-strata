@@ -356,6 +356,26 @@ class Main(unittest.TestCase):
         self.assertNotIn("--draft-model", args)                          # the draft block is in its last file
         self.assertEqual([Path(r[1]).name for r in self.runs], ["strata_tokenizer.py"])
 
+    def test_deepseek(self):
+        """DeepSeek V4 Flash: GLM's steps for Unsloth's three files, no draft block and no shipped profile."""
+        fam = setup.FAMILIES["deepseek"]
+        d = fam["models"]["UD-IQ2_XXS"]
+        files = [f"DeepSeek-V4-Flash-0731-UD-IQ2_XXS-0000{i}-of-00003.gguf" for i in (1, 2, 3)]
+        self.assertRegex(d["hf"], r"^https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF/resolve/[0-9a-f]{40}/"
+                                  r"UD-IQ2_XXS/$")
+        self.assertAlmostEqual(sum(fam["sha256"][f][0] for f in files) / 1e9, d["download_gb"], delta=0.05)
+        self.assertAlmostEqual(setup.poly_ram_need(d, 31.84), d["ram_gb"], delta=0.5)
+        code, out, cfg = self.main(family="deepseek")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.downloads, [d["hf"] + f for f in files])
+        self.assertEqual(self.verified, [(f, *fam["sha256"][f]) for f in files])
+        self.assertEqual([Path(r[1]).name for r in self.runs], ["strata_tokenizer.py"])
+        args = cfg["args"]
+        self.assertEqual(Path(args[args.index("--model") + 1]), self.t / "models" / "dsv4-UD-IQ2_XXS" / files[0])
+        self.assertNotIn("--draft-model", args)
+        self.assertFalse((self.t / "data" / "packs" / "dsv4-ud-iq2_xxs" / "expert-profile.txt").exists())
+        self.assertEqual(cfg["model_name"], "deepseek-v4-flash-ud-iq2_xxs")
+
     def test_too_little_ram(self):
         code, out, cfg = self.main(ram=40.0)
         self.assertNotEqual(code, 0)

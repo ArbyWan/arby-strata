@@ -104,6 +104,11 @@ FALLBACK_FAMILIES = {
     "glm": {"title": "GLM 5.3 Flash", "about": "another model, with its own engine: Linux, one NVIDIA card (run on "
                                                "32 GB), 64-128 GB of RAM", "tag": "glm-", "engine": "poly",
             "vision": False, "experimental": True},
+    "deepseek": {"title": "DeepSeek V4 Flash", "about": "another model on GLM's engine: Linux, one NVIDIA card (run on "
+                                                       "32 GB), ~72 GB of RAM beside it; a 91 GB download, no images",
+                 "tag": "dsv4-", "engine": "poly", "vision": False, "experimental": True,
+                 "models": {"UD-IQ2_XXS": {"about": "2-bit i-quant experts (Unsloth Dynamic), 3-bit and MXFP4 where "
+                                                    "they write", "download_gb": 90.9, "ram_gb": 72, "arena_gb": 83.9}}},
     # a family with sizes of its own ("models"): two of these have a size of one name
     "qwen36": {"title": "Qwen3.6-35B-A3B", "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a "
                                                      "17 GB file, ~21 GB of RAM beside an 8 GB card; a smaller and a "
@@ -1026,7 +1031,7 @@ def tool_defs(models: dict, families: dict, contexts: list) -> list:
         {"name": "strata_models", "title": "PolyStrata models",
          "description": "The models and sizes PolyStrata's setup offers (families: qwen = Qwen3.8-Flash-Next, swift = "
                         "Swift 1.5, coder = the Coder, unsloth = Unsloth's ~4-bit, glm = GLM 5.3 Flash, another "
-                        "model with its own engine, qwen36 = Qwen3.6-35B-A3B, ornith = Ornith 1.5, gemma4 = "
+                        "model with its own engine, deepseek = DeepSeek V4 Flash on that engine, qwen36 = Qwen3.6-35B-A3B, ornith = Ornith 1.5, gemma4 = "
                         "Gemma 4 26B-A4B and tiel = Tiel Coder 35B-A3B, 11-24 GB models on that engine), with "
                         "download size, RAM needed, "
                         "whether each fits this PC, which are installed, the context lengths, and the recommendation. "
@@ -1049,7 +1054,9 @@ def tool_defs(models: dict, families: dict, contexts: list) -> list:
                                        "UD-Q6_K_XL, Q8_0): every expert in RAM where they fit, else part of them read "
                                        "from the SSD, glm = GLM 5.3 "
                                        "Flash (another model: Linux, one NVIDIA card, 64-128 GB of RAM, a 79 or "
-                                       "114 GB download, no images), qwen36 = Qwen3.6-35B-A3B, ornith = Ornith "
+                                       "114 GB download, no images), deepseek = DeepSeek V4 Flash (GLM's "
+                                       "engine: Linux, one NVIDIA card, ~72 GB of RAM beside a 32 GB card, a 91 "
+                                       "GB download, no images), qwen36 = Qwen3.6-35B-A3B, ornith = Ornith "
                                        "1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel Coder 35B-A3B (GLM's engine: "
                                        "one NVIDIA card, an 11-24 GB download, 15-28 GB of RAM beside an 8 GB "
                                        "card by setup's estimate; images with vision)"},

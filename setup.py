@@ -82,6 +82,7 @@ HF_REVISIONS = {
     "unsloth/gemma-4-26B-A4B-it-GGUF": "c099eb48e663fd284577b04978a94ffccb261841",                     # 2026-10-05
     "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP": "bbe9e566f39e4fc9652ac66b71968289a03c520a",        # 2026-09-10
     "unsloth/Qwen3.6-35B-A3B-MTP-GGUF": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",                  # 2026-10-12
+    "unsloth/DeepSeek-V4-Flash-0731-GGUF": "fbbb5b93fb787c21338159b0af3318bb3f4d9768",               # 2026-10-15
 }
 
 
@@ -479,6 +480,25 @@ FAMILIES = {
                        (49248507840, "89180f13784dc1128586b98adf1ca876279881a20bc4f01747703ce352563372"),
                        "GLM-5.3-Flash-UD-IQ2_XXS-00004-of-00004.gguf":
                        (2690716000, "9e0ef47daa1fdffce3cf2ac1594ce4634d176ad018be6e692729757f38d5fbf6")}},
+    # DeepSeek V4 Flash (llama.cpp's deepseek4) on strata-poly, from Unsloth's split GGUF; no draft block in it.  Like
+    # GLM's sizes, "ram_gb" is poly_ram_need() for a 32 GB card and "vram_beside_gb" was measured there at 32K: it has
+    # run on an RTX 5090 with 120 GB of RAM only.  "row_bytes": its caches keep compressed rows, 6,880 bytes a token.
+    "deepseek": {"title": "DeepSeek V4 Flash", "by": "DeepSeek; quantized by Unsloth",
+                 "about": "another model on GLM's engine: Linux, one NVIDIA card (run on 32 GB), ~72 GB of RAM beside "
+                          "it; a 91 GB download, no images",
+                 "hf": hf("unsloth/DeepSeek-V4-Flash-0731-GGUF"),
+                 "file": "DeepSeek-V4-Flash-0731-{q}-0000{i}-of-00003.gguf", "shards": 3, "tag": "dsv4-", "name": "deepseek-v4-flash", "engine": "poly", "vision": False,
+                 "experimental": True, "row_bytes": 6880,
+                 "models": {"UD-IQ2_XXS": {"about": "2-bit i-quant experts (Unsloth Dynamic), 3-bit and MXFP4 where "
+                                                    "they write", "download_gb": 90.9, "ram_gb": 72, "arena_gb": 83.9,
+                                           "vram_beside_gb": 11.5,
+                                           "hf": hf("unsloth/DeepSeek-V4-Flash-0731-GGUF") + "UD-IQ2_XXS/"}},
+                 "sha256": {"DeepSeek-V4-Flash-0731-UD-IQ2_XXS-00001-of-00003.gguf":
+                            (5257664, "c58c9d62eac7b62e9578b52613f425e48313d7212ab8d1d76caed8ea8de26595"),
+                            "DeepSeek-V4-Flash-0731-UD-IQ2_XXS-00002-of-00003.gguf":
+                            (49890588800, "65a113df6d4469f16db6882b6919e153c464c3c78c833f5e1b41a33803cdbd52"),
+                            "DeepSeek-V4-Flash-0731-UD-IQ2_XXS-00003-of-00003.gguf":
+                            (40964890464, "a69102ddfaf4a84426e11fdb66716654f4260dc3a1de3ade9fd50e006b8691d3")}},
     # The models strata-poly also runs, each from one GGUF (docs/BACKENDS.md): "engine": "poly" gives them
     # poly_setup's steps.  "models": the family's own sizes, as MODELS has them for the others: Unsloth calls a
     # quantization the same for every model, so two families' sizes share a name.  A size's "arena_gb" (its routed
@@ -6039,7 +6059,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     if hip and WIN:
         fail(f"{title} has no AMD engine for Windows: its HIP engine is compiled on Linux",
              "choose another model for this card, or run setup on Linux")
-    if hip and family in ("glm", "gemma4", "tiel"):   # the engine runs on the AMD card, these three models not yet
+    if hip and family in ("glm", "deepseek", "gemma4", "tiel"):   # the engine runs on the AMD card, these models not yet
         warn(f"{title} on the AMD card has not been tried: the engine runs there, this model was not")
     if cuda_tk == 12:
         warn(f"{title}'s engine with CUDA 12 is compiled here (the ready-made one is CUDA 13)" +
@@ -6606,8 +6626,8 @@ def main() -> int:
         return mac_setup(sys.argv[1:])
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--family", choices=list(FAMILIES) + list(PREVIEW_FAMILIES),
-                    help="qwen = Qwen3.8-Flash-Next, swift = Swift 1.5, glm = GLM 5.3 Flash (docs/GLM.md), qwen36 = "
-                         "Qwen3.6-35B-A3B on strata-poly, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel "
+                    help="qwen = Qwen3.8-Flash-Next, swift = Swift 1.5, glm = GLM 5.3 Flash (docs/GLM.md), deepseek = "
+                         "DeepSeek V4 Flash, qwen36 = Qwen3.6-35B-A3B on strata-poly, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel "
                          "Coder 35B-A3B (docs/BACKENDS.md), qwen36-strata = Qwen3.6-35B-A3B on the Strata project's "
                          "own engine (UD-Q4_K_XL and up, 32 GB of RAM or more)")
     ap.add_argument("--model", choices=list(dict.fromkeys(
