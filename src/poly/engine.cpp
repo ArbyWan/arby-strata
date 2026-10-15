@@ -1611,6 +1611,7 @@ void Engine::alloc() {
         d_ids_ = (int32_t*) dmalloc(rr * sizeof(int32_t), "scratch");
         d_wts_ = (float*) dmalloc(rr * sizeof(float), "scratch");
         h_ids_ = (int32_t*) hmalloc(rr * sizeof(int32_t), "pinned memory");
+        d_slots_ = (void**) dmalloc((size_t) n_layer_ * n_expert_ * sizeof(void*), "scratch");
         tab_ = (int32_t*) dmalloc(tab, "scratch");
         h_tab_ = (int32_t*) hmalloc(tab, "pinned memory");
         iota_ = (int32_t*) dmalloc(rr * sizeof(int32_t), "scratch");
@@ -1955,6 +1956,54 @@ bool Engine::moe(Layer& L, int il, int n, const std::function<void()>* first) {
 
 // The CPU's experts of n tokens into the routed experts' sum.
 void Engine::moe_add(int n) { axpy(h_cpu_, 1.f, fo_, n * n_embd_, true, st_); }
+
+// With every routed expert in VRAM, a few tokens' experts are routed on the card and found there by its picks
+// (moe_card()), so a layer never waits for the host.  The cache's slots go to the card again when they changed.
+bool Engine::card_moe(int n) {
+    if (!all_cached() || !d_slots_ || n * n_used_ > kSumRows || opt_.dump) return false;
+    bool same = !h_slots_.empty();
+    for (int il = lo_; il < hi_ && same; ++il) {
+        const Layer& L = layers_[(size_t) il];
+        for (int e = 0; e < n_expert_ && same && L.moe; ++e)
+            same = h_slots_[(size_t) il * n_expert_ + e] == L.slot[(size_t) e];
+    }
+    if (!same) {
+        h_slots_.assign((size_t) n_layer_ * n_expert_, nullptr);
+        for (int il = lo_; il < hi_; ++il)
+            if (layers_[(size_t) il].moe)
+                std::copy(layers_[(size_t) il].slot.begin(), layers_[(size_t) il].slot.end(),
+                          h_slots_.begin() + (ptrdiff_t) il * n_expert_);
+        ck(cudaMemcpy(d_slots_, h_slots_.data(), h_slots_.size() * sizeof(void*), cudaMemcpyHostToDevice),
+           "expert slots");
+    }
+    return true;
+}
+
+// moe()'s launches for a few tokens whose experts are all in VRAM, with the card's picks for the host's: routed on
+// the card, an expert's slot read from d_slots_ by its pick.  False, with nothing launched: this layer is routed
+// on the host, or its formats have no kernel for picks on the card.
+bool Engine::moe_card(Layer& L, int il, int n) {
+    if (L.card == 0) return false;
+    if (!kernels::native_mmvq_ids_supported((int) L.gu_type) || !kernels::native_mmvq_ids_supported((int) L.d_type) ||
+        !route_card(il, n, d_ids_, d_wts_)) {
+        L.card = 0;
+        return false;
+    }
+    L.card = 1;
+    const int rr = n * n_used_;
+    const void* const* table = d_slots_ + (size_t) il * n_expert_;
+    const kernels::MmvqIds gate_up{table, d_ids_, 0, xq_, kernels::native_q8_1_bytes(n_embd_), n_used_, g_,
+                                   2 * (size_t) n_ff_exp_};
+    kernels::native_mmvq_ids((int) L.gu_type, gate_up, rr, n_embd_, 2 * n_ff_exp_, st_);
+    if (gelu_) geglu_rows(g_, h_, n_ff_exp_, rr, st_);
+    else swiglu_clamp_rows(g_, h_, n_ff_exp_, rr, clamp_exp_[(size_t) il], st_);
+    kernels::native_quantize_q8_1(h_, q8_, n_ff_exp_ * rr, 1, st_);   // the rows back to back, as one vector
+    const kernels::MmvqIds down{table, d_ids_, 2 * L.gu_bytes, q8_, kernels::native_q8_1_bytes(n_ff_exp_), 1, d_,
+                                (size_t) n_embd_};
+    kernels::native_mmvq_ids((int) L.d_type, down, rr, n_ff_exp_, n_embd_, st_);
+    moe_sum(d_, d_wts_, fo_, n_embd_, n_used_, n, st_);
+    return true;
+}
 
 // m experts from the mapped file into the staging buffer: gate and up of each back to back from the start, the
 // downs after them.  The two pinned buffers take turns, so the workers fill one while the other uploads.  `alone`:
@@ -2457,12 +2506,49 @@ void Engine::run(const int32_t* tokens, int n) {
         back();
         return;
     }
+    // The routed experts on the card alone, when every one of them is in VRAM: recorded too, once a layer has
+    // shown it routes there (Layer::card).
+    const bool card = n < kStageRows && card_moe(n);
+    const auto on_card = [&](int il, int m, size_t rec) {
+        Layer& L = layers_[(size_t) il];
+        if (!card) return false;
+        if (replay && L.card == 1) replayed(L.card_moe, rec, [&] { moe_card(L, il, m); });
+        else if (!moe_card(L, il, m)) return false;
+        stats_.gpu_experts += m * n_used_;
+        return true;
+    };
+    // Once every layer has shown that, a call's layers are one recording: on an RTX 5090 the card waited 2 to 4
+    // microseconds from one layer's recording to the next, four of them a layer.
+    bool whole = card && replay;
+    for (int il = lo_; il < hi_ && whole; ++il) {
+        const Layer& L = layers_[(size_t) il];
+        whole = L.fixed && (!L.moe || L.card == 1);
+    }
+    if (whole) {
+        std::vector<int> key{n};
+        for (int il = lo_; il < hi_; ++il) key.push_back(head_key(il, n));
+        void*& pass = passes_[key];
+        if (!pass)
+            pass = record([&] {
+                for (int il = lo_; il < hi_; ++il) {
+                    Layer& L = layers_[(size_t) il];
+                    layer_head(L, il, n);
+                    if (!L.moe) continue;
+                    moe_shared(L, il, n);
+                    moe_card(L, il, n);
+                    layer_tail(L, il, n);
+                }
+            });
+        ck(cudaGraphLaunch((cudaGraphExec_t) pass, cs(st_)), "layer graph");
+        for (int il = lo_; il < hi_; ++il) stats_.gpu_experts += layers_[(size_t) il].moe ? n * n_used_ : 0;
+        return;
+    }
     for (int il = lo_; il < hi_; ++il) {
         Layer& L = layers_[(size_t) il];
         up(il, n, (size_t) n - 1);
         if (!L.moe) continue;
         if (batched(L, n)) moe_rows(L, il, n);
-        else if (moe(L, il, n)) moe_add(n);
+        else if (!on_card(il, n, (size_t) n - 1) && moe(L, il, n)) moe_add(n);
         tail(il, n, (size_t) n - 1);
     }
 }

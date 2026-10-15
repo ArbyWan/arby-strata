@@ -19,6 +19,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -111,11 +112,14 @@ struct Layer {
     size_t slot_bytes = 0;             ///< from a slot of the layer to the one behind it: whole blocks of both types
     std::vector<int32_t> ahead;        ///< experts a full prompt batch stages before it routes
     int trade = -1;                    ///< layers with the same number can take each other's slots: same size
+    int8_t card = -1;                  ///< a few tokens' experts routed and found on the card (moe_card()): 1 yes,
+                                       ///< 0 no (the architecture routes this layer on the host), -1 not tried
     // What a call of a few tokens hands the card, recorded (Engine::run()): by the call's tokens, and the head
     // also by Engine::head_key()
     std::vector<void*> heads;          ///< up to the router
     std::vector<void*> shared;         ///< the shared expert
     std::vector<void*> tail;           ///< after the experts
+    std::vector<void*> card_moe;       ///< the routed experts, routed on the card (moe_card())
 };
 
 /// A routed expert is run from the VRAM cache or on the CPU when tokens come a few at a time, as an answer's do
@@ -400,6 +404,8 @@ protected:
     void save_last(uint8_t* dst);
     void moe_router(const Layer& L, int n);
     bool moe(Layer& L, int il, int n, const std::function<void()>* first = nullptr);
+    bool card_moe(int n);
+    bool moe_card(Layer& L, int il, int n);
     /// Whether n tokens take layer L's routed experts as a prompt batch, through MMQ (moe_rows()), and not a few at
     /// a time (moe()).
     bool batched(const Layer& L, int n) const;
@@ -474,6 +480,8 @@ protected:
     void* ev_row_[8] = {}; ///< one for each token a window can have
     std::vector<void*> dev_allocs_, host_allocs_;
     std::vector<void*> graphs_;   ///< every recorded graph, to destroy
+    std::map<std::vector<int>, void*> passes_;   ///< a call's layers recorded as one (run()): by its tokens and
+                                                 ///< every layer's head_key()
     void* tail_ = nullptr;        ///< one token's launches from the last layer to the logits, recorded
     // A recorded launch cannot be given the position as an argument: it reads it here when it runs.  eval() writes
     // the token's place in the sequence and its rotary position before it replays the layers.
@@ -582,6 +590,8 @@ protected:
     int32_t* d_ids_ = nullptr;                    ///< a batch's experts and weights when it routes on the card
     float* d_wts_ = nullptr;
     int32_t* h_ids_ = nullptr;                    ///< pinned: the experts, back from the card
+    void** d_slots_ = nullptr;                    ///< every layer's L.slot on the card, n_expert_ a layer (moe_card())
+    std::vector<void*> h_slots_;                  ///< what d_slots_ holds
     uint8_t* stage_ = nullptr;                    ///< experts that are not cached, on their way through VRAM
     uint8_t* h_stage_[2] = {};                    ///< pinned; filled in turn
     void* ev_stage_[2] = {};                      ///< marks the upload out of each
