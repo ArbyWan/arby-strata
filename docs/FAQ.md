@@ -141,6 +141,16 @@ than that. With the setting the server gives it the room that is left. With `"wa
 keeps Claude Code's system prompt and tool list and reads them when it starts, so the first request after a restart
 reads only the rest: 3.5 s instead of 11.1 s in a test.
 
+### A long chat stops with "request exceeds the context window". Can it drop old messages instead?
+
+Yes, if you ask for it. By default the server never cuts a conversation: when it no longer fits the context, the
+request gets that error and the engine keeps running. Add `"drop_oldest": true` to `strata-<model>.json` and restart,
+and the server leaves out the oldest turns (a question with its answers and tool results) until the prompt leaves
+room for the answer, as LM Studio's rolling window does. The system prompt and the last message stay, and the server
+window says how many messages it left out. Each request is cut again from the full conversation the app sends, so
+the model has forgotten what was dropped. Claude Code, Codex and OpenCode compact the conversation themselves and do
+not need it. A larger context (`--max-context` in the same file) keeps more of the chat.
+
 ### Who maintains it?
 
 Me, and it's MIT licensed. Strata's engine inside it comes from Strata's releases, and the added engine is all in

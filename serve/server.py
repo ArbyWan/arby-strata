@@ -3063,6 +3063,7 @@ class Service:
                  fit_max_tokens: bool = False):
         self.engine, self.tok, self.template, self.model, self.vision = engine, tokenizer, template, model_name, vision
         self.fit_max_tokens = fit_max_tokens          # --fit-max-tokens: clamp the output cap instead of 400
+        self.drop_oldest = False                      # #17 (opt-in): a conversation too long loses its oldest turns
         self.aliases: list[str] = []                  # #297: other names of the model (the config's `aliases`)
         self.reasoning_close_retry = False            # #1053 (opt-in): close the thinking once when a reply ends inside it
         self.codex_compaction_cache = False           # #924 (opt-in): a Codex compaction is rendered with its conversation's tools
@@ -4088,6 +4089,30 @@ class Service:
                     content[n] = {"type": "text", "text": f"[image omitted: {why}]"}
         return fetched
 
+    def drop_oldest_turns(self, messages, tools, kwargs, ids, max_new):
+        """#17 (opt-in, "drop_oldest": true in the config): a conversation the context no longer holds loses its
+        oldest turns, a user message with the replies and tool results after it, until the prompt leaves room for
+        the answer: what max_tokens asks, at most an eighth of the context, 4,096 tokens when it asks none.  The
+        system messages and the last turn stay; a last turn that does not fit is refused as before."""
+        ctx = self.engine.max_context or getattr(self.engine, "known_ctx", 0)
+        if ctx <= 0:
+            return messages, ids
+        want = min(max_new if max_new and max_new > 0 else 4096, ctx // 8)
+        dropped = 0
+        while len(ids) + want + CTX_SLACK > ctx:
+            first = next((i for i, m in enumerate(messages) if m.get("role") not in ("system", "developer")), None)
+            nxt = None if first is None else next(
+                (i for i in range(first + 1, len(messages)) if messages[i].get("role") == "user"), None)
+            if nxt is None:
+                break
+            dropped += nxt - first
+            messages = messages[:first] + messages[nxt:]
+            ids = self.encode_prompt(messages, tools, kwargs)
+        if dropped:
+            print(f"[strata] the conversation did not fit the context ({ctx} tokens): its {dropped} oldest messages "
+                  f"were left out (drop_oldest)", flush=True)
+        return messages, ids
+
     def prepare(self, messages, tools, kwargs, max_new=None, force=None, req=None, cancel=None):
         """-> (ids, thinking, max_new). An unset or non-positive max_new (some clients send -1) means "unlimited":
         the rest of the context.  `force` (forced_call): without thinking the reply starts with it, so it ends the
@@ -4096,6 +4121,8 @@ class Service:
         # between pictures and raise ClientGone
         fetched = self._note_unreadable_tool_images(messages, cancel)
         ids = self.encode_prompt(messages, tools, kwargs)
+        if self.drop_oldest:
+            messages, ids = self.drop_oldest_turns(messages, tools, kwargs, ids, max_new)
         if force and kwargs.get("enable_thinking", True) is False:
             ids = ids + self.tok.encode(force, parse_special=True)
         self.embeddings.path = None
@@ -4163,14 +4190,15 @@ class Service:
             if ctx <= 0:
                 raise EngineStarting("the engine is starting (a minute or two); try again shortly")
         room = ctx - CTX_SLACK - len(ids)
-        if max_new is None or max_new <= 0 or (self.fit_max_tokens and room < 1):
+        fit = self.fit_max_tokens or self.drop_oldest
+        if max_new is None or max_new <= 0 or (fit and room < 1):
             if room < 1:
                 raise ValueError("request exceeds the context window: "
                                  f"prompt ({len(ids)} tokens) leaves no room to answer in the context "
                                  f"({ctx}); requests are never truncated")
             max_new = room
         elif max_new > room:
-            if not self.fit_max_tokens:
+            if not fit:
                 raise ValueError("request exceeds the context window: "
                                  f"prompt ({len(ids)} tokens) + max tokens ({max_new}) exceeds the context "
                                  f"({ctx}); requests are never truncated. Send a smaller "
@@ -7093,6 +7121,7 @@ def main() -> int:
                   sampling_defaults=sampling_defaults,
                   fit_max_tokens=a.fit_max_tokens or cfg.get("fit_max_tokens") is True)
     svc.reasoning_close_retry = cfg.get("reasoning_close_retry") is True    # #1053: opt-in, off by default
+    svc.drop_oldest = cfg.get("drop_oldest") is True                        # #17: opt-in, off by default
     if cfg.get("images"):                               # image generation (serve/images.py), set up by setup --images
         icfg = {k: (os.path.abspath(os.path.join(cfg.get("cwd") or ".", v))
                     if k in ("exe", "diffusion_model", "vae", "llm", "out_dir") and isinstance(v, str)
