@@ -5,7 +5,7 @@
 <p align="center"><b>在你自己的电脑上运行大型 AI 模型</b><br>
 Qwen3.8-Flash-Next、GLM 5.3 Flash、DeepSeek V4 Flash、LFM2.5、Qwen3.6、Ornith 1.5、Gemma 4、Tiel Coder 和 MiniCPM-V · 免费开源</p>
 
-<p align="center"><img src="docs/media/speed.svg" width="820" alt="写回答时每秒的 token 数：8 GB 显存的笔记本上 Qwen3.6-35B-A3B 为 94 到 100，RTX 5090 上为 385 到 393"></p>
+<p align="center"><img src="docs/media/speed.svg" width="820" alt="写回答时每秒的 token 数：8 GB 显存的笔记本上 Qwen3.6-35B-A3B 为 94 到 100，RTX 5090 上为 394 到 395"></p>
 
 <p align="center"><img src="docs/media/claude-code-demo.gif" width="820" alt="终端里的 Claude Code，旁边是 PolyStrata 的 API Monitor"><br>
 <sub>Claude Code 接 Qwen3.6-35B-A3B UD-Q3_K_M，在 8 GB 显卡的笔记本上，原速：给一个小程序加 <code>--json</code> 选项，写测试，跑测试。服务器启动时已经读过 Claude Code 的系统提示词（<code>"warm_start": true</code>）。</sub></p>

@@ -5,7 +5,7 @@
 <p align="center"><b>Faites tourner de grands modèles d'IA sur votre propre PC</b><br>
 Qwen3.8-Flash-Next, GLM 5.3 Flash, DeepSeek V4 Flash, LFM2.5, Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder et MiniCPM-V · gratuit et open source</p>
 
-<p align="center"><img src="docs/media/speed.svg" width="820" alt="Tokens par seconde pendant l'écriture d'une réponse : 94 à 100 avec Qwen3.6-35B-A3B sur un portable à carte 8 Go, 385 à 393 sur une RTX 5090"></p>
+<p align="center"><img src="docs/media/speed.svg" width="820" alt="Tokens par seconde pendant l'écriture d'une réponse : 94 à 100 avec Qwen3.6-35B-A3B sur un portable à carte 8 Go, 394 à 395 sur une RTX 5090"></p>
 
 <p align="center"><img src="docs/media/claude-code-demo.gif" width="820" alt="Claude Code dans un terminal à côté de l'API Monitor de PolyStrata"><br>
 <sub>Claude Code avec Qwen3.6-35B-A3B UD-Q3_K_M sur le portable à carte de 8 Go, en temps réel : il ajoute une option <code>--json</code> à un petit programme, écrit un test et lance les tests. Le serveur avait lu le prompt système de Claude Code à son démarrage (<code>"warm_start": true</code>).</sub></p>
