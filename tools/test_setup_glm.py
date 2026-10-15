@@ -111,7 +111,10 @@ class Estimates(unittest.TestCase):
         self.assertAlmostEqual(setup.poly_ram_need(setup.MODELS[M], 8.0), 117.2, delta=0.1)
 
     def test_check_lines(self):
-        self.assertIn("AMD", setup.poly_verdict(setup.MODELS[M], 256, 24.0, True))
+        with mock.patch.object(setup, "WIN", False):   # #11: AMD on Linux runs it
+            self.assertNotIn("does not run", setup.poly_verdict(setup.MODELS[M], 256, 24.0, True))
+        with mock.patch.object(setup, "WIN", True):
+            self.assertIn("AMD", setup.poly_verdict(setup.MODELS[M], 256, 24.0, True))   # only AMD on Windows is left out
         self.assertIn("does not fit", setup.poly_verdict(setup.MODELS[M], 256, 12.0, False))
         self.assertIn("fits by setup's estimate", setup.poly_verdict(setup.MODELS[M], 128, 31.84, False))
         self.assertIn("read from the SSD", setup.poly_verdict(setup.MODELS[M], 64, 31.84, False))
