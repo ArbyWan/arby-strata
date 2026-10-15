@@ -1583,13 +1583,14 @@ template <int ahead> __device__ __forceinline__ void flash_wait() {
 // products.  Fragment layouts are PTX's for mma.m16n8k16: a thread holds rows gid and gid + 8, columns 2 tig and
 // 2 tig + 1 of each block of 8.  The next block of keys and values is copied in while one is worked on, two buffers
 // in turn.
-// FLASH_ROW: a cache row in shared memory, in halves; 16-byte aligned, and ldmatrix's eight rows on different banks.
-constexpr int FLASH_TOKENS = 16, FLASH_KEYS = 64, FLASH_ROW = 64 + 8;
+constexpr int FLASH_TOKENS = 16;
 __global__ void __launch_bounds__(4 * WARP)
 attn_flash64_kernel(const float* __restrict__ q, const half* __restrict__ kcache, const half* __restrict__ vcache,
                     float* __restrict__ out, int rows, int n_head, int kv_heads, long long pos, float scale_log2) {
 #if STRATA_POLY_MMA
-    constexpr int DIM = 64, G = 4;
+    // FLASH_ROW: a cache row in shared memory, in halves; 16-byte aligned, and ldmatrix's eight rows on different
+    // banks.
+    constexpr int DIM = 64, G = 4, FLASH_KEYS = 64, FLASH_ROW = 64 + 8;
     __shared__ __align__(16) half ks[2][FLASH_KEYS][FLASH_ROW], vs[2][FLASH_KEYS][FLASH_ROW];
     const int g = blockIdx.y, t0 = blockIdx.x * FLASH_TOKENS, lane = threadIdx.x % WARP, w = threadIdx.x / WARP;
     const int gid = lane / 4, tig = lane % 4;
@@ -1685,6 +1686,9 @@ attn_flash64_kernel(const float* __restrict__ q, const half* __restrict__ kcache
         for (int n = 0; n < 8; ++n)
             *reinterpret_cast<float2*>(y + 8 * n) = make_float2(o[n][2 * i] / l[i], o[n][2 * i + 1] / l[i]);
     }
+#else
+    (void) q, (void) kcache, (void) vcache, (void) out, (void) rows, (void) n_head, (void) kv_heads, (void) pos,
+        (void) scale_log2;   // a card without the tensor cores' steps never launches it (tensor_cores())
 #endif
 }
 
