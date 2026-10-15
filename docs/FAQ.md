@@ -156,8 +156,9 @@ not need it. A larger context (`--max-context` in the same file) keeps more of t
 With Qwen3.6, Ornith and Tiel Coder, if you ask for it. Their template leaves the thinking of earlier answers out of
 the prompt, so a model that thought of two numbers and said one makes the other up when asked for it later. Add
 `"preserve_thinking": true` to `strata-<model>.json` and restart, or send `"chat_template_kwargs":
-{"preserve_thinking": true}` with a request, as with llama.cpp. Your app has to send the earlier thinking back, as
-`reasoning_content`, as Anthropic thinking blocks, or inside the reply's text.
+{"preserve_thinking": true}` with a request, as with llama.cpp. The server also remembers the thinking of the
+answers it wrote, so an app that sends an answer back without it (the chat page, Open WebUI) still gets it, as long as
+the answer's text comes back unchanged.
 
 ### Who maintains it?
 
