@@ -1456,6 +1456,65 @@ __global__ void conv4_silu_rows_kernel(const float* __restrict__ x, const float*
     out[size_t(row) * channels + c] = y * sigmoid(y);
 }
 
+// LFM2's short convolution.  A token's in_proj row is B, C and x, `channels` values each; the convolution runs over
+// B * x with three taps, and C scales its output.  The state is the two B * x before the call, oldest first.  A
+// thread is a channel and walks the tokens; the state as it is after a token of `snaps` goes to snap.
+__global__ void shortconv_kernel(const float* __restrict__ bcx, float* __restrict__ state,
+                                 const float* __restrict__ w, float* __restrict__ out, int channels, int rows,
+                                 float* __restrict__ snap, size_t stride, unsigned snaps) {
+    const int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (c >= channels) return;
+    const float* wc = w + 3 * size_t(c);
+    float* st = state + size_t(c) * 2;
+    float s0 = st[0], s1 = st[1];
+    for (int row = 0; row < rows; ++row) {
+        const float* in = bcx + size_t(row) * 3 * channels;
+        const float bx = in[c] * in[2 * channels + c];
+        const float y = s0 * wc[0] + s1 * wc[1] + bx * wc[2];
+        s0 = s1;
+        s1 = bx;
+        out[size_t(row) * channels + c] = in[channels + c] * y;
+        if (float* m = snap_of(snap, stride, snaps, row)) {
+            m[size_t(c) * 2] = s0;
+            m[size_t(c) * 2 + 1] = s1;
+        }
+    }
+    st[0] = s0;
+    st[1] = s1;
+}
+
+// shortconv_kernel for a call that leaves no snapshots: a thread a channel of a token, as conv4_silu_rows_kernel.
+__global__ void shortconv_rows_kernel(const float* __restrict__ bcx, const float* __restrict__ state,
+                                      const float* __restrict__ w, float* __restrict__ out, int channels) {
+    const int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (c >= channels) return;
+    const int row = blockIdx.y;
+    const float* wc = w + 3 * size_t(c);
+    auto bx = [&](int r) {
+        if (r < 0) return state[size_t(c) * 2 + 2 + r];
+        const float* in = bcx + size_t(r) * 3 * channels;
+        return in[c] * in[2 * channels + c];
+    };
+    const float y = bx(row - 2) * wc[0] + bx(row - 1) * wc[1] + bx(row) * wc[2];
+    out[size_t(row) * channels + c] = bcx[size_t(row) * 3 * channels + channels + c] * y;
+}
+
+// The short convolution's state after the call: its last two B * x, the state's own where the call has fewer.
+__global__ void shortconv_state_kernel(const float* __restrict__ bcx, float* __restrict__ state, int channels,
+                                       int rows) {
+    const int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (c >= channels) return;
+    float* st = state + size_t(c) * 2;
+    auto bx = [&](int r) {
+        if (r < 0) return st[2 + r];
+        const float* in = bcx + size_t(r) * 3 * channels;
+        return in[c] * in[2 * channels + c];
+    };
+    const float a = bx(rows - 2), b = bx(rows - 1);
+    st[0] = a;
+    st[1] = b;
+}
+
 // The state after the call: its last three inputs, the state's own where the call has fewer.
 __global__ void conv4_state_kernel(const float* __restrict__ x, float* __restrict__ state, int channels, int rows) {
     const int c = blockIdx.x * blockDim.x + threadIdx.x;
@@ -2041,6 +2100,20 @@ void conv4_silu(const float* x, float* state, const float* w, float* out, int ch
     }
     conv4_silu_kernel<<<grid(channels, 256), 256, 0, cs(stream)>>>(x, state, w, out, channels, rows, snap, stride,
                                                                   snaps);
+}
+
+void shortconv(const float* bcx, float* state, const float* w, float* out, int channels, int rows, void* stream,
+               float* snap, size_t stride, unsigned snaps) {
+    if (rows <= 0) return;
+    if (rows >= CONV_ROWS && (!snap || !snaps)) {
+        shortconv_rows_kernel<<<dim3(grid(channels, 256), rows), 256, 0, cs(stream)>>>(bcx, state, w, out, channels);
+        shortconv_state_kernel<<<grid(channels, 256), 256, 0, cs(stream)>>>(bcx, state, channels, rows);
+    } else {
+        shortconv_kernel<<<grid(channels, 256), 256, 0, cs(stream)>>>(bcx, state, w, out, channels, rows, snap,
+                                                                     stride, snaps);
+    }
+    if (const cudaError_t e = cudaGetLastError(); e != cudaSuccess)
+        throw std::runtime_error(std::string("shortconv: ") + cudaGetErrorString(e));
 }
 
 void gdn_step(float* qkv, float* alpha, float* beta, const float* dt, const float* a, float* s, const float* z,

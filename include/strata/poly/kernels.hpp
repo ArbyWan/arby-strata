@@ -203,6 +203,12 @@ void mul_sigmoid(float* acc, const float* g, int n, int rows, int g_stride, bool
 /// the tokens' order, `stride` floats apart.
 void conv4_silu(const float* x, float* state, const float* w, float* out, int channels, int rows, void* stream,
                 float* snap = nullptr, size_t stride = 0, unsigned snaps = 0);
+/// LFM2's gated short convolution (llama.cpp's shortconv block between its two projections).  bcx: B, C and x of a
+/// token, `channels` values each, as the in_proj writes them.  out = C * conv3(B * x), `channels` values a token,
+/// a causal convolution of three taps w (3, channels).  state: the 2 B * x before the call a channel, oldest
+/// first, advanced here by `rows` tokens.  snap, stride, snaps: as conv4_silu's.
+void shortconv(const float* bcx, float* state, const float* w, float* out, int channels, int rows, void* stream,
+               float* snap = nullptr, size_t stride = 0, unsigned snaps = 0);
 /// The delta-rule step of every value head and its gated output, token after token: ggml's gated_delta_net op
 /// with one decay a head.  qkv: a token's conv outputs, the k_heads key heads' q, their k, then the n_head value
 /// heads' v, dim values each; value head h reads key head h % k_heads.  alpha and beta: n_head a token, as their

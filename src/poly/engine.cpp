@@ -5,6 +5,7 @@
 #include "deepseek4.hpp"
 #include "gemma4.hpp"
 #include "glm5next.hpp"
+#include "lfm2moe.hpp"
 #include "mmq.hpp"
 #include "qwen35.hpp"
 #include "runtime.hpp"
@@ -815,6 +816,7 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
         if (name == "qwen35moe") return std::make_unique<Qwen35>();
         if (name == "gemma4") return std::make_unique<Gemma4>();
         if (name == "deepseek4") return std::make_unique<DeepSeek4>();
+        if (name == "lfm2moe") return std::make_unique<Lfm2Moe>();
         throw std::runtime_error(o.model + " is a '" + name + "' model, which this engine does not run");
     };
     int cards = 1;
@@ -1429,7 +1431,11 @@ void Engine::load(const Options& o) {
         for (int il = 0; il < n_all; ++il)
             if (runs(il)) load_layer(il);
         if (hi_ == n_layer_) {
-            out_norm_ = upload(gg_->find("output_norm.weight"), "output_norm.weight", n_embd_, 1, kF32);
+            const TensorInfo* norm = gg_->find("output_norm.weight");
+            if (const Names* a = norm ? nullptr : tensor_alias("output_norm.weight"))
+                for (const char* other : a->other)
+                    if (other && !norm) norm = gg_->find(other);
+            out_norm_ = upload(norm, "output_norm.weight", n_embd_, 1, kF32);
             // a file without an output matrix ties the output to the token table
             const TensorInfo* head = gg_->find("output.weight");
             output_ = upload(head ? head : gg_->find("token_embd.weight"), "output.weight", n_embd_, n_vocab_,
