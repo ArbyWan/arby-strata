@@ -514,6 +514,8 @@ FAMILIES = {
     # less, and the third is by name (poly_default()).  "windows": installed by setup and run there, on one PC.
     # "ran_on_gb": the smallest card it has run on, 32 GB without the key.  "tail_skip": the engine's --tail-skip,
     # for the family whose answers it moves no more than the Strata project's default moves its own (docs/BACKENDS.md).
+    # "laptop_tps": tokens/s written after a prompt that fills each context on the 8 GB laptop, where the family's
+    # differ from the others'.
     # "batch_gb": the VRAM the engine's prompt batch takes for a second 1,024 tokens, measured on the RTX 5090; a card
     # that holds every expert beside it reads with 2,048 (poly_batch()).  "batch_from_gb": the family reads with 2,048
     # on any card from this much VRAM (GiB) on, where the 8 GB laptop read faster that way and wrote no slower.
@@ -525,6 +527,7 @@ FAMILIES = {
               "hf": hf("unsloth/LFM2.5-24B-A2B-GGUF"), "file": "LFM2.5-24B-A2B-{q}.gguf", "shards": 1,
               "tag": "lfm25-", "name": "lfm2.5-24b-a2b", "engine": "poly", "vision": False, "experimental": True,
               "windows": True, "ran_on_gb": 8, "row_bytes": 20480, "batch_gb": 0.4, "batch_from_gb": 7.5,
+              "laptop_tps": {32768: "69-74", 65536: "54-55", 131072: "35-37"},
               "models": {"UD-Q4_K_XL": {"about": "4-bit experts (Unsloth Dynamic), 5- and 6-bit where they write",
                                         "download_gb": 14.9, "ram_gb": 20, "arena_gb": 14.0, "vram_beside_gb": 4.1},
                          "UD-Q3_K_XL": {"about": "3-bit i-quant experts, 4-bit where they write: the least RAM",
@@ -6208,8 +6211,9 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         say("  Context length = how much text the model can see at once (your chat, files, tool output).")
         say("  Longer takes VRAM from the expert cache:")
         row = fam.get("row_bytes", GLM_ROW_BYTES)
-        # writing after a prompt that fills the context, tokens/s, on the 8 GB laptop (docs/BACKENDS.md)
-        laptop = {32768: "52-58", 65536: "42-46", 131072: "28-30"} if fam.get("ran_on_gb") == 8 else {}
+        # writing after a prompt that fills the context, tokens/s, on the 8 GB laptop (docs/BACKENDS.md, docs/LFM.md)
+        laptop = fam.get("laptop_tps") or ({32768: "52-58", 65536: "42-46", 131072: "28-30"}
+                                           if fam.get("ran_on_gb") == 8 else {})
         for i, c in enumerate(POLY_CONTEXTS, 1):
             on8 = f"; 8 GB card: {laptop[c]} tokens/s after a full prompt" if c in laptop else ""
             note = f"   (recommended{on8})" if c == 32768 else \

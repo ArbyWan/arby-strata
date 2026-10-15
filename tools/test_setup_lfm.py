@@ -95,6 +95,14 @@ class Main(unittest.TestCase):
         args = json.loads((self.t / "strata-lfm25-q8_0.json").read_text())["args"]
         self.assertEqual(args[args.index("--prompt-batch") + 1], "2048")
 
+    def test_the_context_question_has_this_model_s_laptop_numbers(self):
+        code, out, _ = self.main(family="lfm25", ram=32.0, vram=8.0)
+        self.assertEqual(code, 0, out)
+        for line in ("32K tokens   (recommended; 8 GB card: 69-74 tokens/s after a full prompt)",
+                     "128K tokens   (2.0 GB more VRAM; 8 GB card: 35-37 tokens/s after a full prompt)"):
+            self.assertIn(line, out)
+        self.assertNotIn("52-58", out)   # Qwen3.6's and the others'
+
     def test_the_size_taken_without_a_name(self):
         for ram, size in ((32.0, "UD-Q4_K_XL"), (14.0, "UD-Q3_K_XL")):
             with self.subTest(ram=ram):
