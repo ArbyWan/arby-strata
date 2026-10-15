@@ -65,7 +65,8 @@ QWEN35_PATTERN = (
 
 # The `glm4` / `glm5` pre-tokenizer (GLM 5.3 Flash), from llama.cpp's LLAMA_VOCAB_PRE_TYPE_CHATGLM4: no `\p{M}`,
 # and digits in runs of up to three.  llama.cpp also sets ignore_merges for these two names: a piece that is a
-# token as a whole is that token, without running the merges.
+# token as a whole is that token, without running the merges.  LLAMA_VOCAB_PRE_TYPE_LLAMA3, which llama.cpp gives
+# `lfm2` (LFM2.5-24B-A2B), is the same pattern with the same ignore_merges.
 GLM4_PATTERN = (
     r"(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])"
     r"|[^\r\n\p{L}\p{N}]?\p{L}+"
@@ -99,9 +100,9 @@ DEEPSEEK3_SEQUENCE = (
 )
 
 PRE_PATTERNS = {"glm4": GLM4_PATTERN, "glm5": GLM4_PATTERN,   # every other name: QWEN35_PATTERN, as before
-                "gemma4": GEMMA4_PATTERN}
+                "gemma4": GEMMA4_PATTERN, "lfm2": GLM4_PATTERN}
 PRE_SEQUENCES = {"joyai-llm": DEEPSEEK3_SEQUENCE, "deepseek-v3": DEEPSEEK3_SEQUENCE}
-IGNORE_MERGES = ("glm4", "glm5")
+IGNORE_MERGES = ("glm4", "glm5", "lfm2")
 RAW = ("gemma4",)                      # vocabularies of UTF-8 pieces
 MODELS = {"gpt2": None, "gemma4": "gemma4"}   # tokenizer.ggml.model -> the pre-tokenizer it implies, if any
 

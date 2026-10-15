@@ -15,6 +15,7 @@ and the formats change often; the engine boundary is token ids in, text deltas o
 """
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import os
@@ -52,7 +53,10 @@ class ChatTemplate:
         env.filters["from_json"] = json.loads           # DeepSeek V4's template reads a call's arguments with it
         env.globals["raise_exception"] = raise_exception
         self.source = Path(path).read_text(encoding="utf-8")
-        self.template = env.from_string(self.source)
+        # transformers' {% generation %} (LFM2's template) marks the assistant's text for training; here it is a
+        # block that always renders
+        source = re.sub(r"({%-?\s*)endgeneration(\s*-?%})", r"\1endif\2", self.source)
+        self.template = env.from_string(re.sub(r"({%-?\s*)generation(\s*-?%})", r"\1if true\2", source))
         self.caps = self._detect_caps()
 
     def render(self, messages: list[dict], tools: list[dict] | None = None, add_generation_prompt: bool = True,
@@ -1060,6 +1064,84 @@ def parse_dsml_tool_call(body: str, schema: dict | None = None) -> ToolCall:
     return ToolCall(name=name, arguments=args)
 
 
+# LFM2 writes its calls as a Python list between two tokens: <|tool_call_start|>[f(a='x', b=1), g()]<|tool_call_end|>.
+# A string is a Python literal; a list or a mapping is JSON (its chat template's format_arg_value).  One block can
+# hold several calls.
+LFM2_CALL, LFM2_CALL_END = "<|tool_call_start|>", "<|tool_call_end|>"
+_LFM2_NAME = re.compile(r"[\s,\[]*([\w.\-]+)\s*\(")
+_LFM2_KEY = re.compile(r"[\s,]*(\w+)\s*=\s*")
+_LFM2_WORD, _LFM2_CLOSE = re.compile(r"[^,)]*"), re.compile(r"\s*\)")
+_LFM2_WORDS = {"true": True, "True": True, "false": False, "False": False, "null": None, "None": None}
+
+
+def lfm2_call_name(text: str) -> str | None:
+    """The first call's name in an LFM2 block, or None while it is still arriving."""
+    m = _LFM2_NAME.match(text)
+    return m.group(1) if m else None
+
+
+def lfm2_call_end(text: str) -> int:
+    return text.find(LFM2_CALL_END)
+
+
+def _lfm2_close(s: str, i: int) -> int:
+    """The index after the string, list or mapping that starts at s[i] (the end of s when it does not close)."""
+    depth, quote = 0, ""
+    while i < len(s):
+        c = s[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+                if not depth:
+                    return i + 1
+        elif c in "'\"":
+            quote = c
+        elif c in "[{":
+            depth += 1
+        elif c in "]}":
+            depth -= 1
+            if not depth:
+                return i + 1
+        i += 1
+    return len(s)
+
+
+def _lfm2_value(s: str, i: int):
+    """The argument value that starts at s[i] -> (value, the index after it)."""
+    if i < len(s) and s[i] in "'\"[{":
+        end = _lfm2_close(s, i)
+        text = s[i:end]
+        for read in (json.loads, ast.literal_eval) if s[i] in "[{" else (ast.literal_eval,):
+            try:
+                return read(text), end
+            except (ValueError, SyntaxError, TypeError):
+                pass
+        return text, end
+    m = _LFM2_WORD.match(s, i)
+    word = m.group().strip()
+    if word in _LFM2_WORDS:
+        return _LFM2_WORDS[word], m.end()
+    try:
+        return json.loads(word), m.end()
+    except ValueError:
+        return word, m.end()
+
+
+def parse_lfm2_tool_calls(body: str, schema: dict | None = None) -> list[ToolCall]:
+    """`[f(a='x', b=1), g()]` -> one ToolCall a call.  The values carry their types, so the schema is not read."""
+    calls, i = [], 0
+    while m := _LFM2_NAME.match(body, i):
+        name, args, i = m.group(1), {}, m.end()
+        while k := _LFM2_KEY.match(body, i):
+            args[k.group(1)], i = _lfm2_value(body, k.end())
+        if close := _LFM2_CLOSE.match(body, i):
+            i = close.end()
+        calls.append(ToolCall(name=name, arguments=args))
+    return calls
+
+
 def gemma_model_turn(prompt: str, thinking: bool) -> str:
     """Gemma's template opens no turn for the model after an answer that came with text, tool calls and their
     results: the prompt ends on that closed turn and, with thinking on, on a thought opened outside any turn.  This
@@ -1087,10 +1169,12 @@ class OutputParser:
         # (a call inside the reasoning, `recover`), reads that form only and is not applied to these.
         self.whole = {"glm": (glm_call_name, glm_call_end, parse_glm_tool_call),
                       "gemma": (gemma_call_name, gemma_call_end, parse_gemma_tool_call),
-                      "dsml": (dsml_call_name, dsml_call_end, parse_dsml_tool_call)}.get(call_format)
+                      "dsml": (dsml_call_name, dsml_call_end, parse_dsml_tool_call),
+                      "lfm2": (lfm2_call_name, lfm2_call_end, parse_lfm2_tool_calls)}.get(call_format)
         self.call_start, self.call_stop = {"gemma": (GEMMA_CALL, GEMMA_CALL_END),
-                                           "dsml": (DSML_INVOKE, DSML_INVOKE_END)}.get(call_format,
-                                                                                        (CALL_START, CALL_END))
+                                           "dsml": (DSML_INVOKE, DSML_INVOKE_END),
+                                           "lfm2": (LFM2_CALL, LFM2_CALL_END)}.get(call_format,
+                                                                                   (CALL_START, CALL_END))
         # tags around the calls that are neither a call nor content (DeepSeek V4's block of calls)
         self.noise = DSML_BLOCK if call_format == "dsml" else ()
         # Gemma opens its reasoning itself, as a channel, and ends it with a token of its own; the others' reasoning
@@ -1106,7 +1190,8 @@ class OutputParser:
         self.opening = bool(self.think_open) and not opened
         self.state = "reasoning" if thinking and (opened or not self.think_open) else "content"
         self.buf = ""
-        self.lead = False
+        # newlines the answer starts with are dropped: LFM2 writes one after the </think> its prompt ends on
+        self.lead = self.state == "content"
         self.schemas = {t.get("name"): t for t in tools or []}
         # stream_tools: a tool call is also reported while it is being written - "tool_start" (its name and id) as
         # soon as the name is known, then "tool_args" pieces of its JSON arguments (string parameters character by
@@ -1594,11 +1679,15 @@ class OutputParser:
                     return out
                 body = self.buf[:i]
                 self.buf = self.buf[i + len(self.call_stop):]
-                call = parse(body, self.schemas.get(name_of(body + self.call_stop)))
-                if self.scall is not None:
-                    call.id = self.scall.id
-                    out.append(Event("tool_args", json.dumps(call.arguments, ensure_ascii=False), call=self.scall))
-                out.append(Event("tool_call", call=call))
+                calls = parse(body, self.schemas.get(name_of(body + self.call_stop)))
+                calls = calls if isinstance(calls, list) else [calls]     # LFM2's block holds a list of calls
+                if not calls:                                             # nothing a call can be made of
+                    out.append(Event("content", self._track(self.call_start + body + self.call_stop)))
+                elif self.scall is not None:
+                    calls[0].id = self.scall.id
+                    out.append(Event("tool_args", json.dumps(calls[0].arguments, ensure_ascii=False),
+                                     call=self.scall))
+                out.extend(Event("tool_call", call=call) for call in calls)
                 self._reset_scan()
                 self.state, self.lead = "content", True
             else:
