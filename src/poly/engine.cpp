@@ -42,8 +42,9 @@ namespace {
 
 // A launch's tiles are as wide as the most rows one of its matrices has, up to 128, and every matrix in it
 // computes whole tiles.  So a prompt batch's cached experts go by how many rows they have (moe_rows()): a launch
-// for the experts of each of these widths, and one for the experts with more rows than the widest.
-constexpr int kTile[] = {8, 16, 24, 32, 48, 64, 96, 128};
+// for the experts of up to 32 rows, one for those of up to 128, and one for the experts with more.  Narrower
+// widths saved less work than their launches cost.
+constexpr int kTile[] = {32, 128};
 constexpr int kClasses = (int) (sizeof(kTile) / sizeof(kTile[0])) + 1;
 
 int tile_class(int rows) {
