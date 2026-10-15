@@ -134,21 +134,21 @@ Medido como Qwen3.6-35B-A3B más abajo, en los mismos dos PC, con un prompt de u
 
 | Tamaño | Escribe respuestas | Lee tu prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 70-73 tokens/s | 3,120 tokens/s |
-| **UD-Q3_K_XL** | 88 tokens/s | 3,270-3,300 tokens/s |
-| **QAD-Q4_0** | 77-78 tokens/s | 3,190-3,220 tokens/s |
-| **UD-Q6_K_XL** | 42-43 tokens/s | 2,640 tokens/s |
-| **Q8_0** | 23-26 tokens/s | 2,380-2,600 tokens/s |
+| **UD-Q4_K_XL** | 70-73 tokens/s | 3,590-3,620 tokens/s |
+| **UD-Q3_K_XL** | 88 tokens/s | 3,760-3,810 tokens/s |
+| **QAD-Q4_0** | 77-78 tokens/s | 3,720-3,730 tokens/s |
+| **UD-Q6_K_XL** | 42-43 tokens/s | 3,030-3,120 tokens/s |
+| **Q8_0** | 23-34 tokens/s | 2,950-3,040 tokens/s |
 
 </td><td>
 
 | Tamaño | Escribe respuestas | Lee tu prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 476-477 tokens/s | 21,310-21,320 tokens/s |
-| **UD-Q3_K_XL** | 490-497 tokens/s | 21,130-21,170 tokens/s |
-| **QAD-Q4_0** | 498 tokens/s | 21,650-21,670 tokens/s |
-| **UD-Q6_K_XL** | 424 tokens/s | 19,200-19,340 tokens/s |
-| **Q8_0** | 372-373 tokens/s | 21,240-21,270 tokens/s |
+| **UD-Q4_K_XL** | 480-485 tokens/s | 23,390-23,460 tokens/s |
+| **UD-Q3_K_XL** | 490-497 tokens/s | 22,920-23,400 tokens/s |
+| **QAD-Q4_0** | 498 tokens/s | 23,880-23,900 tokens/s |
+| **UD-Q6_K_XL** | 423-426 tokens/s | 21,250-21,270 tokens/s |
+| **Q8_0** | 376 tokens/s | 23,270-23,350 tokens/s |
 
 </td></tr>
 </table>
@@ -156,9 +156,10 @@ Medido como Qwen3.6-35B-A3B más abajo, en los mismos dos PC, con un prompt de u
 En el portátil Q8_0 llena los 32 GB de RAM, y por eso va lento allí; la estación de trabajo guarda entero cada tamaño.
 
 En el portátil llama.cpp b11540 con `--n-cpu-moe 25`, el mejor de los ajustes probados allí, leyó un prompt de 32,000
-tokens a 530 tokens/s y escribió después a 53; PolyStrata lo leyó a 3,100 y escribió a 69-71. En la estación de
+tokens a 530 tokens/s y escribió después a 53; PolyStrata lo leyó a 3,540 y escribió a 71-73. En la estación de
 trabajo llama-bench leyó 29,816 tokens a 13,300 tokens/s con el lote por defecto de llama.cpp, de 512, y a 23,600 con
-2,048, más rápido que PolyStrata, y escribió a 455 tokens/s, 369 después de ese prompt.
+2,048, tan rápido como PolyStrata, y escribió token a token a 455 tokens/s, y a 369 después de ese prompt; PolyStrata
+escribe a 452 y 387.
 
 ### Qwen3.6-35B-A3B
 
@@ -619,7 +620,7 @@ En qué se diferencian:
 | **Imágenes** | Responde que sí a "Images?" en la instalación. Luego haz clic en **Picture** en el chat, o adjunta imágenes en tu aplicación. Las tarjetas AMD leen imágenes en Linux a través del procesador; en Windows todavía no. | Todavía no. | Solo lee texto. | Solo lee texto. | Responde que sí a "Images?" en la instalación, y luego como con Qwen3.8-Flash-Next. En una tarjeta de menos de 16 GB el codificador de imágenes funciona en el procesador, y una imagen tarda unos segundos. |
 | **Una petición cada vez** | Por defecto PolyStrata responde una petición y las demás esperan. Para responder varias a la vez, pon `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). En una tarjeta de 12 GB, cada respuesta va más lenta. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. |
 | **Varias conversaciones** | La última se conserva, así que los mensajes siguientes empiezan en segundos. Dos argumentos del motor guardan varias en RAM ([detalles](docs/DETAILS.md#using-it)). | La última se conserva. La instalación pregunta si guardar varias en RAM, para que un agente y sus subagentes se turnen sin que se vuelvan a leer sus prompts ([cómo](docs/GLM.md#several-conversations-at-once)). | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. |
-| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan 1,5 segundos en la estación de trabajo y de 9 a 13 segundos en el portátil de 8 GB. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 20 segundos en el portátil de 8 GB. |
+| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan de 1,3 a 1,5 segundos en la estación de trabajo y de 8 a 10 segundos en el portátil de 8 GB. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 20 segundos en el portátil de 8 GB. |
 
 Más: [dónde se guardan tus chats](docs/INSTALL.md#where-things-are-stored), [la API](docs/DETAILS.md#using-it).
 

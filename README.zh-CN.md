@@ -128,28 +128,28 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 
 | 规格 | 写回答 | 读提示 |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 70-73 tokens/s | 3,120 tokens/s |
-| **UD-Q3_K_XL** | 88 tokens/s | 3,270-3,300 tokens/s |
-| **QAD-Q4_0** | 77-78 tokens/s | 3,190-3,220 tokens/s |
-| **UD-Q6_K_XL** | 42-43 tokens/s | 2,640 tokens/s |
-| **Q8_0** | 23-26 tokens/s | 2,380-2,600 tokens/s |
+| **UD-Q4_K_XL** | 70-73 tokens/s | 3,590-3,620 tokens/s |
+| **UD-Q3_K_XL** | 88 tokens/s | 3,760-3,810 tokens/s |
+| **QAD-Q4_0** | 77-78 tokens/s | 3,720-3,730 tokens/s |
+| **UD-Q6_K_XL** | 42-43 tokens/s | 3,030-3,120 tokens/s |
+| **Q8_0** | 23-34 tokens/s | 2,950-3,040 tokens/s |
 
 </td><td>
 
 | 规格 | 写回答 | 读提示 |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 476-477 tokens/s | 21,310-21,320 tokens/s |
-| **UD-Q3_K_XL** | 490-497 tokens/s | 21,130-21,170 tokens/s |
-| **QAD-Q4_0** | 498 tokens/s | 21,650-21,670 tokens/s |
-| **UD-Q6_K_XL** | 424 tokens/s | 19,200-19,340 tokens/s |
-| **Q8_0** | 372-373 tokens/s | 21,240-21,270 tokens/s |
+| **UD-Q4_K_XL** | 480-485 tokens/s | 23,390-23,460 tokens/s |
+| **UD-Q3_K_XL** | 490-497 tokens/s | 22,920-23,400 tokens/s |
+| **QAD-Q4_0** | 498 tokens/s | 23,880-23,900 tokens/s |
+| **UD-Q6_K_XL** | 423-426 tokens/s | 21,250-21,270 tokens/s |
+| **Q8_0** | 376 tokens/s | 23,270-23,350 tokens/s |
 
 </td></tr>
 </table>
 
 Q8_0 在笔记本上占满了 32 GB 内存，所以在那里慢；工作站能放下每个规格的整个模型。
 
-在笔记本上，llama.cpp b11540 用 `--n-cpu-moe 25`（那里试过的设置里最快的）读 32,000 个 token 的提示是 530 token/s，之后写答案 53；PolyStrata 读它是 3,100，写答案 69 到 71。在工作站上，llama-bench 用 llama.cpp 默认的 512 批大小读 29,816 个 token 是 13,300 token/s，用 2,048 是 23,600，比 PolyStrata 快，写答案 455 token/s，读完那个提示之后 369。
+在笔记本上，llama.cpp b11540 用 `--n-cpu-moe 25`（那里试过的设置里最快的）读 32,000 个 token 的提示是 530 token/s，之后写答案 53；PolyStrata 读它是 3,540，写答案 71 到 73。在工作站上，llama-bench 用 llama.cpp 默认的 512 批大小读 29,816 个 token 是 13,300 token/s，用 2,048 是 23,600，和 PolyStrata 一样快；逐个 token 写答案是 455 token/s，读完那个提示之后 369，PolyStrata 是 452 和 387。
 
 ### Qwen3.6-35B-A3B
 
@@ -588,7 +588,7 @@ UD-Q4_K_XL 95.5%，QAD-Q4_0 92.7%，UD-Q3_K_XL 91.6%。
 | **图片** | 在安装时对“Images?”选是。然后在聊天里点 **Picture**，或在你的应用里附上图片。AMD 显卡在 Linux 上通过处理器识别图片；在 Windows 上暂时还不行。 | 暂时不支持。 | 只能处理文字。 | 只能处理文字。 | 在安装时对“Images?”选是，之后和 Qwen3.8-Flash-Next 一样。显存不到 16 GB 的卡上，图片编码器在处理器上跑，一张图片要几秒。 |
 | **多个请求** | 默认一次只回答一个，其他请求排队等待。设置 `"parallel": 2` 可以同时回答多个（[BATCHING.md](docs/BATCHING.md)）；在 12 GB 显卡上，这会让每个回答变慢。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 |
 | **多个对话** | 保留最近的一个对话，所以后续消息几秒内就开始回答。加两个引擎参数可以在内存里保留多个（[详情](docs/DETAILS.md#using-it)）。 | 保留最近的一个对话。安装程序会问要不要在内存里保留多个，这样智能体和子代理轮流请求时不用重读提示（[原理](docs/GLM.md#several-conversations-at-once)）。 | 和 GLM 5.3 Flash 一样。 | 和 GLM 5.3 Flash 一样。 | 和 GLM 5.3 Flash 一样。 |
-| **长提示** | 对话的第一条消息要完整读入，大约每 30,000 个 token 需要 1 分钟。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 40 秒。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 29 秒。 | 第一条消息要完整读入：30,000 个 token 在工作站上要 1.5 秒，在 8 GB 笔记本上要 9 到 13 秒。 | 第一条消息要完整读入：30,000 个 token，工作站要 4 到 5 秒，8 GB 显卡的笔记本要 14 到 20 秒。 |
+| **长提示** | 对话的第一条消息要完整读入，大约每 30,000 个 token 需要 1 分钟。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 40 秒。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 29 秒。 | 第一条消息要完整读入：30,000 个 token 在工作站上要 1.3 到 1.5 秒，在 8 GB 笔记本上要 8 到 10 秒。 | 第一条消息要完整读入：30,000 个 token，工作站要 4 到 5 秒，8 GB 显卡的笔记本要 14 到 20 秒。 |
 
 更多：[聊天记录存在哪里](docs/INSTALL.md#where-things-are-stored)、[API](docs/DETAILS.md#using-it)。
 

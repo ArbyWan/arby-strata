@@ -133,21 +133,21 @@ Measured the same way as Qwen3.6-35B-A3B below, on the same two PCs, with a prom
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 70-73 tokens/s | 3,120 tokens/s |
-| **UD-Q3_K_XL** | 88 tokens/s | 3,270-3,300 tokens/s |
-| **QAD-Q4_0** | 77-78 tokens/s | 3,190-3,220 tokens/s |
-| **UD-Q6_K_XL** | 42-43 tokens/s | 2,640 tokens/s |
-| **Q8_0** | 23-26 tokens/s | 2,380-2,600 tokens/s |
+| **UD-Q4_K_XL** | 70-73 tokens/s | 3,590-3,620 tokens/s |
+| **UD-Q3_K_XL** | 88 tokens/s | 3,760-3,810 tokens/s |
+| **QAD-Q4_0** | 77-78 tokens/s | 3,720-3,730 tokens/s |
+| **UD-Q6_K_XL** | 42-43 tokens/s | 3,030-3,120 tokens/s |
+| **Q8_0** | 23-34 tokens/s | 2,950-3,040 tokens/s |
 
 </td><td>
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 476-477 tokens/s | 21,310-21,320 tokens/s |
-| **UD-Q3_K_XL** | 490-497 tokens/s | 21,130-21,170 tokens/s |
-| **QAD-Q4_0** | 498 tokens/s | 21,650-21,670 tokens/s |
-| **UD-Q6_K_XL** | 424 tokens/s | 19,200-19,340 tokens/s |
-| **Q8_0** | 372-373 tokens/s | 21,240-21,270 tokens/s |
+| **UD-Q4_K_XL** | 480-485 tokens/s | 23,390-23,460 tokens/s |
+| **UD-Q3_K_XL** | 490-497 tokens/s | 22,920-23,400 tokens/s |
+| **QAD-Q4_0** | 498 tokens/s | 23,880-23,900 tokens/s |
+| **UD-Q6_K_XL** | 423-426 tokens/s | 21,250-21,270 tokens/s |
+| **Q8_0** | 376 tokens/s | 23,270-23,350 tokens/s |
 
 </td></tr>
 </table>
@@ -156,9 +156,10 @@ On the laptop Q8_0 fills the 32 GB of RAM, which is what makes it slow there; th
 whole.
 
 With `--n-cpu-moe 25`, the best of the settings tried on the laptop, llama.cpp b11540 read a prompt of 32,000 tokens
-there at 530 tokens/s and wrote after it at 53; PolyStrata read it at 3,100 and wrote at 69 to 71. On the workstation
-llama-bench read 29,816 tokens at 13,300 tokens/s with llama.cpp's default batch of 512 and at 23,600 with 2,048,
-faster than PolyStrata, and wrote at 455 tokens/s, 369 after that prompt.
+there at 530 tokens/s and wrote after it at 53; PolyStrata read it at 3,540 and wrote at 71 to 73. On the workstation
+llama-bench read 29,816 tokens at 13,300 tokens/s with llama.cpp's default batch of 512 and at 23,600 with 2,048, as
+fast as PolyStrata, and wrote one token at a time at 455 tokens/s and at 369 after that prompt, where PolyStrata
+writes at 452 and 387.
 
 ### Qwen3.6-35B-A3B
 
@@ -624,7 +625,7 @@ Where they differ:
 | **Pictures** | Say yes to "Images?" in setup. Then click **Picture** in the chat, or attach pictures in your app. AMD cards read pictures on Linux through the processor; on Windows they can't yet. | Not yet. | It reads text only. | It reads text only. | Say yes to "Images?" in setup, then as with Qwen3.8-Flash-Next. On a card with less than 16 GB the picture encoder runs on the processor, and a picture takes a few seconds. |
 | **Several requests** | One at a time by default, the others wait. `"parallel": 2` answers several at once ([BATCHING.md](docs/BATCHING.md)); on a 12 GB card each answer gets slower. | One at a time, the others wait. | One at a time, the others wait. | One at a time, the others wait. | One at a time, the others wait. |
 | **Several conversations** | The last one is kept, so follow-up messages start in seconds. Two engine arguments keep several in RAM ([details](docs/DETAILS.md#using-it)). | The last one is kept. Setup asks whether to keep several in RAM, so that an agent and its subagents take turns without their prompts being read again ([how](docs/GLM.md#several-conversations-at-once)). | As GLM 5.3 Flash. | As GLM 5.3 Flash. | As GLM 5.3 Flash. |
-| **Long prompts** | The first message of a chat is read in full, about 1 minute per 30,000 tokens. | The first message is read in full, about 40 seconds per 30,000 tokens. | The first message is read in full, about 29 seconds per 30,000 tokens. | The first message is read in full: 30,000 tokens take 1.5 seconds on the workstation and 9 to 13 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take 4 to 5 seconds on the workstation and 14 to 20 seconds on the 8 GB laptop. |
+| **Long prompts** | The first message of a chat is read in full, about 1 minute per 30,000 tokens. | The first message is read in full, about 40 seconds per 30,000 tokens. | The first message is read in full, about 29 seconds per 30,000 tokens. | The first message is read in full: 30,000 tokens take 1.3 to 1.5 seconds on the workstation and 8 to 10 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take 4 to 5 seconds on the workstation and 14 to 20 seconds on the 8 GB laptop. |
 
 More: [where your chats are stored](docs/INSTALL.md#where-things-are-stored), [the API](docs/DETAILS.md#using-it).
 

@@ -29,44 +29,44 @@ Setup takes UD-Q4_K_XL, or UD-Q3_K_XL when the PC has too little RAM for it; the
 The README's numbers are PolyStrata's own benchmark through the server, the test every model of this engine gets
 ([BACKENDS.md](BACKENDS.md#a-prompt-of-30000-tokens)): `polystrata.py benchmark --prompt-tokens 24000`, a short chat
 and a prompt built from this repository's documents, 256 tokens written after each, three runs a size and the last
-two below. The engine is d74c5e25's, with the run configs setup writes for each machine.
+two below. The engine is 4a644a8d's, with the run configs setup writes for each machine: on both, a prompt is read
+2,048 tokens at a time.
 
 ### On a laptop with 8 GB of VRAM
 
 An RTX 4070 Laptop with 8 GB, an i7-14700HX, 32 GB of RAM, Windows 10, CUDA 13.0. A context of 32,768 and 13 threads
-for the experts the card does not hold. The prompt came to 29,759 tokens.
+for the experts the card does not hold. The prompt came to 29,804 tokens.
 
 | Size | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM | Machine's RAM, GiB |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| UD-Q4_K_XL | 9.6 | 3,118 to 3,124 | 68 to 70 | 69 to 74 | 55% to 56% | 22.1 to 22.6 |
-| UD-Q3_K_XL | 9.0 to 9.1 | 3,271 to 3,301 | 88 | 72 to 74 | 71% to 73% | 18.4 to 18.9 |
-| QAD-Q4_0 | 9.3 to 9.4 | 3,192 to 3,220 | 75 to 78 | 76 to 79 | 63% | 20.8 to 21.3 |
-| UD-Q6_K_XL | 11.3 | 2,642 to 2,645 | 42 to 44 | 51 to 53 | 38% | 28.9 to 29.2 |
-| Q8_0 | 11.5 to 12.6 | 2,377 to 2,598 | 21 to 25 | 44 to 48 | 32% | 31.2 |
+| UD-Q4_K_XL | 8.3 to 8.4 | 3,575 to 3,601 | 67 to 68 | 69 | 52% to 53% | 22.5 to 22.6 |
+| UD-Q3_K_XL | 7.9 to 8.0 | 3,758 to 3,811 | 80 to 81 | 70 to 76 | 67% | 18.7 to 18.8 |
+| QAD-Q4_0 | 8.1 | 3,685 to 3,694 | 72 to 73 | 77 to 79 | 59% | 21.1 to 21.2 |
+| UD-Q6_K_XL | 9.6 to 9.9 | 3,035 to 3,115 | 41 to 44 | 53 to 54 | 36% | 29.1 |
+| Q8_0 | 10.3 to 12.4 | 2,406 to 2,923 | 19 to 34 | 44 to 47 | 30% to 31% | 31.2 |
 
 Q8_0 fills the machine's RAM, and part of its file is read from the disk again; that is what makes it the slowest
-here. Two passes before this one, with engines from before d74c5e25, read the prompt at 1,290 to 1,728 tokens/s. A
-README cell has the highest of the three: one of the earlier two wrote the short chat a little faster with
-UD-Q4_K_XL, QAD-Q4_0, UD-Q6_K_XL and Q8_0.
+here, and the most uneven. Four passes before this one, with earlier engines, read the prompt at 1,290 to 3,778
+tokens/s, the last of them, d74c5e25's with the same batch, at 2,954 to 3,778. A README cell has the highest of the
+five passes: the short chat came a little faster in an earlier one with most sizes.
 
 ### On a workstation
 
 An RTX 5090 (32 GB), 25 vCPU of a Xeon Platinum 8470Q, 120 GB of RAM, Linux, CUDA 12.8. The card holds every expert
-of every size, so setup's config reads a prompt 2,048 tokens at a time there. The prompt came to 29,816 tokens.
+of every size. The prompt came to 29,816 tokens.
 
 | Size | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| UD-Q4_K_XL | 1.5 | 21,312 to 21,325 | 473 to 475 | 602 to 603 | 100% |
-| UD-Q3_K_XL | 1.5 | 21,127 to 21,166 | 473 to 474 | 528 to 535 | 100% |
-| QAD-Q4_0 | 1.5 | 21,653 to 21,666 | 497 | 412 to 413 | 100% |
-| UD-Q6_K_XL | 1.6 | 19,200 to 19,342 | 419 to 420 | 360 to 361 | 100% |
-| Q8_0 | 1.5 | 21,244 to 21,274 | 370 | 321 | 100% |
+| UD-Q4_K_XL | 1.3 to 1.4 | 23,387 to 23,462 | 480 to 485 | 639 to 640 | 100% |
+| UD-Q3_K_XL | 1.3 to 1.4 | 22,923 to 23,396 | 455 to 472 | 663 to 675 | 100% |
+| QAD-Q4_0 | 1.3 | 23,878 to 23,899 | 495 to 497 | 419 to 420 | 100% |
+| UD-Q6_K_XL | 1.5 | 21,252 to 21,270 | 423 to 426 | 366 to 376 | 100% |
+| Q8_0 | 1.4 | 23,272 to 23,349 | 376 | 341 to 343 | 100% |
 
 The answer after the prompt goes faster than the short chat where it repeats the prompt's text and the engine's
 guesses from it are right. One token at a time (`--window 1`), UD-Q4_K_XL writes at 452 tokens/s after a short
-prompt and at 350 after 29,816 tokens. Two passes before this one, with 165bb4da's and 4f5947f5's engines and a
-prompt batch of 1,024, read the prompt at 10,007 to 10,854 tokens/s and wrote the short chat at 372 to 498 tokens/s;
-a README cell has the highest of the three.
+prompt and at 387 after 29,816 tokens. Three passes before this one, with earlier engines, read the prompt at 10,007
+to 21,666 tokens/s; a README cell has the highest of the four.
 
 ### Against llama.cpp
 
@@ -75,10 +75,10 @@ On the laptop, UD-Q4_K_XL through each server with the same prompts
 
 | | PolyStrata | llama.cpp b11540, `--n-cpu-moe 25` | llama.cpp b11540, `--fit on` |
 | --- | ---: | ---: | ---: |
-| Reads about 4,000 tokens | 1,971 to 1,988 tokens/s | 498 to 505 | 483 to 485 |
-| Writes after them | 91 to 95 tokens/s | 57.7 to 58.0 | 55.1 to 55.3 |
-| Reads about 32,000 tokens | 3,103 to 3,123 tokens/s | 528 to 537 | 505 to 516 |
-| Writes after them | 69 to 71 tokens/s | 52.8 to 53.0 | 50.9 to 51.0 |
+| Reads about 4,000 tokens | 2,193 to 2,215 tokens/s | 498 to 505 | 483 to 485 |
+| Writes after them | 89 to 94 tokens/s | 57.7 to 58.0 | 55.1 to 55.3 |
+| Reads about 32,000 tokens | 3,543 to 3,545 tokens/s | 528 to 537 | 505 to 516 |
+| Writes after them | 71 to 73 tokens/s | 52.8 to 53.0 | 50.9 to 51.0 |
 
 `--n-cpu-moe 25` was the fastest of the settings tried for llama.cpp there. On the workstation, `llama-bench` of the
 llama.cpp that [Strata](https://github.com/Niko1221/Strata) v0.1.39 vendors, every layer on the card and flash
@@ -86,12 +86,13 @@ attention on:
 
 | | PolyStrata | llama.cpp, batch of 512 (its default) | llama.cpp, batch of 2,048 |
 | --- | ---: | ---: | ---: |
-| Reads 29,816 tokens | 21,070 tokens/s (16,100 with a batch of 1,024) | 13,311 | 23,614 |
+| Reads 29,816 tokens | 23,400 tokens/s (18,700 with a batch of 1,024) | 13,311 | 23,614 |
 | Writes, one token at a time | 452 tokens/s | 455 | |
-| Writes after 29,816 tokens, one at a time | 350 tokens/s | 369 | |
+| Writes after 29,816 tokens, one at a time | 387 tokens/s | 369 | |
 
-With a batch of 2,048 llama.cpp reads the prompt 12% faster than PolyStrata, and after a long prompt it writes 5%
-faster one token at a time. PolyStrata's guesses make up the second where the answer repeats the prompt.
+With a batch of 2,048 llama.cpp reads the prompt as fast as PolyStrata, 1% faster, and writes as fast one token
+at a time; after the long prompt PolyStrata writes 5% faster. Its guesses add to that where the answer repeats the
+prompt.
 
 ## How it was checked
 
@@ -100,7 +101,7 @@ faster one token at a time. PolyStrata's guesses make up the second where the an
 - With greedy sampling the engine and llama.cpp on the CPU write the same tokens until two candidates are close: 1,
   39 and 10 of 64 tokens on three short prompts, 20 on a prompt of 17,575 tokens. llama.cpp's CUDA build parts
   from its CPU build at 5, 40 and 23 tokens on the same three. While they agree on the long prompt, the
-  probabilities are 0.066 apart at most.
+  probabilities are 0.087 apart at most.
 - A window of guesses writes the same tokens as one token at a time, with the experts on the CPU: 300 tokens after
   a prompt of 26 tokens and after one of 4,259.
 - `poly_attend_test`, `poly_norm_q8_test`, `poly_shortconv_test` and `poly_route_test` check the kernels written for
@@ -133,6 +134,10 @@ The decode numbers are UD-Q4_K_XL on the RTX 5090 with the engine's guesses, aft
 | 4f5947f5 | the attention of a few tokens in blocks of 64 rows, a launch block each | one token at a time after 4,300 tokens 381 to 441, after 30,000 196 to 350; the laptop after 30,000 49 to 56 |
 | d74c5e25 | a prompt batch's attention in registers, the way FlashAttention-2 goes | a prompt of 29,816 tokens read in 1,852 ms instead of 2,787 on the 5090, in 8.9 s instead of 16.8 on the laptop |
 | 0ec4802d | setup's config reads 2,048 tokens at a time on a card that holds every expert | 1,415 ms instead of 1,852 |
+| 36fdc62e | and on any card from 8 GB | the laptop 7.8 to 8.0 s instead of 8.9 to 9.1 |
+| 3d51cba9 | the blocks of rows added up 16 warps at a time | one token at a time after 30,000 tokens 348 to 388 |
+| cd87aecd | the next block of keys copied in while attn_flash64 works on one | 1,361 to 1,371 ms instead of 1,398 to 1,400 |
+| 4a644a8d | a prompt batch's cached experts in three widths of tiles instead of nine | 1,280 ms instead of 1,367 to 1,376 |
 
 ## What you need
 
