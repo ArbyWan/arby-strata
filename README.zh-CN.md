@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文** · [日本語](README.ja.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt-BR.md)
 
 <p align="center"><b>在你自己的电脑上运行大型 AI 模型</b><br>
-Qwen3.8-Flash-Next、GLM 5.3 Flash、Qwen3.6、Ornith 1.5、Gemma 4 和 Tiel Coder · 免费开源</p>
+Qwen3.8-Flash-Next、GLM 5.3 Flash、DeepSeek V4 Flash、Qwen3.6、Ornith 1.5、Gemma 4 和 Tiel Coder · 免费开源</p>
 
 <p align="center"><img src="docs/media/speed.svg" width="820" alt="写回答时每秒的 token 数：8 GB 显存的笔记本上 Qwen3.6-35B-A3B 为 94 到 100，RTX 5090 上为 385 到 393"></p>
 
@@ -17,15 +17,16 @@ Qwen3.8-Flash-Next、GLM 5.3 Flash、Qwen3.6、Ornith 1.5、Gemma 4 和 Tiel Cod
 PolyStrata 能在普通电脑上运行通常要用服务器才能跑的大型 AI 模型。它们能聊天、写代码，还能配合你的应用和编程智能体一起工作。
 所有数据都留在你的电脑上。
 
-它能跑六个模型，用两个引擎：
+它能跑七个模型，用两个引擎：
 
 - **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)**：12 GB 及以上的 NVIDIA 或 AMD 显卡，Windows 或
   Linux。它还能看图片。引擎是 Strata 项目的，没有改动。
 
-另外五个用的是为 PolyStrata 写的引擎，需要一张 NVIDIA 显卡，也可以用[两张](docs/MULTI_GPU.md#the-strata-poly-models)：五个都能在 Linux 上跑，四个小的也能在 Windows 上跑。
+另外六个用的是为 PolyStrata 写的引擎，需要一张 NVIDIA 显卡，也可以用[两张](docs/MULTI_GPU.md#the-strata-poly-models)：六个都能在 Linux 上跑，四个小的也能在 Windows 上跑。
 目前是实验性的：只在一台 32 GB 显卡的电脑上跑过，四个小的另外在一台 8 GB 显卡的笔记本上跑过。
 
 - **[GLM 5.3 Flash](docs/GLM.md)**：最大的一个，文件 79 到 114 GB，大部分留在内存里。
+- **[DeepSeek V4 Flash](docs/DEEPSEEK.md)**：文件 91 GB，大部分也留在内存里。它记对话占的显存很少：128K 上下文只比 32K 多占 0.7 GB。
 - **[Qwen3.6-35B-A3B](docs/BACKENDS.md)**：文件 13 到 23 GB。它还能看图片。
 - **[Ornith 1.5](docs/BACKENDS.md)**：结构和 Qwen3.6-35B-A3B 相同，权重不同，文件 14 到 24 GB。它还能看图片。
 - **[Gemma 4 26B-A4B](docs/BACKENDS.md)**：文件 11 到 17 GB。它还能看图片。
@@ -94,6 +95,26 @@ NVIDIA：Q2_0 用的是引擎 0.1.36，其他各行用的是 0.1.26（4K 回答�
 
 GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放得下它约五分之一的专家，所以写得慢一些。
 测了什么、怎么测的：[docs/GLM.md](docs/GLM.md#what-it-was-measured-on)。
+
+### DeepSeek V4 Flash
+
+由 PolyStrata 在同一台工作站上测得，用一段短对话和一个 3 万 token 的提示。
+
+<table>
+<tr><th>NVIDIA：RTX 5090（32 GB）、Xeon Platinum 8470Q（25 vCPU）、120 GB 内存</th></tr>
+<tr><td>
+
+| 规格 | 写回答 | 读提示 |
+| --- | ---: | ---: |
+| **UD-IQ2_XXS** | 56 tokens/s | 1,040 tokens/s |
+
+</td></tr>
+</table>
+
+同一台电脑上，llama.cpp 每秒写 25 到 28 个 token，读一个 3,384 token 的提示每秒读 96 个。
+在 128K 的上下文里，一个 116,473 token 的提示读完并答完用了 174 秒；在 512K 的上下文里，一个 487,529 token 的提示用了
+32 分钟。两次藏在里面的三条信息都找到了。
+测了什么、怎么测的：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-it-was-measured-on)。
 
 ### Qwen3.6-35B-A3B
 
@@ -204,7 +225,7 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 
 10,000 个 token 的提示，笔记本每秒读 1,670 个，工作站每秒读 6,300 个。
 
-用 PolyStrata 自己引擎的这五个模型，都是用它自带的跑分测的，你也可以在自己的电脑上跑：
+用 PolyStrata 自己引擎的这六个模型，都是用它自带的跑分测的，你也可以在自己的电脑上跑：
 `python polystrata.py benchmark --model <name> --prompt-tokens 24000`
 （[它发什么、打印什么](docs/BACKENDS.md#benchmark)，英文）。
 别人在自己的显卡上测的结果，以及怎么在你的电脑上和 llama.cpp 对比：
@@ -248,6 +269,19 @@ GLM 5.3 Flash 比其他几个模型大得多，这张卡的 32 GB 显存只放�
 有用户在 Windows 上用一张 24 GB 显卡加 128 GB 内存跑起来了（[报告](https://github.com/VecSzn/PolyStrata/issues/10)）。
 
 完整列表：[docs/GLM.md](docs/GLM.md#what-you-need)。
+
+### DeepSeek V4 Flash
+
+| | |
+| --- | --- |
+| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡。目前只在 **32 GB 显存**上跑过。放专家之前就要占掉约 11.5 GB，所以 12 GB 的卡启动不了。 |
+| **内存** | 配 32 GB 显卡时需要 **72 GB 或以上**，这是安装程序的估算。显卡越小，需要的内存越多（[具体多少](#该选哪个模型)）。实际跑过的是 120 GB。 |
+| **硬盘** | 模型的三个文件共 91 GB，要放在 SSD 上。 |
+| **系统** | Linux，以及 NVIDIA 的最新显卡驱动。 |
+
+其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。还没试过：Windows、AMD 显卡、两张显卡。它只能处理文字。
+
+完整列表：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-you-need)。
 
 ### Qwen3.6-35B-A3B
 
@@ -331,12 +365,12 @@ PolyStrata 的 [MCP 服务器](docs/MCP_SERVER.md)来安装、启动和停止 Po
 
 - 用哪个模型、哪个规格，
 - 上下文多大（模型能记住多少文字），
-- 是否要识别图片（GLM 5.3 Flash 不支持）。
+- 是否要识别图片（GLM 5.3 Flash 和 DeepSeek V4 Flash 不支持）。
 
-每次直接按回车就是推荐选项。之后它会下载模型（Qwen3.8-Flash-Next 约 70 GB，GLM 5.3 Flash 79 到 114 GB，另外四个 11 到 24 GB）并启动。
+每次直接按回车就是推荐选项。之后它会下载模型（Qwen3.8-Flash-Next 约 70 GB，GLM 5.3 Flash 79 到 114 GB，DeepSeek V4 Flash 91 GB，另外四个 11 到 24 GB）并启动。
 如果下载中断了，再运行一次即可：它会从中断的地方继续。浏览器会打开 PolyStrata 应用，地址是 `http://127.0.0.1:8080`。
 
-六个模型都在安装程序的模型列表里。想直接装其中一个，运行 `./setup.sh --family glm`（或 `qwen36`、`ornith`、`gemma4`、`tiel`）
+七个模型都在安装程序的模型列表里。想直接装其中一个，运行 `./setup.sh --family glm`（或 `deepseek`、`qwen36`、`ornith`、`gemma4`、`tiel`）
 （[它会问什么、写什么](docs/GLM.md#install)）。
 
 > **模型启动时，你的电脑可能会变慢或卡住 1-3 分钟**（第一次最久）。
@@ -400,6 +434,17 @@ PolyStrata 的 [MCP 服务器](docs/MCP_SERVER.md)来安装、启动和停止 Po
 
 GLM 5.3 Flash 的其他量化版本暂时不支持：[还缺什么](docs/GLM.md#what-is-missing)。
 
+### DeepSeek V4 Flash
+
+目前只有一个规格。
+
+| 规格 | 是什么 | 下载 | 配 32 GB 显卡需要的内存 |
+| --- | --- | ---: | ---: |
+| **UD-IQ2_XXS** | 完整模型，约 2 bit（[Unsloth](https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF)） | 91 GB | 72 GB |
+
+和 GLM 5.3 Flash 一样，显卡放不下的专家都留在内存里：按安装程序的估算，配 24 GB 显卡约需 80 GB，配 16 GB 显卡约需 89 GB，
+12 GB 的卡启动不了。目前只在 32 GB 的卡上试过。
+
 ### Qwen3.6-35B-A3B
 
 目前有三个规格。安装程序默认选 UD-Q3_K_M，内存不够时选 UD-Q2_K_XL；UD-Q4_K_M 要指名：`--model UD-Q4_K_M`。
@@ -454,7 +499,7 @@ GLM 5.3 Flash 的其他量化版本暂时不支持：[还缺什么](docs/GLM.md#
 
 ## 使用方法
 
-六个模型的用法一样：同一个应用，同一套 API。
+七个模型的用法一样：同一个应用，同一套 API。
 
 <p align="center"><img src="docs/media/runpagoda.png" width="900" alt="应用的 Monitor 标签页，旁边是一个编程智能体"><br>
 <sub>应用的 <b>Monitor</b>（左），编程智能体正在写视频里的宝塔花园（右）。截图来自 <a href="https://github.com/Niko1221/Strata">Strata</a>。</sub></p>
@@ -474,12 +519,12 @@ GLM 5.3 Flash 的其他量化版本暂时不支持：[还缺什么](docs/GLM.md#
 
 它们不一样的地方：
 
-| | Qwen3.8-Flash-Next | GLM 5.3 Flash | Qwen3.6-35B-A3B、Ornith 1.5、Gemma 4 26B-A4B、Tiel Coder 35B-A3B |
-| --- | --- | --- | --- |
-| **图片** | 在安装时对“Images?”选是。然后在聊天里点 **Picture**，或在你的应用里附上图片。AMD 显卡在 Linux 上通过处理器识别图片；在 Windows 上暂时还不行。 | 暂时不支持。 | 在安装时对“Images?”选是，之后和 Qwen3.8-Flash-Next 一样。显存不到 16 GB 的卡上，图片编码器在处理器上跑，一张图片要几秒。 |
-| **多个请求** | 默认一次只回答一个，其他请求排队等待。设置 `"parallel": 2` 可以同时回答多个（[BATCHING.md](docs/BATCHING.md)）；在 12 GB 显卡上，这会让每个回答变慢。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 |
-| **多个对话** | 保留最近的一个对话，所以后续消息几秒内就开始回答。加两个引擎参数可以在内存里保留多个（[详情](docs/DETAILS.md#using-it)）。 | 保留最近的一个对话。安装程序会问要不要在内存里保留多个，这样智能体和子代理轮流请求时不用重读提示（[原理](docs/GLM.md#several-conversations-at-once)）。 | 和 GLM 5.3 Flash 一样。 |
-| **长提示** | 对话的第一条消息要完整读入，大约每 30,000 个 token 需要 1 分钟。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 40 秒。 | 第一条消息要完整读入：30,000 个 token，工作站要 4 到 5 秒，8 GB 显卡的笔记本要 14 到 20 秒。 |
+| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | Qwen3.6-35B-A3B、Ornith 1.5、Gemma 4 26B-A4B、Tiel Coder 35B-A3B |
+| --- | --- | --- | --- | --- |
+| **图片** | 在安装时对“Images?”选是。然后在聊天里点 **Picture**，或在你的应用里附上图片。AMD 显卡在 Linux 上通过处理器识别图片；在 Windows 上暂时还不行。 | 暂时不支持。 | 只能处理文字。 | 在安装时对“Images?”选是，之后和 Qwen3.8-Flash-Next 一样。显存不到 16 GB 的卡上，图片编码器在处理器上跑，一张图片要几秒。 |
+| **多个请求** | 默认一次只回答一个，其他请求排队等待。设置 `"parallel": 2` 可以同时回答多个（[BATCHING.md](docs/BATCHING.md)）；在 12 GB 显卡上，这会让每个回答变慢。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 |
+| **多个对话** | 保留最近的一个对话，所以后续消息几秒内就开始回答。加两个引擎参数可以在内存里保留多个（[详情](docs/DETAILS.md#using-it)）。 | 保留最近的一个对话。安装程序会问要不要在内存里保留多个，这样智能体和子代理轮流请求时不用重读提示（[原理](docs/GLM.md#several-conversations-at-once)）。 | 和 GLM 5.3 Flash 一样。 | 和 GLM 5.3 Flash 一样。 |
+| **长提示** | 对话的第一条消息要完整读入，大约每 30,000 个 token 需要 1 分钟。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 40 秒。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 29 秒。 | 第一条消息要完整读入：30,000 个 token，工作站要 4 到 5 秒，8 GB 显卡的笔记本要 14 到 20 秒。 |
 
 更多：[聊天记录存在哪里](docs/INSTALL.md#where-things-are-stored)、[API](docs/DETAILS.md#using-it)。
 
@@ -546,6 +591,19 @@ GLM 5.3 Flash 的其他量化版本暂时不支持：[还缺什么](docs/GLM.md#
 - **长文本分大块读入**（每次 1,024 个 token，显卡放不下的专家分批经过显卡），每秒读 780 到 1,250 个 token。
 
 每个部分及其数据：[docs/GLM.md](docs/GLM.md#how-it-uses-the-card)。
+
+### DeepSeek V4 Flash
+
+<p align="center"><img src="docs/media/how-it-works-dsv4.svg" width="860" alt="模型的 11,008 个专家：最常用的在显卡上，其余的在内存里，模型文件在 SSD 上"></p>
+
+- **这个模型是由 11,008 个小专家组成的团队**，43 层，每层 256 个。每个词只需要从每一层里用 6 个，另外每层还有一个每个词都要用的专家。
+- **你的显卡** 存放最常用的那些，32 GB 的卡上约 2,840 个：引擎会统计你的使用中哪些专家用得多。**你的内存** 存放其余的，
+  **你的处理器** 同时把它们算出来。**你的 SSD** 存放模型文件，文件原地使用，硬盘上不会多出一份副本。
+- **记对话很省地方：** 每个词完整地读最近 128 个词，更早的内容读压缩过的行，每 4 个或每 128 个词压成一行。每个 token 的上下文
+  只占 6,880 字节，所以上下文开得很长，显卡的空间也几乎都留给专家。
+- **长文本分大块读入**（每次 1,024 个 token），30,000 个 token 每秒读约 1,000 个。它还没有“先猜，再检查”：为它做的预猜模型还没接上。
+
+每个部分及其数据：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#how-it-differs-from-the-other-models)。
 
 ### Qwen3.6-35B-A3B
 
@@ -618,7 +676,7 @@ Qwen3.8-Flash-Next 来自 [Qwen 团队](https://huggingface.co/Qwen/Qwen3.8-Flas
 [ISTA-DASLab](https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF)、UkisAI（Swift 1.5）
 和 Unsloth 压缩。GLM 5.3 Flash 用的是
 [neuralll](https://huggingface.co/neuralll/GLM-5.3-Flash-GSQ-RCO-3.0bit-Q4Kattn-GGUF)、Unsloth 和 patrickbdevaney 的文件。
-Qwen3.6-35B-A3B 来自 Qwen 团队，Gemma 4 来自 Google，用的都是 [Unsloth](https://huggingface.co/unsloth) 的量化版本。Ornith 1.5 来自
+Qwen3.6-35B-A3B 来自 Qwen 团队，Gemma 4 来自 Google，DeepSeek V4 Flash 来自 DeepSeek，用的都是 [Unsloth](https://huggingface.co/unsloth) 的量化版本。Ornith 1.5 来自
 ornith-ai，用的是 [mudler](https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF) 的 APEX 量化版本。Tiel Coder 35B-A3B 是 [peculiar-ragdoll](https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP) 量化的 Ornith 1.5，[u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) 发现它能在 PolyStrata 上跑。PolyStrata 基于
 Niko1221 和各位贡献者的 [Strata](https://github.com/Niko1221/Strata)，并使用了
 [llama.cpp / ggml](https://github.com/ggml-org/llama.cpp) 的部分代码。完整致谢：

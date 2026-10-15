@@ -82,6 +82,10 @@ By the PC's RAM (ask the user whether they mainly want it for code - then the Co
 32 GB, 96 GB of RAM or more, a 114 GB download, no images. Take it only when the user asks for it, and read
 [GLM.md](GLM.md) first.
 
+`--family deepseek` (DeepSeek V4 Flash) runs on that engine too, as experimental: Linux, one NVIDIA card with
+32 GB, 72 GB of RAM or more by setup's estimate, a 91 GB download, no images. Take it only when the user asks for it,
+and read [DEEPSEEK.md](DEEPSEEK.md) first.
+
 `--family qwen36`, `--family ornith` and `--family gemma4` (Qwen3.6-35B-A3B, Ornith 1.5, Gemma 4 26B-A4B) are
 smaller models on GLM's engine, and experimental too: Linux or Windows, one NVIDIA card, an 11 to 24 GB download,
 about 15 to 28 GB of RAM beside an 8 GB card by setup's estimate, by size. On Windows setup compiles the engine

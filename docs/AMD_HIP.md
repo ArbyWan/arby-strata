@@ -379,7 +379,7 @@ same `hip_compat` headers as the main engine, with the CUDA driver's virtual mem
 (`hip_compat/cuda.h`). Linux only: there is no ready-made AMD engine, and setup refuses these models on an AMD
 card under Windows.
 
-- Install as for NVIDIA: `./setup.sh --family qwen36` (or `ornith`, `gemma4`, `tiel`, `glm`). Setup compiles the
+- Install as for NVIDIA: `./setup.sh --family qwen36` (or `ornith`, `gemma4`, `tiel`, `glm`, `deepseek`). Setup compiles the
   engine for the card into `engine-poly/` (`build_engine_poly_hip`), with ROCm from a system install or AMD's
   wheels in `.venv`, as for the main engine, and compiles again after a `git pull` that changed the engine.
 - Images stay off: the image encoder is a CUDA program.

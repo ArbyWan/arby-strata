@@ -3,7 +3,7 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · **日本語** · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt-BR.md)
 
 <p align="center"><b>大きな AI モデルを、手元の PC で動かす</b><br>
-Qwen3.8-Flash-Next、GLM 5.3 Flash、Qwen3.6、Ornith 1.5、Gemma 4、Tiel Coder · 無料のオープンソース</p>
+Qwen3.8-Flash-Next、GLM 5.3 Flash、DeepSeek V4 Flash、Qwen3.6、Ornith 1.5、Gemma 4、Tiel Coder · 無料のオープンソース</p>
 
 <p align="center"><img src="docs/media/speed.svg" width="820" alt="回答を書く速さ（トークン/秒）：8 GB のノート PC で Qwen3.6-35B-A3B は 94〜100、RTX 5090 で 385〜393"></p>
 
@@ -17,17 +17,18 @@ Qwen3.8-Flash-Next、GLM 5.3 Flash、Qwen3.6、Ornith 1.5、Gemma 4、Tiel Coder
 PolyStrata は、ふつうはサーバーが必要な大きな AI モデルを普通の PC で動かします。チャットをしたり、コードを書いたり、
 アプリやコーディングエージェントと連携したりできます。データが PC の外に出ることはありません。
 
-動かせるモデルは 6 つで、エンジンは 2 つです。
+動かせるモデルは 7 つで、エンジンは 2 つです。
 
 - **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)**：12 GB 以上の NVIDIA または AMD の
   グラフィックカード、Windows または Linux。画像も読めます。エンジンは
   [Strata](https://github.com/Niko1221/Strata) のものをそのまま使っています。
 
-残りの 5 つは PolyStrata のために書いたエンジンで動きます。NVIDIA カードが 1 枚必要です（[2 枚](docs/MULTI_GPU.md#the-strata-poly-models)でも動きます）。5 つとも Linux で動き、
+残りの 6 つは PolyStrata のために書いたエンジンで動きます。NVIDIA カードが 1 枚必要です（[2 枚](docs/MULTI_GPU.md#the-strata-poly-models)でも動きます）。6 つとも Linux で動き、
 小さい 4 つは Windows でも動きます。まだ実験的で、動かしたのは 32 GB のカードを載せた 1 台の PC と、
 小さい 4 つについては 8 GB のカードを載せたノート PC 1 台だけです。
 
 - **[GLM 5.3 Flash](docs/GLM.md)**：いちばん大きいモデル。ファイルは 79〜114 GB で、その大部分は RAM に置かれます。
+- **[DeepSeek V4 Flash](docs/DEEPSEEK.md)**：ファイルは 91 GB で、これも大部分は RAM に置かれます。会話を覚えておくための VRAM が少なく、128K のコンテキストでも 32K より 0.7 GB 多いだけです。
 - **[Qwen3.6-35B-A3B](docs/BACKENDS.md)**：ファイルは 13〜23 GB。画像も読めます。
 - **[Ornith 1.5](docs/BACKENDS.md)**：構造は Qwen3.6-35B-A3B と同じで、重みが違います。ファイルは 14〜24 GB。画像も読めます。
 - **[Gemma 4 26B-A4B](docs/BACKENDS.md)**：ファイルは 11〜17 GB。画像も読めます。
@@ -96,6 +97,26 @@ PolyStrata が 1 台のワークステーションで、短いチャットと 29
 
 GLM 5.3 Flash はほかのモデルよりずっと大きく、このカードの 32 GB にはエキスパートの約 5 分の 1 しか載らないため、書き出しは遅くなります。
 測定の内容と方法：[docs/GLM.md](docs/GLM.md#what-it-was-measured-on)（英語）。
+
+### DeepSeek V4 Flash
+
+PolyStrata が同じワークステーションで、短いチャットと 30K トークンのプロンプトで測った値です。
+
+<table>
+<tr><th>NVIDIA: RTX 5090 (32 GB), Xeon Platinum 8470Q (25 vCPU), 120 GB RAM</th></tr>
+<tr><td>
+
+| サイズ | 回答の書き出し | プロンプトの読み込み |
+| --- | ---: | ---: |
+| **UD-IQ2_XXS** | 56 tokens/s | 1,040 tokens/s |
+
+</td></tr>
+</table>
+
+同じ PC で llama.cpp は毎秒 25〜28 トークンを書き出し、3,384 トークンのプロンプトを毎秒 96 トークンで読みました。
+128K のコンテキストで 116,473 トークンのプロンプトを読んで答えるまで 174 秒、512K のコンテキストで 487,529 トークンの
+プロンプトでは 32 分かかり、どちらも中に隠した 3 つの事実はすべて見つかりました。
+測定の内容と方法：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-it-was-measured-on)（英語）。
 
 ### Qwen3.6-35B-A3B
 
@@ -209,7 +230,7 @@ PolyStrata が 2 台の PC で、短いチャットと 3 万〜3.2 万トーク�
 
 10,000 トークンのプロンプトは、ノート PC で毎秒 1,670 トークン、ワークステーションで毎秒 6,300 トークンで読みます。
 
-PolyStrata 独自のエンジンで動く 5 つのモデルは、付属のベンチマークで測りました。あなたの PC でも実行できます：
+PolyStrata 独自のエンジンで動く 6 つのモデルは、付属のベンチマークで測りました。あなたの PC でも実行できます：
 `python polystrata.py benchmark --model <name> --prompt-tokens 24000`
 （[何を送り、何を表示するか](docs/BACKENDS.md#benchmark)、英語）。
 ほかの人が自分のカードで測った結果と、あなたの PC で llama.cpp と比べる方法：
@@ -253,6 +274,20 @@ PolyStrata 独自のエンジンで動く 5 つのモデルは、付属のベン
 Windows で 24 GB のカード 1 枚と 128 GB の RAM で動かしたユーザーの[報告](https://github.com/VecSzn/PolyStrata/issues/10)があります。
 
 全体の一覧：[docs/GLM.md](docs/GLM.md#what-you-need)（英語）。
+
+### DeepSeek V4 Flash
+
+| | |
+| --- | --- |
+| **グラフィックカード** | **NVIDIA** GeForce RTX 20 シリーズ以降のカード 1 枚。動かしたことがあるのは **VRAM 32 GB** だけです。エキスパートを載せる前に約 11.5 GB を使うので、12 GB のカードでは起動できません。 |
+| **RAM** | 32 GB のカードと組み合わせる場合、**72 GB 以上**（インストーラーの見積もり）。カードが小さいほど RAM が多く必要です（[どのくらいか](#どのモデルを選べばいい)）。実際に動かしたのは 120 GB です。 |
+| **ディスク** | モデルの 3 つのファイルで 91 GB。SSD に置いてください。 |
+| **OS** | Linux と、最新の NVIDIA ドライバー。 |
+
+ほかはすべてインストーラーが用意します。GLM 5.3 Flash と同じです。まだ試していないもの：Windows、AMD のカード、2 枚のカード。
+読めるのはテキストだけです。
+
+全体の一覧：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-you-need)（英語）。
 
 ### Qwen3.6-35B-A3B
 
@@ -340,15 +375,15 @@ PolyStrata のインストール、起動、停止もできます。
 
 - どのモデルを、どのサイズで使うか
 - コンテキストをどのくらいにするか（モデルが覚えておけるテキストの量）
-- 画像を読ませるかどうか（GLM 5.3 Flash は画像を読めません）
+- 画像を読ませるかどうか（GLM 5.3 Flash と DeepSeek V4 Flash は画像を読めません）
 
 **Mac（Apple シリコン、M1〜M5、macOS 15 以降）：** まず一度だけ Apple の Command Line Tools をインストールします（ターミナルで `xcode-select --install`。Xcode 本体は不要です）。次に PolyStrata フォルダーでターミナルを開き、**`./setup.sh`** を実行します。Mac 用エンジンをお使いの Mac 上でビルドし（約 7 分）、同じ質問をしてからモデルをダウンロードして起動します。次回からは `./setup.sh` ですぐに起動します。どのサイズが Mac に合うかと速度：[docs/MAC.md](docs/MAC.md)。
 
-毎回 Enter を押せば、おすすめの答えになります。そのあとモデル（Qwen3.8-Flash-Next は約 70 GB、GLM 5.3 Flash は 79〜114 GB、ほかの 4 つは 11〜24 GB）をダウンロードして起動します。
+毎回 Enter を押せば、おすすめの答えになります。そのあとモデル（Qwen3.8-Flash-Next は約 70 GB、GLM 5.3 Flash は 79〜114 GB、DeepSeek V4 Flash は 91 GB、ほかの 4 つは 11〜24 GB）をダウンロードして起動します。
 ダウンロードが止まったら、もう一度実行してください。続きから再開します。ブラウザーで PolyStrata アプリが
 `http://127.0.0.1:8080` に開きます。
 
-6 つともインストーラーのモデル一覧にあります。`./setup.sh --family glm`（または `qwen36`、`ornith`、`gemma4`、`tiel`）なら
+7 つともインストーラーのモデル一覧にあります。`./setup.sh --family glm`（または `deepseek`、`qwen36`、`ornith`、`gemma4`、`tiel`）なら
 直接そこへ進みます（[何を尋ね、何を書き出すか](docs/GLM.md#install)、英語）。
 
 > **モデルの起動中、1-3 分ほど PC が重くなったり、反応しなくなったりすることがあります**（初回がいちばん長いです）。
@@ -416,6 +451,17 @@ RAM の数字は、動かしたことのある 1 台の PC をもとにしたイ
 
 GLM 5.3 Flash のほかの量子化にはまだ対応していません：[足りないもの](docs/GLM.md#what-is-missing)（英語）。
 
+### DeepSeek V4 Flash
+
+いまのところ 1 サイズです。
+
+| サイズ | 内容 | ダウンロード | 32 GB のカードと組む場合の RAM |
+| --- | --- | ---: | ---: |
+| **UD-IQ2_XXS** | モデル全体、約 2 ビット（[Unsloth](https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF)） | 91 GB | 72 GB |
+
+GLM 5.3 Flash と同じく、カードに載らないエキスパートは RAM に置きます。インストーラーの見積もりでは、24 GB のカードなら約 80 GB、
+16 GB のカードなら約 89 GB で、12 GB のカードでは起動しません。試したのは 32 GB のカードだけです。
+
 ### Qwen3.6-35B-A3B
 
 いまのところ 3 サイズです。インストーラーは UD-Q3_K_M を選び、RAM が足りない PC では UD-Q2_K_XL を選びます。UD-Q4_K_M は名前で指定します（`--model UD-Q4_K_M`）。
@@ -470,7 +516,7 @@ GLM 5.3 Flash のほかの量子化にはまだ対応していません：[足�
 
 ## 使い方
 
-6 つのモデルの使い方は同じです。同じアプリ、同じ API です。
+7 つのモデルの使い方は同じです。同じアプリ、同じ API です。
 
 <p align="center"><img src="docs/media/runpagoda.png" width="900" alt="PolyStrata アプリの Monitor タブと、その横で動くコーディングエージェント"><br>
 <sub>PolyStrata アプリの <b>Monitor</b>（左）。コーディングエージェントが動画の五重塔の庭を書いているところ（右）。<a href="https://github.com/Niko1221/Strata">Strata</a> のスクリーンショットです。</sub></p>
@@ -490,12 +536,12 @@ GLM 5.3 Flash のほかの量子化にはまだ対応していません：[足�
 
 モデルによって違うところ：
 
-| | Qwen3.8-Flash-Next | GLM 5.3 Flash | Qwen3.6-35B-A3B、Ornith 1.5、Gemma 4 26B-A4B、Tiel Coder 35B-A3B |
-| --- | --- | --- | --- |
-| **画像** | セットアップで「Images?」に yes と答えます。そのあとチャットで **Picture** をクリックするか、アプリで画像を添付します。AMD のカードは、Linux ではプロセッサーを使って画像を読みます。Windows ではまだ読めません。 | まだ読めません。 | セットアップで「Images?」に yes と答えます。あとは Qwen3.8-Flash-Next と同じです。16 GB 未満のカードでは画像エンコーダーがプロセッサーで動き、画像 1 枚に数秒かかります。 |
-| **リクエストは 1 つずつ** | 初期設定では PolyStrata は 1 つのリクエストに答え、ほかは待ちます。複数に同時に答えるには`"parallel": 2` を設定します（[BATCHING.md](docs/BATCHING.md)）。12 GB のカードでは、それぞれの回答が遅くなります。 | 1 つずつ答え、ほかは待ちます。 | 1 つずつ答え、ほかは待ちます。 |
-| **複数の会話** | 直前の会話は保持されるので、2 通目以降は数秒で始まります。エンジンの引数を 2 つ足すと、複数の会話を RAM に保持できます（[詳細](docs/DETAILS.md#using-it)）。 | 直前の会話は保持されます。セットアップで、複数の会話を RAM に保持するかどうかを尋ねます。保持すると、エージェントとサブエージェントが交互に使っても、プロンプトを読み直しません（[仕組み](docs/GLM.md#several-conversations-at-once)）。 | GLM 5.3 Flash と同じです。 |
-| **長いプロンプト** | PolyStrata はチャットの最初のメッセージをすべて読みます。30,000 トークンあたり約 1 分かかります。2 通目以降のメッセージは数秒で始まります。 | 最初のメッセージはすべて読みます。30,000 トークンあたり約 40 秒かかります。 | 最初のメッセージは全部読みます。30,000 トークンで、ワークステーションは 4〜5 秒、8 GB のノート PC は 14〜20 秒です。 |
+| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | Qwen3.6-35B-A3B、Ornith 1.5、Gemma 4 26B-A4B、Tiel Coder 35B-A3B |
+| --- | --- | --- | --- | --- |
+| **画像** | セットアップで「Images?」に yes と答えます。そのあとチャットで **Picture** をクリックするか、アプリで画像を添付します。AMD のカードは、Linux ではプロセッサーを使って画像を読みます。Windows ではまだ読めません。 | まだ読めません。 | テキストだけです。 | セットアップで「Images?」に yes と答えます。あとは Qwen3.8-Flash-Next と同じです。16 GB 未満のカードでは画像エンコーダーがプロセッサーで動き、画像 1 枚に数秒かかります。 |
+| **リクエストは 1 つずつ** | 初期設定では PolyStrata は 1 つのリクエストに答え、ほかは待ちます。複数に同時に答えるには`"parallel": 2` を設定します（[BATCHING.md](docs/BATCHING.md)）。12 GB のカードでは、それぞれの回答が遅くなります。 | 1 つずつ答え、ほかは待ちます。 | 1 つずつ答え、ほかは待ちます。 | 1 つずつ答え、ほかは待ちます。 |
+| **複数の会話** | 直前の会話は保持されるので、2 通目以降は数秒で始まります。エンジンの引数を 2 つ足すと、複数の会話を RAM に保持できます（[詳細](docs/DETAILS.md#using-it)）。 | 直前の会話は保持されます。セットアップで、複数の会話を RAM に保持するかどうかを尋ねます。保持すると、エージェントとサブエージェントが交互に使っても、プロンプトを読み直しません（[仕組み](docs/GLM.md#several-conversations-at-once)）。 | GLM 5.3 Flash と同じです。 | GLM 5.3 Flash と同じです。 |
+| **長いプロンプト** | PolyStrata はチャットの最初のメッセージをすべて読みます。30,000 トークンあたり約 1 分かかります。2 通目以降のメッセージは数秒で始まります。 | 最初のメッセージはすべて読みます。30,000 トークンあたり約 40 秒かかります。 | 最初のメッセージはすべて読みます。30,000 トークンあたり約 29 秒かかります。 | 最初のメッセージは全部読みます。30,000 トークンで、ワークステーションは 4〜5 秒、8 GB のノート PC は 14〜20 秒です。 |
 
 詳しくは：[チャットの保存場所](docs/INSTALL.md#where-things-are-stored)、[API](docs/DETAILS.md#using-it)。
 
@@ -567,6 +613,22 @@ GLM 5.3 Flash のほかの量子化にはまだ対応していません：[足�
   速さは毎秒 780〜1,250 トークンです。
 
 各部分とその数字：[docs/GLM.md](docs/GLM.md#how-it-uses-the-card)（英語）。
+
+### DeepSeek V4 Flash
+
+<p align="center"><img src="docs/media/how-it-works-dsv4.svg" width="860" alt="モデルの 11,008 個のエキスパート：よく使うものはグラフィックカードに、残りは RAM に、モデルファイルは SSD に"></p>
+
+- **モデルは 11,008 個の小さなエキスパートのチームです。** 43 層それぞれに 256 個あります。1 単語ごとに必要なのは、各層から 6 個と、
+  どの単語も使う 1 個だけです。
+- **グラフィックカード** には、よく使われるものを置きます。32 GB のカードで約 2,840 個です。エンジンはどれが使われたかを数えます。
+  **RAM** は残りを持ち、**プロセッサー** がそれを同時に計算します。**SSD** はモデルファイルを持ちます。ファイルは置いた場所でそのまま使い、
+  2 つ目のコピーは作りません。
+- **会話の記憶が小さい：** 各単語は直前の 128 単語をそのまま読み、それより前は圧縮した行で読みます。4 単語ごと、または 128 単語ごとに
+  1 行です。コンテキスト 1 トークンあたり 6,880 バイトなので、長いコンテキストにしてもカードの空きはほとんどエキスパートに使えます。
+- **長いテキストは大きなまとまりで読みます**（一度に 1,024 トークン）。30,000 トークンなら毎秒約 1,000 トークンです。
+  予想してから確認する仕組みはまだありません。このモデル用の予想モデルはまだ動かしていません。
+
+各部分とその数字：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#how-it-differs-from-the-other-models)（英語）。
 
 ### Qwen3.6-35B-A3B
 
@@ -652,8 +714,8 @@ GLM 5.3 Flash のほかの量子化にはまだ対応していません：[足�
 Qwen3.8-Flash-Next は [Qwen チーム](https://huggingface.co/Qwen/Qwen3.8-Flash-Next) のモデルです。圧縮は
 [ISTA-DASLab](https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF)、UkisAI（Swift 1.5）、Unsloth によるものです。
 GLM 5.3 Flash は [neuralll](https://huggingface.co/neuralll/GLM-5.3-Flash-GSQ-RCO-3.0bit-Q4Kattn-GGUF)、Unsloth、
-patrickbdevaney のファイルで動きます。Qwen3.6-35B-A3B は Qwen チーム、Gemma 4 は Google のモデルで、どちらも
-[Unsloth](https://huggingface.co/unsloth) の量子化を使っています。Ornith 1.5 は ornith-ai のモデルで、
+patrickbdevaney のファイルで動きます。Qwen3.6-35B-A3B は Qwen チーム、Gemma 4 は Google、DeepSeek V4 Flash は DeepSeek のモデルで、
+3 つとも [Unsloth](https://huggingface.co/unsloth) の量子化を使っています。Ornith 1.5 は ornith-ai のモデルで、
 [mudler](https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF) の APEX 量子化を使っています。Tiel Coder 35B-A3B は [peculiar-ragdoll](https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP) が量子化した Ornith 1.5 で、PolyStrata で動くことは [u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) が見つけました。PolyStrata は Niko1221 とコントリビューターによる [Strata](https://github.com/Niko1221/Strata) をもとにしており、
 [llama.cpp / ggml](https://github.com/ggml-org/llama.cpp) の一部を使っています。すべてのクレジット：
 [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md#credits)。PolyStrata は [MIT License](LICENSE) のオープンソースです。一部のパーツと

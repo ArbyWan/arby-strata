@@ -78,8 +78,9 @@ experimental build for older cards, but that is for Qwen3.8-Flash-Next only
 This engine helps MoE models that don't fit in VRAM. A dense model like Bonsai uses all its weights for every
 token, so there are no experts to split, and the 1-bit Bonsai models already fit on a small card. LFM2.5's MoE
 (8B-A1B) fits whole on an 8 GB card, so plain llama.cpp is fine there; it could help on 2 to 4 GB cards.
-Bigger MoEs are the good fit: Ling-2.6-flash (104B, 7.4B active) and DeepSeek V4 Flash are both on the list.
-Requests go in the issues, and the ones people ask for most come first.
+Bigger MoEs are the good fit. DeepSeek V4 Flash runs now (`--family deepseek`, [DEEPSEEK.md](DEEPSEEK.md)), and
+Ling-2.6-flash (104B, 7.4B active) is on the list. Requests go in the issues, and the ones people ask for most come
+first.
 
 ### Can I run a fine-tune, or another model with the same architecture?
 

@@ -18,15 +18,17 @@ a second machine, a Windows laptop whose card has 8 GB.
 | Ornith 1.5 35B-A3B | `qwen35moe` | `strata-poly` | APEX-MTP-I-Compact, I-Mini and I-Quality, 14.4 to 23.7 GB | draft block in the file |
 | Gemma 4 26B-A4B | `gemma4` | `strata-poly` | Unsloth UD-Q3_K_M, UD-Q2_K_XL and UD-Q4_K_M, 10.5 to 16.9 GB | its draft model, a file of 0.46 GB |
 | Tiel Coder 35B-A3B | `qwen35moe` | `strata-poly` | peculiar-ragdoll's UD-Q3_K_XL, UD-IQ3_XXS and UD-Q4_K_XL, 13.6 to 22.7 GB | draft block in the file |
+| DeepSeek V4 Flash | `deepseek4` | `strata-poly` | Unsloth UD-IQ2_XXS, three files, 90.9 GB | repeats only: its draft model is not run yet |
 
 `strata` is the first engine and runs Qwen3.8 only; nothing in it changed. `strata-poly` is the engine that reads a
-GGUF in place, and it now has three architectures. It was called `strata-glm`, after its first model; an install
+GGUF in place, and it now has four architectures. It was called `strata-glm`, after its first model; an install
 from then keeps its engine and moves to the new name the next time setup updates it.
 
 ## Install
 
-Setup installs all six. The four new models are in its list of models, and each has a family name that goes
-straight to it:
+Setup installs all seven. The four new models are in its list of models, and each has a family name that goes
+straight to it. GLM 5.3 Flash and DeepSeek V4 Flash, the two large ones, have pages of their own,
+[GLM.md](GLM.md) and [DEEPSEEK.md](DEEPSEEK.md):
 
 ```bash
 ./setup.sh --family qwen36
@@ -520,6 +522,10 @@ from hand-written configs, as for the last table below.
 | GLM 5.3 Flash 3.0bit | 32 GB | 29,364 | 36.3 to 37.5 | 786 to 810 | 60 to 64 | 61 to 62 | 50% to 52% |
 | GLM 5.3 Flash UD-IQ2_XXS | 32 GB | 29,364 | 29.0 | 1,015 to 1,016 | 48 | 44 | 52% |
 | GLM 5.3 Flash REAP50-Q3_K_M | 32 GB | 29,364 | 22.8 to 22.9 | 1,289 to 1,292 | 62 | 60 to 64 | 58% to 59% |
+| DeepSeek V4 Flash UD-IQ2_XXS | 32 GB | 29,750 | 28.7 to 28.8 | 1,038 to 1,040 | 56 | 39 to 44 | 73% |
+
+DeepSeek V4 Flash's row is of 2026-10-15, as setup installs the model, with the build that added it
+([DEEPSEEK.md](DEEPSEEK.md)).
 
 The build before that change, three hours earlier:
 
