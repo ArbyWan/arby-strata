@@ -164,8 +164,9 @@ int test_squeeze(bool overlap, int ratio, int dim) {
     return bad;
 }
 
-int test_attend(bool with_sel, int ratio) {
-    const int dim = 512, heads = 8, window = 16, rows = 5, top = 6;
+// rows from GROUP_ROWS (32) take the batch kernel; 12 heads leave its second group of 8 short
+int test_attend(bool with_sel, int ratio, int rows, int heads, int window) {
+    const int dim = 512, top = 6;
     const int64_t pos = 60;
     const int ring = window + rows, n_comp = (int) ((pos + rows) / ratio);
     auto q = random((size_t) rows * heads * dim, 0.05f);
@@ -212,7 +213,7 @@ int test_attend(bool with_sel, int ratio) {
         }
     }
     char what[64];
-    std::snprintf(what, sizeof what, "attend ratio %d%s", ratio, with_sel ? ", picked rows" : "");
+    std::snprintf(what, sizeof what, "attend ratio %d%s, %d tokens", ratio, with_sel ? ", picked" : "", rows);
     const int bad = report(what, got, want, 1e-3);
     for (void* p : {(void*) d_q, (void*) d_s, (void*) d_raw, (void*) d_comp, (void*) d_sel, (void*) d_out}) cudaFree(p);
     return bad;
@@ -274,9 +275,12 @@ int main() {
     bad += test_squeeze(true, 4, 512);
     bad += test_squeeze(true, 4, 128);
     bad += test_squeeze(false, 128, 512);
-    bad += test_attend(false, 128);
-    bad += test_attend(true, 4);
-    bad += test_attend(false, 4);
+    bad += test_attend(false, 128, 5, 8, 16);
+    bad += test_attend(true, 4, 5, 8, 16);
+    bad += test_attend(false, 4, 5, 8, 16);
+    bad += test_attend(false, 128, 40, 12, 40);
+    bad += test_attend(true, 4, 40, 12, 40);
+    bad += test_attend(false, 4, 40, 12, 40);
     bad += test_index();
     if (cudaGetLastError() != cudaSuccess) {
         std::printf("CUDA error\n");

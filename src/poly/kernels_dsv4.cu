@@ -19,6 +19,10 @@ constexpr int SELECT_THREADS = 1024;
 constexpr int ATTEND_THREADS = 256;
 constexpr int SCORE_KEYS = 32;      // dsv4_idx_score: the keys a block takes
 constexpr int IDX_DIM = 128;        // an indexer key's values
+constexpr int GROUP_HEADS = 8;      // attend_rows_kernel: the heads of a token a block takes, a warp each
+constexpr int GROUP_KEYS = WARP;    // the keys it holds in shared memory at a time, a lane each
+constexpr int GROUP_ROWS = 32;      // dsv4_attend takes attend_rows_kernel from this many tokens a call
+constexpr int GROUP_DIM = 512;      // the longest head it takes
 
 cudaStream_t cs(void* s) { return (cudaStream_t) s; }
 int grid(int n, int b) { return (n + b - 1) / b; }
@@ -383,6 +387,111 @@ __global__ void attend_kernel(const float* __restrict__ q, const uint16_t* __res
     }
 }
 
+// attend_kernel for a batch of tokens.  The heads share their one key row, so a block takes GROUP_HEADS heads of a
+// token, a warp each, and reads the keys GROUP_KEYS at a time into shared memory once for all of them; the softmax
+// runs along the keys, from the sink.  attend_kernel read every key twice for every head.
+__global__ void attend_rows_kernel(const float* __restrict__ q, const uint16_t* __restrict__ raw, int ring,
+                                   int window, const uint16_t* __restrict__ comp, int ratio,
+                                   const int32_t* __restrict__ sel, int sel_stride, int top,
+                                   const float* __restrict__ sinks, float* __restrict__ out, int dim, int n_head,
+                                   float scale, long long pos, const long long* at) {
+    // GROUP_HEADS rows of query values; GROUP_KEYS rows of keys, a word a pair of halves and four words more a row:
+    // read 16 bytes at a time, the 8 lanes of a quarter warp then reach every bank once, along a row or down a
+    // column; a probability a head and key
+    extern __shared__ float smem[];
+    __shared__ int row[GROUP_KEYS];
+    const int pitch = dim / 2 + 4;
+    float* sq = smem;
+    uint32_t* sk = (uint32_t*) (sq + GROUP_HEADS * dim);
+    float* sp = (float*) (sk + GROUP_KEYS * pitch);
+    const int lane = threadIdx.x % WARP, w = threadIdx.x / WARP;
+    const int h = blockIdx.x * GROUP_HEADS + w, t = blockIdx.y;
+    const long long p = position(at, pos, 1, t);
+    const int n_raw = (int) min((long long) window, p + 1);
+    const long long first_raw = p + 1 - n_raw;
+    int n_comp = 0;
+    if (comp) {
+        const long long visible = (p + 1) / ratio;
+        n_comp = sel ? (int) min(visible, (long long) top) : (int) visible;
+    }
+    const int n_key = n_raw + n_comp;
+    for (int i = threadIdx.x; i < GROUP_HEADS * dim; i += blockDim.x) {
+        const int hh = blockIdx.x * GROUP_HEADS + i / dim;
+        sq[i] = hh < n_head ? q[(size_t(t) * n_head + hh) * dim + i % dim] : 0.0f;
+    }
+    // this lane's part of the head's output: values 8 lane to 8 lane + 7 of every 256
+    float o[GROUP_DIM / WARP] = {};
+    const int chunks = dim / (8 * WARP);
+    float m = h < n_head ? sinks[h] : 0.0f, l = 1.0f;
+    for (int k0 = 0; k0 < n_key; k0 += GROUP_KEYS) {
+        const int nk = min(GROUP_KEYS, n_key - k0);
+        __syncthreads();   // the keys before are read
+        if (threadIdx.x < GROUP_KEYS) {
+            const int k = k0 + threadIdx.x;
+            row[threadIdx.x] = k >= k0 + nk ? 0
+                               : k < n_raw  ? int((first_raw + k) % ring)
+                               : sel        ? sel[size_t(t) * sel_stride + k - n_raw]
+                                            : k - n_raw;
+        }
+        __syncthreads();
+        for (int i = threadIdx.x; i < GROUP_KEYS * (dim / 8); i += blockDim.x) {
+            const int kk = i / (dim / 8), c = i % (dim / 8);
+            uint4 v = make_uint4(0, 0, 0, 0);
+            if (kk < nk) v = ((const uint4*) ((k0 + kk < n_raw ? raw : comp) + size_t(row[kk]) * dim))[c];
+            *(uint4*) &sk[kk * pitch + 4 * c] = v;
+        }
+        __syncthreads();
+        float s = -INFINITY;
+        if (lane < nk) {
+            const uint4* kr = (const uint4*) (sk + lane * pitch);
+            const float4* qh = (const float4*) (sq + w * dim);
+            float d0 = 0.0f, d1 = 0.0f;
+            for (int c = 0; c < dim / 8; ++c) {
+                const uint4 kv = kr[c];
+                const float4 qa = qh[2 * c], qb = qh[2 * c + 1];
+                const float2 a = __half22float2(*(const __half2*) &kv.x), b = __half22float2(*(const __half2*) &kv.y);
+                const float2 e = __half22float2(*(const __half2*) &kv.z), f = __half22float2(*(const __half2*) &kv.w);
+                d0 += qa.x * a.x + qa.y * a.y + qa.z * b.x + qa.w * b.y;
+                d1 += qb.x * e.x + qb.y * e.y + qb.z * f.x + qb.w * f.y;
+            }
+            s = (d0 + d1) * scale;
+        }
+        const float mn = fmaxf(m, warp_max(s));
+        const float alpha = expf(m - mn), e = lane < nk ? expf(s - mn) : 0.0f;
+        l = l * alpha + warp_sum(e);
+        m = mn;
+        sp[w * GROUP_KEYS + lane] = e;
+        __syncwarp();
+#pragma unroll
+        for (int j = 0; j < GROUP_DIM / WARP; ++j) o[j] *= alpha;
+        for (int k = 0; k < nk; ++k) {
+            const float pk = sp[w * GROUP_KEYS + k];
+            const uint4* kr = (const uint4*) (sk + k * pitch) + lane;
+#pragma unroll
+            for (int j = 0; j < GROUP_DIM / (8 * WARP); ++j)   // whole, so that o stays in registers
+                if (j < chunks) {
+                    const uint4 v = kr[WARP * j];
+                    const float2 a = __half22float2(*(const __half2*) &v.x), b = __half22float2(*(const __half2*) &v.y);
+                    const float2 c = __half22float2(*(const __half2*) &v.z), d = __half22float2(*(const __half2*) &v.w);
+                    float* oj = o + 8 * j;
+                    oj[0] += pk * a.x, oj[1] += pk * a.y, oj[2] += pk * b.x, oj[3] += pk * b.y;
+                    oj[4] += pk * c.x, oj[5] += pk * c.y, oj[6] += pk * d.x, oj[7] += pk * d.y;
+                }
+        }
+        __syncwarp();   // sp is written again for the next keys
+    }
+    if (h >= n_head) return;
+    float* oh = out + (size_t(t) * n_head + h) * dim + 8 * lane;
+    const float inv = 1.0f / l;
+#pragma unroll
+    for (int j = 0; j < GROUP_DIM / (8 * WARP); ++j)
+        if (j < chunks) {
+            const float* oj = o + 8 * j;
+            *(float4*) &oh[8 * WARP * j] = make_float4(oj[0] * inv, oj[1] * inv, oj[2] * inv, oj[3] * inv);
+            *(float4*) &oh[8 * WARP * j + 4] = make_float4(oj[4] * inv, oj[5] * inv, oj[6] * inv, oj[7] * inv);
+        }
+}
+
 __global__ void permute_kernel(const float* __restrict__ x, float* __restrict__ y, int n, int groups, int rows,
                                bool back) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -453,6 +562,20 @@ void dsv4_attend(const float* q, const uint16_t* raw, int ring, int window, cons
                  const int32_t* sel, int sel_stride, int top, const float* sinks, float* out, int dim, int n_head,
                  float scale, int64_t pos, int rows, void* stream, const long long* at, int room) {
     if (rows <= 0) return;
+    // a batch: its shared memory does not grow with the keys.  A few tokens keep a block a head, which spreads a
+    // token over more of the card.
+    if (rows >= GROUP_ROWS && dim % (8 * WARP) == 0 && dim <= GROUP_DIM) {
+        const size_t smem = (size_t(GROUP_HEADS) * dim + GROUP_HEADS * GROUP_KEYS) * sizeof(float) +
+                            size_t(GROUP_KEYS) * (dim / 2 + 4) * sizeof(uint32_t);
+        static unsigned done = 0;
+        if (smem <= allow_smem(attend_rows_kernel, done)) {
+            attend_rows_kernel<<<dim3(grid(n_head, GROUP_HEADS), rows), GROUP_HEADS * WARP, smem, cs(stream)>>>(
+                q, raw, ring, window, comp, ratio, sel, sel_stride, top, sinks, out, dim, n_head, scale,
+                (long long) pos, at);
+            ck("dsv4_attend");
+            return;
+        }
+    }
     long long keys = window;
     if (comp) keys += sel ? top : (at ? room : pos + rows) / ratio;
     const size_t smem = (size_t(dim) + 2 * size_t(keys)) * sizeof(float);
