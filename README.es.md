@@ -17,19 +17,22 @@ Qwen3.8-Flash-Next, GLM 5.3 Flash, DeepSeek V4 Flash, Qwen3.6, Ornith 1.5, Gemma
 PolyStrata ejecuta modelos de IA grandes en un PC normal, modelos que normalmente necesitan un servidor.
 Conversan, escriben código y funcionan con tus aplicaciones y agentes de programación. Nada sale de tu PC.
 
-Ejecuta siete modelos, con dos motores:
+Ejecuta ocho modelos, con dos motores:
 
 - **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** en una tarjeta gráfica NVIDIA o AMD de
   12 GB o más, en Windows o Linux. También entiende imágenes. Su motor es el de
   [Strata](https://github.com/Niko1221/Strata), sin cambios.
 
-Los otros seis usan un motor escrito para PolyStrata, con una tarjeta NVIDIA o [dos](docs/MULTI_GPU.md#the-strata-poly-models): los seis en Linux, y los cuatro más
-pequeños también en Windows. Son experimentales: solo han funcionado en un PC con una tarjeta de 32 GB, y los cuatro más
+Los otros siete usan un motor escrito para PolyStrata, con una tarjeta NVIDIA o [dos](docs/MULTI_GPU.md#the-strata-poly-models): los siete en Linux, y los cinco más
+pequeños también en Windows. Son experimentales: solo han funcionado en un PC con una tarjeta de 32 GB, y los cinco más
 pequeños además en un portátil con una tarjeta de 8 GB.
 
 - **[GLM 5.3 Flash](docs/GLM.md)**, el más grande: un archivo de 79 a 114 GB, que en su mayor parte se queda en la RAM.
 - **[DeepSeek V4 Flash](docs/DEEPSEEK.md)**, un archivo de 91 GB, que en su mayor parte también se queda en la RAM. Su
   memoria de una conversación es pequeña: un contexto de 128K ocupa solo 0,7 GB más de VRAM que uno de 32K.
+- **[LFM2.5-24B-A2B](docs/LFM.md)** de Liquid AI, un archivo de 11 a 25 GB. La mayoría de sus capas no tiene
+  atención, así que una conversación larga ocupa poca VRAM: un contexto de 128K solo ocupa 2 GB más que 32K. Su
+  licencia solo permite el uso comercial a empresas que facturan menos de 10 millones de dólares al año.
 - **[Qwen3.6-35B-A3B](docs/BACKENDS.md)**, un archivo de 13 a 23 GB. También entiende imágenes.
 - **[Ornith 1.5](docs/BACKENDS.md)**, con la arquitectura de Qwen3.6-35B-A3B y otros pesos: un archivo de 14 a 24 GB.
   También entiende imágenes.
@@ -120,6 +123,42 @@ Medido para PolyStrata en la misma estación de trabajo, con un chat corto y un 
 En el mismo PC, llama.cpp escribía de 25 a 28 tokens por segundo y leía un prompt de 3,384 tokens a 96. Un prompt de
 116,473 tokens, en un contexto de 128K, se leyó y se respondió en 174 segundos, y uno de 487,529 tokens, en un
 contexto de 512K, en 32 minutos; las dos veces se encontraron los tres datos escondidos en él. Qué se midió y cómo: [docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-it-was-measured-on) (en inglés).
+
+### LFM2.5-24B-A2B
+
+Medido como Qwen3.6-35B-A3B más abajo, en los mismos dos PC, con un prompt de unos 30,000 tokens.
+
+<table>
+<tr><th>NVIDIA: RTX 4070 Laptop (8 GB), Core i7-14700HX, 32 GB de RAM</th><th>NVIDIA: RTX 5090 (32 GB), Xeon Platinum 8470Q (25 vCPU), 120 GB de RAM</th></tr>
+<tr><td>
+
+| Tamaño | Escribe respuestas | Lee tu prompt |
+| --- | ---: | ---: |
+| **UD-Q4_K_XL** | 70-73 tokens/s | 3,120 tokens/s |
+| **UD-Q3_K_XL** | 88 tokens/s | 3,270-3,300 tokens/s |
+| **QAD-Q4_0** | 77-78 tokens/s | 3,190-3,220 tokens/s |
+| **UD-Q6_K_XL** | 42-43 tokens/s | 2,640 tokens/s |
+| **Q8_0** | 23-26 tokens/s | 2,380-2,600 tokens/s |
+
+</td><td>
+
+| Tamaño | Escribe respuestas | Lee tu prompt |
+| --- | ---: | ---: |
+| **UD-Q4_K_XL** | 476-477 tokens/s | 21,310-21,320 tokens/s |
+| **UD-Q3_K_XL** | 490-497 tokens/s | 21,130-21,170 tokens/s |
+| **QAD-Q4_0** | 498 tokens/s | 21,650-21,670 tokens/s |
+| **UD-Q6_K_XL** | 424 tokens/s | 19,200-19,340 tokens/s |
+| **Q8_0** | 372-373 tokens/s | 21,240-21,270 tokens/s |
+
+</td></tr>
+</table>
+
+En el portátil Q8_0 llena los 32 GB de RAM, y por eso va lento allí; la estación de trabajo guarda entero cada tamaño.
+
+En el portátil llama.cpp b11540 con `--n-cpu-moe 25`, el mejor de los ajustes probados allí, leyó un prompt de 32,000
+tokens a 530 tokens/s y escribió después a 53; PolyStrata lo leyó a 3,100 y escribió a 69-71. En la estación de
+trabajo llama-bench leyó 29,816 tokens a 13,300 tokens/s con el lote por defecto de llama.cpp, de 512, y a 23,600 con
+2,048, más rápido que PolyStrata, y escribió a 455 tokens/s, 369 después de ese prompt.
 
 ### Qwen3.6-35B-A3B
 
@@ -234,7 +273,7 @@ Medido de la misma manera, en los mismos dos PC.
 
 Un prompt de 10,000 tokens se lee a 1,670 tokens/s en el portátil y a 6,300 en la estación de trabajo.
 
-Los seis modelos del motor propio de PolyStrata se midieron con su benchmark, que puedes ejecutar en tu PC:
+Los siete modelos del motor propio de PolyStrata se midieron con su benchmark, que puedes ejecutar en tu PC:
 `python polystrata.py benchmark --model <name> --prompt-tokens 24000`
 ([qué envía y qué imprime](docs/BACKENDS.md#benchmark), en inglés).
 Lo que otros midieron en sus propias tarjetas, y cómo comparar con llama.cpp en la tuya:
@@ -292,6 +331,21 @@ El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. Aún sin pro
 tarjetas. Solo lee texto.
 
 La lista completa: [docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-you-need) (en inglés).
+
+### LFM2.5-24B-A2B
+
+| | |
+| --- | --- |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 4 GB se ocupan antes del primer experto. Ha funcionado en la tarjeta de 8 GB de un portátil y en una tarjeta de 32 GB. |
+| **RAM** | Unos **16, 18, 20, 27 o 31 GB** junto a una tarjeta de 8 GB para UD-Q3_K_XL, QAD-Q4_0, UD-Q4_K_XL, UD-Q6_K_XL y Q8_0, según la estimación del instalador. Una tarjeta de 24 GB guarda enteros los tres tamaños más pequeños. Los cinco han funcionado en un portátil con 32 GB. |
+| **Disco** | De 11 a 25 GB para el archivo del modelo. |
+| **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |
+
+El instalador se encarga de todo lo demás, como con Qwen3.6-35B-A3B más abajo. Aún no se ha probado en una tarjeta
+AMD. Solo lee texto. La licencia de Liquid AI solo permite el uso comercial a empresas que facturan menos de
+10 millones de dólares al año ([LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/main/LICENSE)).
+
+La lista completa: [docs/LFM.md](docs/LFM.md#what-you-need) (en inglés).
 
 ### Qwen3.6-35B-A3B
 
@@ -382,15 +436,15 @@ Te hace unas pocas preguntas:
 
 - qué modelo y qué tamaño,
 - cuánto contexto (cuánto texto tiene presente el modelo),
-- si debe entender imágenes (GLM 5.3 Flash y DeepSeek V4 Flash no las entienden).
+- si debe entender imágenes (GLM 5.3 Flash, DeepSeek V4 Flash y LFM2.5 no las entienden).
 
 Pulsa Enter cada vez para usar la respuesta recomendada. Después descarga el modelo (unos 70 GB para
-Qwen3.8-Flash-Next, de 79 a 114 GB para GLM 5.3 Flash, 91 GB para DeepSeek V4 Flash, de 11 a 24 GB para los otros cuatro) y lo arranca. Si la
+Qwen3.8-Flash-Next, de 79 a 114 GB para GLM 5.3 Flash, 91 GB para DeepSeek V4 Flash, de 11 a 25 GB para los otros cinco) y lo arranca. Si la
 descarga se detiene, vuelve a ejecutarlo: sigue donde lo dejó. Tu navegador abre la aplicación de PolyStrata en
 `http://127.0.0.1:8080`.
 
-Los siete están en la lista de modelos del instalador. `./setup.sh --family glm`, `deepseek`, `qwen36`, `ornith`, `gemma4`
-o `tiel` va directo a uno ([qué pregunta y qué escribe](docs/GLM.md#install), en inglés).
+Los ocho están en la lista de modelos del instalador. `./setup.sh --family glm`, `deepseek`, `lfm25`, `qwen36`, `ornith`,
+`gemma4` o `tiel` va directo a uno ([qué pregunta y qué escribe](docs/GLM.md#install), en inglés).
 
 > **Mientras el modelo arranca, tu PC puede ir lento o dejar de responder durante 1-3 minutos** (más la primera vez).
 > PolyStrata carga 35-55 GB en tu RAM y reserva una parte para la tarjeta gráfica. Es normal. Espera y no cierres la
@@ -471,6 +525,21 @@ Como con GLM 5.3 Flash, los expertos que la tarjeta no guarda se quedan en la RA
 unos 80 GB junto a una tarjeta de 24 GB y 89 GB junto a una de 16 GB; una tarjeta de 12 GB no puede arrancarlo. Solo se
 ha probado la tarjeta de 32 GB.
 
+### LFM2.5-24B-A2B
+
+Cinco tamaños. El instalador toma UD-Q4_K_XL, o UD-Q3_K_XL en un PC con menos RAM. Los demás se eligen por su nombre: `--model QAD-Q4_0`.
+
+| Tamaño | Qué es | Descarga | RAM junto a una tarjeta de 8 GB |
+| --- | --- | ---: | ---: |
+| **UD-Q4_K_XL** | el modelo entero con expertos de 4 bits ([Unsloth](https://huggingface.co/unsloth/LFM2.5-24B-A2B-GGUF)) | 15 GB | unos 20 GB |
+| **UD-Q3_K_XL** | el mismo con expertos de 3 bits: el que menos RAM pide | 11 GB | unos 16 GB |
+| **QAD-Q4_0** | 4 bits, de la propia [Liquid AI](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B-GGUF), entrenado para perder menos con esa cuantización | 14 GB | unos 18 GB |
+| **UD-Q6_K_XL** | expertos de 6 bits | 22 GB | unos 27 GB |
+| **Q8_0** | 8 bits en todo, el más cercano al modelo tal como se entrenó | 25 GB | unos 31 GB |
+
+Frente a Q8_0, con cinco prompts de 256 tokens cada uno, los otros tamaños eligen el token más probable de Q8_0 en el
+96,8 % de los pasos (UD-Q6_K_XL), el 95,5 % (UD-Q4_K_XL), el 92,7 % (QAD-Q4_0) y el 91,6 % (UD-Q3_K_XL).
+
 ### Qwen3.6-35B-A3B
 
 Tres tamaños por ahora. El instalador toma UD-Q3_K_M, o UD-Q2_K_XL en un PC con menos RAM. UD-Q4_K_M se elige por su nombre: `--model UD-Q4_K_M`.
@@ -525,7 +594,7 @@ han comprobado en un PC así.
 
 ## Cómo usarlo
 
-Los siete modelos se usan igual: la misma aplicación, la misma API.
+Los ocho modelos se usan igual: la misma aplicación, la misma API.
 
 <p align="center"><img src="docs/media/runpagoda.png" width="900" alt="La pestaña Monitor de la aplicación de PolyStrata junto a un agente de programación"><br>
 <sub>El <b>Monitor</b> de la aplicación de PolyStrata (izquierda) mientras un agente de programación escribe el jardín de la pagoda del vídeo (derecha). Una captura de <a href="https://github.com/Niko1221/Strata">Strata</a>.</sub></p>
@@ -545,12 +614,12 @@ Los siete modelos se usan igual: la misma aplicación, la misma API.
 
 En qué se diferencian:
 
-| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | Qwen3.6-35B-A3B, Ornith 1.5, Gemma 4 26B-A4B, Tiel Coder 35B-A3B |
-| --- | --- | --- | --- | --- |
-| **Imágenes** | Responde que sí a "Images?" en la instalación. Luego haz clic en **Picture** en el chat, o adjunta imágenes en tu aplicación. Las tarjetas AMD leen imágenes en Linux a través del procesador; en Windows todavía no. | Todavía no. | Solo lee texto. | Responde que sí a "Images?" en la instalación, y luego como con Qwen3.8-Flash-Next. En una tarjeta de menos de 16 GB el codificador de imágenes funciona en el procesador, y una imagen tarda unos segundos. |
-| **Una petición cada vez** | Por defecto PolyStrata responde una petición y las demás esperan. Para responder varias a la vez, pon `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). En una tarjeta de 12 GB, cada respuesta va más lenta. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. |
-| **Varias conversaciones** | La última se conserva, así que los mensajes siguientes empiezan en segundos. Dos argumentos del motor guardan varias en RAM ([detalles](docs/DETAILS.md#using-it)). | La última se conserva. La instalación pregunta si guardar varias en RAM, para que un agente y sus subagentes se turnen sin que se vuelvan a leer sus prompts ([cómo](docs/GLM.md#several-conversations-at-once)). | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. |
-| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 20 segundos en el portátil de 8 GB. |
+| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | LFM2.5-24B-A2B | Qwen3.6-35B-A3B, Ornith 1.5, Gemma 4 26B-A4B, Tiel Coder 35B-A3B |
+| --- | --- | --- | --- | --- | --- |
+| **Imágenes** | Responde que sí a "Images?" en la instalación. Luego haz clic en **Picture** en el chat, o adjunta imágenes en tu aplicación. Las tarjetas AMD leen imágenes en Linux a través del procesador; en Windows todavía no. | Todavía no. | Solo lee texto. | Solo lee texto. | Responde que sí a "Images?" en la instalación, y luego como con Qwen3.8-Flash-Next. En una tarjeta de menos de 16 GB el codificador de imágenes funciona en el procesador, y una imagen tarda unos segundos. |
+| **Una petición cada vez** | Por defecto PolyStrata responde una petición y las demás esperan. Para responder varias a la vez, pon `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). En una tarjeta de 12 GB, cada respuesta va más lenta. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. |
+| **Varias conversaciones** | La última se conserva, así que los mensajes siguientes empiezan en segundos. Dos argumentos del motor guardan varias en RAM ([detalles](docs/DETAILS.md#using-it)). | La última se conserva. La instalación pregunta si guardar varias en RAM, para que un agente y sus subagentes se turnen sin que se vuelvan a leer sus prompts ([cómo](docs/GLM.md#several-conversations-at-once)). | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. |
+| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan 1,5 segundos en la estación de trabajo y de 9 a 13 segundos en el portátil de 8 GB. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 20 segundos en el portátil de 8 GB. |
 
 Más: [dónde se guardan tus chats](docs/INSTALL.md#where-things-are-stored), [la API](docs/DETAILS.md#using-it).
 
@@ -644,6 +713,26 @@ Cada parte y sus cifras: [docs/GLM.md](docs/GLM.md#how-it-uses-the-card) (en ing
 
 Cada parte y sus cifras: [docs/DEEPSEEK.md](docs/DEEPSEEK.md#how-it-differs-from-the-other-models) (en inglés).
 
+### LFM2.5-24B-A2B
+
+<p align="center"><img src="docs/media/how-it-works-lfm25.svg" width="860" alt="Los 2,432 expertos del modelo: los que una respuesta elige una y otra vez en la tarjeta gráfica, los demás en la RAM y el archivo del modelo en el SSD"></p>
+
+- **El modelo es un equipo de 2,432 pequeños expertos**, 64 en cada una de 38 capas. Cada palabra solo necesita 4 de
+  cada capa.
+- **La mayoría de sus 40 capas no tiene atención.** 30 de ellas mezclan las palabras con una convolución corta sobre
+  las tres últimas y solo guardan dos vectores por capa. Solo las otras 10 recuerdan toda la conversación, así que su
+  memoria de una conversación es pequeña: un contexto de 128K solo ocupa 2 GB de VRAM más que 32K.
+- **Tu tarjeta gráfica** guarda todos los expertos que caben: unos 900 a 1,300 en una tarjeta de 8 GB, y a partir de
+  24 GB caben todos en los tamaños de 4 bits. En la tarjeta de 8 GB los que tiene sirven de dos tercios a cuatro
+  quintos de lo que usa una respuesta. **Tu RAM** tiene los demás, y **tu procesador** los calcula al mismo tiempo.
+  **Tu SSD** guarda el archivo del modelo, que se usa donde está, sin una segunda copia.
+- **Sin bloque de borrador.** El modelo no tiene nada que adivine lo siguiente, así que el motor solo adivina a
+  partir del texto que la conversación repite.
+- **Cuando la tarjeta guarda todos los expertos**, el paso entero se queda en la tarjeta: ella misma elige los
+  expertos de las palabras y ejecuta las 40 capas de un token como un solo lanzamiento grabado.
+
+Cada parte y sus números: [docs/LFM.md](docs/LFM.md) (en inglés).
+
 ### Qwen3.6-35B-A3B
 
 <p align="center"><img src="docs/media/how-it-works-qwen36.svg" width="860" alt="Los 10,240 expertos del modelo: los que una respuesta elige una y otra vez en la tarjeta gráfica, los demás en la RAM y el archivo del modelo en el SSD"></p>
@@ -735,7 +824,9 @@ Qwen3.8-Flash-Next es del [equipo de Qwen](https://huggingface.co/Qwen/Qwen3.8-F
 [ISTA-DASLab](https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF), UkisAI (Swift 1.5) y Unsloth.
 GLM 5.3 Flash funciona con los archivos de [neuralll](https://huggingface.co/neuralll/GLM-5.3-Flash-GSQ-RCO-3.0bit-Q4Kattn-GGUF),
 de Unsloth y de patrickbdevaney. Qwen3.6-35B-A3B es del equipo de Qwen, Gemma 4 de Google y DeepSeek V4 Flash de DeepSeek, los tres en la
-cuantización de [Unsloth](https://huggingface.co/unsloth). Ornith 1.5 es de ornith-ai, en la cuantización APEX de
+cuantización de [Unsloth](https://huggingface.co/unsloth). LFM2.5-24B-A2B es de
+[Liquid AI](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B), en la cuantización de Unsloth y en el QAD-Q4_0 de la
+propia Liquid AI. Ornith 1.5 es de ornith-ai, en la cuantización APEX de
 [mudler](https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF). Tiel Coder 35B-A3B es Ornith 1.5 en la cuantización de
 [peculiar-ragdoll](https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP);
 [u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) descubrió que funciona en PolyStrata. PolyStrata está hecho sobre [Strata](https://github.com/Niko1221/Strata) de Niko1221 y sus colaboradores,

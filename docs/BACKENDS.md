@@ -19,6 +19,7 @@ a second machine, a Windows laptop whose card has 8 GB.
 | Gemma 4 26B-A4B | `gemma4` | `strata-poly` | Unsloth UD-Q3_K_M, UD-Q2_K_XL and UD-Q4_K_M, 10.5 to 16.9 GB | its draft model, a file of 0.46 GB |
 | Tiel Coder 35B-A3B | `qwen35moe` | `strata-poly` | peculiar-ragdoll's UD-Q3_K_XL, UD-IQ3_XXS and UD-Q4_K_XL, 13.6 to 22.7 GB | draft block in the file |
 | DeepSeek V4 Flash | `deepseek4` | `strata-poly` | Unsloth UD-IQ2_XXS, three files, 90.9 GB | repeats only: its draft model is not run yet |
+| LFM2.5-24B-A2B | `lfm2moe` | `strata-poly` | Unsloth UD-Q4_K_XL, UD-Q3_K_XL, UD-Q6_K_XL and Q8_0, Liquid AI QAD-Q4_0, 10.9 to 25.5 GB | repeats only: there is no draft model |
 
 `strata` is the first engine and runs Qwen3.8 only; nothing in it changed. `strata-poly` is the engine that reads a
 GGUF in place, and it now has four architectures. It was called `strata-glm`, after its first model; an install
@@ -180,6 +181,8 @@ key, so a model the engine cannot run is listed as unavailable with the reason i
 | `glm5-next`, `glm5next` | `Glm5Next` |
 | `qwen35moe` | `Qwen35` |
 | `gemma4` | `Gemma4` |
+| `deepseek4` | `DeepSeek4` |
+| `lfm2moe` | `Lfm2Moe` |
 
 Within an architecture the shape comes from the file: layer counts, widths, head counts, expert counts, which
 layers have which attention, whether there is a draft block. Qwen3.6 and Ornith 1.5 are one class because their
@@ -193,6 +196,8 @@ and, by the tokenizer's `pre` name, how the model writes its reasoning and its t
 | Qwen3.8, Qwen3.6, Ornith | the prompt opens it, `</think>` ends it | `<tool_call><function=NAME><parameter=P>...` |
 | GLM | the same | `<tool_call>NAME<arg_key>K</arg_key><arg_value>V</arg_value>...` |
 | Gemma 4 | `<\|channel>thought` to `<channel\|>`, opened by the model | `<\|tool_call>call:NAME{key:value,...}<tool_call\|>` |
+| DeepSeek V4 | the prompt opens it, `</think>` ends it | `<｜DSML｜invoke name="NAME"><｜DSML｜parameter name="K" string="true">V...` |
+| LFM2.5 | the prompt opens it, `</think>` ends it | `<\|tool_call_start\|>[NAME(K='V', ...), NAME2()]<\|tool_call_end\|>` |
 
 Gemma 4's template thinks only when it is told to, reads a tool in OpenAI's shape and starts with the tokenizer's
 `<bos>`; the server gives it all three. A tool's answers are put in the order of their calls for every model,
@@ -525,7 +530,8 @@ from hand-written configs, as for the last table below.
 | DeepSeek V4 Flash UD-IQ2_XXS | 32 GB | 29,750 | 28.7 to 28.8 | 1,038 to 1,040 | 56 | 39 to 44 | 73% |
 
 DeepSeek V4 Flash's row is of 2026-10-15, as setup installs the model, with the build that added it
-([DEEPSEEK.md](DEEPSEEK.md)).
+([DEEPSEEK.md](DEEPSEEK.md)). LFM2.5-24B-A2B's five sizes ran the same test on this machine and on the laptop
+below; their tables are in [LFM.md](LFM.md#how-fast).
 
 Tiel Coder's three sizes ran again that day with the same build, whose prompt batches route on the card and skip
 cuBLAS for small products. The documents had grown to 32,165 tokens. UD-Q3_K_XL read them at 8,083 to 8,114

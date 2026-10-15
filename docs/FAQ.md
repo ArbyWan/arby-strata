@@ -56,15 +56,16 @@ Qwen3.8-Flash-Next, yes: on a Radeon with 12 GB or more it runs through Strata's
 models run on AMD under Linux since 0.1.42-poly.4, as a beta: setup compiles their engine for the card on your PC
 (there is no ready-made AMD engine, so not on Windows), a contributor's port tested with Qwen3.6 UD-Q2_K_XL and
 Ornith APEX-I-Mini on an RX 7600 with 8 GB: 74 and 40 tokens/s in a short chat, 53 and 43 after a 32K prompt,
-read at 481 and 444. Gemma 4, Tiel Coder and GLM have not been tried on an AMD card, and setup says so when you
-pick them. I don't have an AMD card myself, so reports from one help; see
+read at 481 and 444. Gemma 4, Tiel Coder, LFM2.5 and GLM have not been tried on an AMD card, and setup says so when
+you pick them. I don't have an AMD card myself, so reports from one help; see
 [AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta).
 
 ### Will it run on a 6 GB card, or 4 GB?
 
 It has only run on 8 GB cards and up. With a context of 32K, Qwen3.6 takes about 5 GB of VRAM beside its experts,
-Ornith about 4 GB, Gemma 4 about 6 GB and Tiel Coder about 5 GB. The attention caches are part of that and take
-their share as a conversation grows, so a short chat leaves more room. On a 6 GB card Ornith is the one to try.
+Ornith about 4 GB, Gemma 4 about 6 GB, Tiel Coder about 5 GB and LFM2.5 about 4 GB. The attention caches are part
+of that and take their share as a conversation grows, so a short chat leaves more room. On a 6 GB card Ornith and
+LFM2.5 are the ones to try; LFM2.5's caches grow the least, 20 KB a token.
 That is untested. On 4 GB, none of them leaves room for experts.
 
 ### What about older cards like a GTX 1050?
@@ -76,9 +77,10 @@ experimental build for older cards, but that is for Qwen3.8-Flash-Next only
 ### Can you add Bonsai, LFM2.5, Ling or DeepSeek V4 Flash?
 
 This engine helps MoE models that don't fit in VRAM. A dense model like Bonsai uses all its weights for every
-token, so there are no experts to split, and the 1-bit Bonsai models already fit on a small card. LFM2.5's MoE
-(8B-A1B) fits whole on an 8 GB card, so plain llama.cpp is fine there; it could help on 2 to 4 GB cards.
-Bigger MoEs are the good fit. DeepSeek V4 Flash runs now (`--family deepseek`, [DEEPSEEK.md](DEEPSEEK.md)), and
+token, so there are no experts to split, and the 1-bit Bonsai models already fit on a small card. LFM2.5-8B-A1B
+fits whole on an 8 GB card, so plain llama.cpp is fine there. LFM2.5-24B-A2B, the larger one, runs now
+(`--family lfm25`, [LFM.md](LFM.md)). Bigger MoEs are the good fit. DeepSeek V4 Flash runs now (`--family
+deepseek`, [DEEPSEEK.md](DEEPSEEK.md)), and
 Ling-2.6-flash (104B, 7.4B active) is on the list. Requests go in the issues, and the ones people ask for most come
 first.
 

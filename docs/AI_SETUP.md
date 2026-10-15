@@ -86,6 +86,13 @@ By the PC's RAM (ask the user whether they mainly want it for code - then the Co
 32 GB, 72 GB of RAM or more by setup's estimate, a 91 GB download, no images. Take it only when the user asks for it,
 and read [DEEPSEEK.md](DEEPSEEK.md) first.
 
+`--family lfm25` (LFM2.5-24B-A2B, by Liquid AI) runs on that engine as well, experimental: Linux or Windows (setup
+compiles the engine there, as for the three below), one NVIDIA card, an 11 to 25 GB download, about 16 to 31 GB of
+RAM beside an 8 GB card by setup's estimate, no images. Leave `--model` out: setup takes UD-Q4_K_XL, or UD-Q3_K_XL
+on a PC with too little RAM for it; QAD-Q4_0, UD-Q6_K_XL and Q8_0 are by name. Its license allows commercial use
+only to companies with less than 10 million US dollars of yearly revenue. Take it only when the user asks for it,
+and read [LFM.md](LFM.md) first.
+
 `--family qwen36`, `--family ornith` and `--family gemma4` (Qwen3.6-35B-A3B, Ornith 1.5, Gemma 4 26B-A4B) are
 smaller models on GLM's engine, and experimental too: Linux or Windows, one NVIDIA card, an 11 to 24 GB download,
 about 15 to 28 GB of RAM beside an 8 GB card by setup's estimate, by size. On Windows setup compiles the engine

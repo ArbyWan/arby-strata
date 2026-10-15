@@ -89,7 +89,7 @@ MODELS = {
              "on your graphics card and the rest in RAM - so it runs on a normal PC."),
         at_work=(8, "8 of a layer's 256 at work"),
         gpu=("8 GB or more; 24 GB holds all",
-             ["Runs the core of the model for", "every word, and keeps the busy", "experts: ~2,000 on an 8 GB card"],
+             ["Runs the core of the model for", "every word, and keeps the busy", "experts: ~2,600 on an 8 GB card"],
              "the experts an answer keeps using", 130),
         ram=("32 GB of memory",
              ["Holds the experts the card", "lacks. When a word needs one,", "the CPU does it - at once"],
@@ -108,7 +108,7 @@ MODELS = {
              "on your graphics card and the rest in RAM - so it runs on a normal PC."),
         at_work=(8, "8 of a layer's 256 at work"),
         gpu=("8 GB or more; 24 GB holds all",
-             ["Runs the core of the model for", "every word, and keeps the busy", "experts: ~2,500 on an 8 GB card"],
+             ["Runs the core of the model for", "every word, and keeps the busy", "experts: ~3,100 on an 8 GB card"],
              "the experts an answer keeps using", 130),
         ram=("32 GB of memory",
              ["Holds the experts the card", "lacks. When a word needs one,", "the CPU does it - at once"],
@@ -127,7 +127,7 @@ MODELS = {
              "on your graphics card and the rest in RAM - so it runs on a normal PC."),
         at_work=(8, "8 of a layer's 128 at work"),
         gpu=("8 GB or more; 16 GB holds all",
-             ["Runs the core of the model for", "every word, and keeps the busy", "experts: ~640 on an 8 GB card"],
+             ["Runs the core of the model for", "every word, and keeps the busy", "experts: ~1,000 on an 8 GB card"],
              "the experts an answer keeps using", 130),
         ram=("32 GB of memory",
              ["Holds the experts the card", "lacks. When a word needs one,", "the CPU does it - at once"],
@@ -139,6 +139,22 @@ MODELS = {
                "the guesses in one go",
                "and keeps the ones it agrees with. The model decides every word - it just arrives 1.3-1.6x sooner."),
         rows=("Draft guesses", "Model checks"),
+    ),
+    # LFM2.5 guesses only from what the conversation repeats: it has no figure of its guesses
+    "lfm25": dict(
+        head="The model is made of 2,432 small specialists - “experts”.",
+        sub=("Each word needs only 4 of the 64 in a layer. PolyStrata keeps the busy ones",
+             "on your graphics card and the rest in RAM - so it runs on a normal PC."),
+        at_work=(4, "4 of a layer's 64 at work"),
+        gpu=("8 GB or more; 24 GB holds 4-bit",
+             ["Runs the core of the model for", "every word, and keeps the busy", "experts: ~900-1,300 on 8 GB"],
+             "the experts an answer keeps using", 130),
+        ram=("32 GB of memory",
+             ["Holds the experts the card", "lacks. When a word needs one,", "the CPU does it - at once"],
+             "the experts the card lacks", 18),
+        ssd=("The model's file: 11-25 GB",
+             ["PolyStrata uses the file where", "it is: no second copy, and no", "lookup table to build"],
+             "read once, at the first start", (0, 1, 2, 3, 4, 5)),
     ),
 }
 
@@ -268,7 +284,9 @@ def guess_and_check(m):
 if __name__ == "__main__":
     for name, m in MODELS.items():
         tail = ("-" + name if name else "") + ".svg"
-        (OUT / ("how-it-works" + tail)).write_text(how_it_works(m), encoding="utf-8")
-        (OUT / ("guess-and-check" + tail)).write_text(guess_and_check(m), encoding="utf-8")
-        for f in ("how-it-works" + tail, "guess-and-check" + tail):
+        made = ["how-it-works" + tail] + (["guess-and-check" + tail] if "guess" in m else [])
+        (OUT / made[0]).write_text(how_it_works(m), encoding="utf-8")
+        if "guess" in m:
+            (OUT / made[1]).write_text(guess_and_check(m), encoding="utf-8")
+        for f in made:
             print(f, (OUT / f).stat().st_size, "bytes")
