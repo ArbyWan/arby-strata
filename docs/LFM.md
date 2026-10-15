@@ -94,6 +94,20 @@ With a batch of 2,048 llama.cpp reads the prompt as fast as PolyStrata, 1% faste
 at a time; after the long prompt PolyStrata writes 5% faster. Its guesses add to that where the answer repeats the
 prompt.
 
+## Long contexts
+
+LFM2.5 was trained for 131,072 tokens, and setup offers a context up to that. The test is the one DEEPSEEK.md has:
+a document of this repository's docs with three facts planted at 15%, 50% and 85% of it, then three questions.
+UD-Q4_K_XL, a context of 131,072 and prompts read 2,048 tokens at a time:
+
+- On the workstation, through the server, the 123,609-token request was read and answered in 8.7 s. The answer had
+  the second and the third fact and made the first one up.
+- Given the prompt as llama.cpp tokenizes it, 123,602 tokens with thinking off, the engine wrote all three facts
+  greedily. llama.cpp's own CUDA build (llama-server of 86ebfef, flash attention on, the same file) wrote the second
+  and the third and made the first one up. The fact furthest back is where the model is least sure.
+- On the laptop the same tokens were read in 44.7 and 45.4 s, 2,700 tokens/s, and the answer written at 35 tokens/s;
+  its first 80 tokens had the first two facts.
+
 ## How it was checked
 
 - The tokenizer gives the same ids as llama.cpp's `llama-tokenize` on 174,442 tokens: three READMEs (English,

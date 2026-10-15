@@ -159,7 +159,8 @@ With `--n-cpu-moe 25`, the best of the settings tried on the laptop, llama.cpp b
 there at 530 tokens/s and wrote after it at 53; PolyStrata read it at 3,540 and wrote at 71 to 73. On the workstation
 llama-bench read 29,816 tokens at 13,300 tokens/s with llama.cpp's default batch of 512 and at 23,600 with 2,048, as
 fast as PolyStrata, and wrote one token at a time at 455 tokens/s and at 369 after that prompt, where PolyStrata
-writes at 452 and 387.
+writes at 452 and 387. A prompt of about 124,000 tokens in a 128K context was read and answered in 8.7 seconds on the
+workstation; the laptop read it in 45 seconds.
 
 ### Qwen3.6-35B-A3B
 

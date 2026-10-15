@@ -161,7 +161,8 @@ Sur le portable, llama.cpp b11540 avec `--n-cpu-moe 25`, le meilleur des réglag
 tokens à 530 tokens/s et a écrit ensuite à 53 ; PolyStrata l'a lu à 3,540 et a écrit à 71-73. Sur la station de
 travail, llama-bench a lu 29,816 tokens à 13,300 tokens/s avec le lot par défaut de llama.cpp, 512, et à 23,600 avec
 2,048, aussi vite que PolyStrata, et a écrit token par token à 455 tokens/s, et à 369 après ce prompt ; PolyStrata
-écrit à 452 et 387.
+écrit à 452 et 387. Un prompt d'environ 124,000 tokens dans un contexte de 128K a été lu et a reçu sa réponse en 8,7
+secondes sur la station de travail ; le portable l'a lu en 45 secondes.
 
 ### Qwen3.6-35B-A3B
 
