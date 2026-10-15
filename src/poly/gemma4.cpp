@@ -575,7 +575,7 @@ float Gemma4::embed_scale() const { return std::sqrt((float) n_embd_); }
 
 // What ggml's MoE graph does for this model: the router's scores over the root of the width, a softmax over every
 // expert, the n_used most likely with their weights made to sum to one, and each expert's own scale on its output.
-void Gemma4::route(int il, const float* logits, int* ids, float* w, float* probs) const {
+void Gemma4::route(int il, const float* logits, int32_t, int* ids, float* w, float* probs) const {
     const std::vector<float>& escale = blocks_[(size_t) il].escale;
     const float s = 1.f / std::sqrt((float) n_embd_);
     float mx = logits[0] * s;

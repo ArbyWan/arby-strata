@@ -491,7 +491,7 @@ void Glm5Next::dense_ffn(Block& B, int il, int n) {
 
 // What ggml's MoE graph does for this model: sigmoid gates, the n_used largest of gate + bias, and weights from
 // the bare gates.
-void Glm5Next::route(int il, const float* logits, int* ids, float* w, float* probs) const {
+void Glm5Next::route(int il, const float* logits, int32_t, int* ids, float* w, float* probs) const {
     const std::vector<float>& bias = blocks_[(size_t) il].probs_b;
     float* pick = probs + n_expert_;
     for (int e = 0; e < n_expert_; ++e) {

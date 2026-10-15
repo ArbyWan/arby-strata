@@ -332,7 +332,7 @@ void Qwen35::output_rows(int first, int rows, float* h) {
 
 // What ggml's MoE graph does for this model: a softmax over every expert's score, the n_used most likely, and
 // their weights made to sum to one.
-void Qwen35::route(int, const float* logits, int* ids, float* w, float* probs) const {
+void Qwen35::route(int, const float* logits, int32_t, int* ids, float* w, float* probs) const {
     float mx = logits[0];
     for (int e = 1; e < n_expert_; ++e) mx = std::max(mx, logits[e]);
     double all = 0.0;

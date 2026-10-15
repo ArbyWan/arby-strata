@@ -1807,7 +1807,7 @@ bool Engine::moe(Layer& L, int il, int n, const std::function<void()>* first) {
         for (int t = 0; t < m; ++t) {
             int ids[kMaxUsed];
             float w[kMaxUsed];
-            route(il, h_rl_ + (size_t) (at + t) * n_expert_, ids, w, route_tmp_.data());
+            route(il, h_rl_ + (size_t) (at + t) * n_expert_, tok_ ? tok_[at + t] : -1, ids, w, route_tmp_.data());
             for (int k = 0; k < n_used_; ++k) {
                 const size_t e = (size_t) ids[k];
                 ++use_[(size_t) il * n_expert_ + e];
@@ -2008,8 +2008,8 @@ void Engine::moe_rows(Layer& L, int il, int n) {
         float* tmp = route_tmp_.data() + (size_t) p * 2 * n_expert_;
         const int end = (int) ((int64_t) n * (p + 1) / parts);
         for (int t = (int) ((int64_t) n * p / parts); t < end; ++t)
-            route(il, h_rl_ + (size_t) t * n_expert_, ids_.data() + (size_t) t * n_used_, w + (size_t) t * n_used_,
-                  tmp);
+            route(il, h_rl_ + (size_t) t * n_expert_, tok_ ? tok_[t] : -1, ids_.data() + (size_t) t * n_used_,
+                  w + (size_t) t * n_used_, tmp);
     });
     count_.assign((size_t) n_expert_, 0);
     for (int i = 0; i < rr; ++i) {
@@ -2255,6 +2255,7 @@ void Engine::run(const int32_t* tokens, int n) {
     // h_r_ and h_cpu_ may still be the source of the previous call's copies
     ck(cudaStreamSynchronize(cs(st_)), "eval");
     if (n_swap_ > 0) follow(n < kStageRows ? n : 0);
+    tok_ = tokens;
     const size_t e_row = (size_t) n_embd_, r_row = (size_t) streams() * e_row;
     const float scale = embed_scale();
     if (pass_) {   // a later card: the card before it left the rows
@@ -2417,6 +2418,7 @@ void Engine::shift_rows(ptrdiff_t by) {
     h_cpu_ += by * e;
     at_ += by * 2;
     pos_ += by;
+    if (tok_) tok_ += by;
 }
 
 // Pinned memory for n rows of the residual on their way to the next card.
@@ -2641,6 +2643,7 @@ bool Engine::read(const int32_t* tokens, int n, const Mark* marks, int n_marks,
                 const Call& call = calls_[(size_t) c];
                 r_ = half(c);
                 pos_ = pos0 + call.at;
+                tok_ = tokens + call.at;
                 if (host) ck(cudaStreamWaitEvent(cs(st_), (cudaEvent_t) ev_in_[c % 2], 0), "read");
                 if (il < n_layer_) {
                     layer(il, call.m);
@@ -2873,6 +2876,7 @@ void Engine::draft_step(int32_t token, int i) {
     moe_router(L, 1);
     ck(cudaEventRecord((cudaEvent_t) ev_, cs(st_)), "router");
     moe_shared(L, n_layer_, 1);
+    tok_ = nullptr;   // a guess's row has no token of the sequence
     if (moe(L, n_layer_, 1)) moe_add(1);
     axpy(fo_, 1.f, x, n_embd_, true, st_);
     rms_norm(x, fp(d_head_), own, n_embd_, 1, rms_eps_, st_);

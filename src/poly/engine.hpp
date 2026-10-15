@@ -311,9 +311,10 @@ protected:
     virtual void layer_tail(Layer& L, int il, int n) = 0;
     /// The model's output for `rows` tokens from row `first` of the call, normed: what the output matrix takes.
     virtual void output_rows(int first, int rows, float* h) = 0;
-    /// A token's experts and their weights from its scores at layer il's router.  tmp: 2 * n_expert_ floats of
-    /// scratch.  A prompt batch's tokens are routed by several threads at once: it changes nothing of the engine's.
-    virtual void route(int il, const float* logits, int* ids, float* w, float* tmp) const = 0;
+    /// A token's experts and their weights from its scores at layer il's router.  `token` is the token the row is
+    /// for, or -1 where it has none (a picture's row, the draft block).  tmp: 2 * n_expert_ floats of scratch.  A
+    /// prompt batch's tokens are routed by several threads at once: it changes nothing of the engine's.
+    virtual void route(int il, const float* logits, int32_t token, int* ids, float* w, float* tmp) const = 0;
     /// The shared expert, into fo_.  It runs on the GPU while the host routes.
     virtual void moe_shared(const Layer& L, int il, int n) = 0;
     /// The scores of a layer's router for n tokens, into rl_.  The engine's own: the router's matrix times the
@@ -619,6 +620,7 @@ protected:
     std::vector<size_t> trade_at_;   ///< per trade number: how many of its pairs follow() has taken
 
     int64_t pos_ = 0;
+    const int32_t* tok_ = nullptr;       ///< the tokens of the call under way, a row each as h_rl_ has them (route())
     std::vector<Image> images_;          ///< the sequence's pictures, by row
     uint64_t images_set_ = 0;            ///< counts images(): what was derived from an earlier list is stale
     std::vector<int64_t> use_, prior_;   ///< routed count per (layer, expert): this run, and the profile's
