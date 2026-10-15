@@ -329,8 +329,9 @@ La lista completa: [docs/GLM.md](docs/GLM.md#what-you-need) (en inglés).
 | **Disco** | 91 GB para los tres archivos del modelo, en un SSD. |
 | **Sistema** | Linux y un controlador de NVIDIA actual. |
 
-El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. Aún sin probar: Windows, tarjetas AMD, dos
+El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. Aún sin probar: tarjetas AMD, dos
 tarjetas. Solo lee texto.
+Un usuario lo ejecuta en Windows con una tarjeta de 24 GB y 128 GB de RAM ([informe](https://github.com/VecSzn/PolyStrata/issues/21)).
 
 La lista completa: [docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-you-need) (en inglés).
 

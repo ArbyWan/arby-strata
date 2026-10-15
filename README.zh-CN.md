@@ -314,7 +314,8 @@ Q8_0 在笔记本上占满了 32 GB 内存，所以在那里慢；工作站能�
 | **硬盘** | 模型的三个文件共 91 GB，要放在 SSD 上。 |
 | **系统** | Linux，以及 NVIDIA 的最新显卡驱动。 |
 
-其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。还没试过：Windows、AMD 显卡、两张显卡。它只能处理文字。
+其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。还没试过：AMD 显卡、两张显卡。它只能处理文字。
+有用户在 Windows 上用一张 24 GB 显卡加 128 GB 内存跑起来了（[报告](https://github.com/VecSzn/PolyStrata/issues/21)）。
 
 完整列表：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-you-need)。
 

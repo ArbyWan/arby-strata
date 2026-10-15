@@ -324,8 +324,8 @@ Windows で 24 GB のカード 1 枚と 128 GB の RAM で動かしたユーザ�
 | **ディスク** | モデルの 3 つのファイルで 91 GB。SSD に置いてください。 |
 | **OS** | Linux と、最新の NVIDIA ドライバー。 |
 
-ほかはすべてインストーラーが用意します。GLM 5.3 Flash と同じです。まだ試していないもの：Windows、AMD のカード、2 枚のカード。
-読めるのはテキストだけです。
+ほかはすべてインストーラーが用意します。GLM 5.3 Flash と同じです。まだ試していないもの：AMD のカード、2 枚のカード。
+読めるのはテキストだけです。Windows で 24 GB のカード 1 枚と 128 GB の RAM で動かしたユーザーの[報告](https://github.com/VecSzn/PolyStrata/issues/21)があります。
 
 全体の一覧：[docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-you-need)（英語）。
 
