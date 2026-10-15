@@ -209,20 +209,41 @@ int main(int argc, char** argv) {
         if (err.empty() && mtmd_encode_chunk(ctx, ichunk) != 0) err = "the vision encoder failed";
         if (err.empty()) {
             const mtmd_image_tokens* it = mtmd_input_chunk_get_tokens_image(ichunk);
-            const int n = (int) mtmd_input_chunk_get_n_tokens(ichunk);
+            const int n_all = (int) mtmd_input_chunk_get_n_tokens(ichunk);
+            int n = n_all;
             // the grid from the decoder positions (nx/ny getters are deprecated): x and y of the last token.  A
             // model whose image tokens count up like text (Gemma 4) has both at n - 1: its grid is one line.
-            const mtmd_decoder_pos last = mtmd_image_tokens_get_decoder_pos(it, 0, (size_t) n - 1);
+            const mtmd_decoder_pos last = mtmd_image_tokens_get_decoder_pos(it, 0, (size_t) n_all - 1);
             int nx = (int) last.x + 1, ny = (int) last.y + 1;
-            if (n > 1 && nx == n && ny == n) ny = 1;
-            if (nx * ny != n) err = "the image grid is not rectangular (" + std::to_string(n) + " tokens)";
+            if (n_all > 1 && nx == n_all && ny == n_all) ny = 1;
+            std::vector<char> keep((size_t) n_all, 1);
+            if (nx * ny != n_all) {
+                // MiniCPM-V 4.7's canvas: a text separator (</image>, \n) takes a token after each tile.  The
+                // image rows are the ones at the canvas origin (t == 0); the grid is their x and y range.
+                int x0 = 1 << 30, x1 = -(1 << 30), y0 = 1 << 30, y1 = -(1 << 30), n_img = 0;
+                for (int i = 0; i < n_all; ++i) {
+                    const mtmd_decoder_pos p = mtmd_image_tokens_get_decoder_pos(it, 0, (size_t) i);
+                    if (p.t != 0) { keep[(size_t) i] = 0; continue; }
+                    ++n_img;
+                    x0 = std::min(x0, (int) p.x); x1 = std::max(x1, (int) p.x);
+                    y0 = std::min(y0, (int) p.y); y1 = std::max(y1, (int) p.y);
+                }
+                nx = x1 - x0 + 1;
+                ny = y1 - y0 + 1;
+                if (n_img != nx * ny) err = "the image is split into tiles, which this encoder cannot read ("
+                                            + std::to_string(n_all) + " tokens)";
+                else n = n_img;
+            }
             const float* embd = mtmd_get_output_embd(ctx);
             FILE* f = err.empty() ? std::fopen(out.c_str(), "wb") : nullptr;
             if (err.empty() && !f) err = "cannot write " + out;
             if (f) {
                 const int32_t hdr[5] = {0x31455653, n, nx, ny, n_embd};
-                const bool ok = std::fwrite(hdr, sizeof hdr, 1, f) == 1 &&
-                                std::fwrite(embd, sizeof(float) * (size_t) n_embd, (size_t) n, f) == (size_t) n;
+                bool ok = std::fwrite(hdr, sizeof hdr, 1, f) == 1;
+                for (int i = 0; ok && i < n_all; ++i)
+                    if (keep[(size_t) i])
+                        ok = std::fwrite(embd + (size_t) i * n_embd, sizeof(float), (size_t) n_embd, f)
+                             == (size_t) n_embd;
                 std::fclose(f);
                 if (!ok) err = "short write to " + out;
                 const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();

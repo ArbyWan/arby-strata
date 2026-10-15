@@ -85,6 +85,7 @@ HF_REVISIONS = {
     "unsloth/DeepSeek-V4-Flash-0731-GGUF": "fbbb5b93fb787c21338159b0af3318bb3f4d9768",               # 2026-10-15
     "unsloth/LFM2.5-24B-A2B-GGUF": "faa77113e93335b63423e9e8d33395f86eaf8946",                        # 2026-10-15
     "LiquidAI/LFM2.5-24B-A2B-GGUF": "0912d33141f77e10705345a6732bfd83f0252fdc",                       # 2026-10-15
+    "openbmb/MiniCPM-V-4.7-35B-A3B-gguf": "77f6d8cb08b2b115ce27d2e2ac1359e126921689",                   # 2026-10-12
 }
 
 
@@ -659,6 +660,34 @@ FAMILIES = {
                         (22749880160, "54f46c4ce544c225122b0f066c2336f10404be7bc53b0cc94d1dbbc5e826bdc1"),
                         "mmproj-BF16.gguf":
                         (902822016, "d9ce31026d1cb1f3f8d5152e2e2a014d9d2b302b6c93a7dc07bb0a0487f52837")}},
+    # The same architecture as Qwen3.6, OpenBMB's weights: 40 layers of 256 experts, 8 to a token, and a picture
+    # encoder of its own: MiniCPM-V 4.6's under the newer name minicpmv4_7, which the pinned llama.cpp answers
+    # (#29416).  The files carry no draft block, so no size has "draft"; its answers are one token at a
+    # time.  "vram_beside_gb" and the smallest size's RAM were measured on an RX 7600 (8 GB) at 32K;
+    # "vision_vram_gb" is Qwen3.6's grown by the size of this mmproj, as the encoder ran on the CPU here.
+    "minicpmv": {"title": "MiniCPM-V 4.7 35B-A3B", "by": "OpenBMB",
+                 "about": "Qwen3.6-35B-A3B's architecture, OpenBMB's weights, and it reads pictures too; a 22 GB "
+                         "file, ~25 GB of RAM beside an 8 GB card; a smaller and a larger size too",
+                 "hf": hf("openbmb/MiniCPM-V-4.7-35B-A3B-gguf"), "file": "MiniCPM-V-4_7-35B-A3B-{q}.gguf",
+                 "shards": 1, "tag": "minicpmv-", "name": "minicpm-v-4.7-35b-a3b", "engine": "poly", "vision": True,
+                 "experimental": True, "windows": True, "ran_on_gb": 8, "row_bytes": 26624,
+                 "mmproj_hf": hf("openbmb/MiniCPM-V-4.7-35B-A3B-gguf"), "mmproj": "mmproj-model-f16.gguf",
+                 "vision_gb": 1.1, "vision_vram_gb": 2.0,
+                 "models": {"Q4_K_M": {"about": "4-bit experts (K-quant), 5- and 6-bit where they write",
+                                       "download_gb": 21.2, "ram_gb": 25, "arena_gb": 19.5, "vram_beside_gb": 3.4},
+                            "mix_q3gud_im": {"about": "3- and 4-bit experts (imatrix mix): the least RAM",
+                                             "download_gb": 15.5, "ram_gb": 19, "arena_gb": 13.8,
+                                             "vram_beside_gb": 3.4},
+                            "Q6_K": {"about": "6-bit experts (K-quant)",
+                                     "download_gb": 28.5, "ram_gb": 31, "arena_gb": 26.4, "vram_beside_gb": 3.4}},
+                 "sha256": {"MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf":
+                           (21166255040, "c729ae6c7bb16dd5b362cdb925c7fb09d744c95601f62b0f45ce51efb55bfe95"),
+                           "MiniCPM-V-4_7-35B-A3B-mix_q3gud_im.gguf":
+                           (15503944928, "6bfeefbfc723ab6fe557fcea28b31253e14128efe8d8d5774e3256a547b3a946"),
+                           "MiniCPM-V-4_7-35B-A3B-Q6_K.gguf":
+                           (28513556672, "159ce7d2fe4aab95233096ad007c23d86d99dd6c4a20d3f7c31e990d09aa71b7"),
+                           "mmproj-model-f16.gguf":
+                           (1119575840, "bff3b688e14c300eca273092c37c50a0ddfcc2054e079af1a0480edeed5d20f1")}},
 }
 MMPROJ = "mmproj-Qwen3.8-Flash-Next-BF16.gguf"
 # Qwen3.6-35B-A3B (GGUF architecture qwen35moe), Unsloth's GGUFs with the MTP block: a family with an engine path of its
@@ -6683,8 +6712,8 @@ def main() -> int:
     ap.add_argument("--family", choices=list(FAMILIES) + list(PREVIEW_FAMILIES),
                     help="qwen = Qwen3.8-Flash-Next, swift = Swift 1.5, glm = GLM 5.3 Flash (docs/GLM.md), deepseek = "
                          "DeepSeek V4 Flash, lfm25 = LFM2.5-24B-A2B, qwen36 = Qwen3.6-35B-A3B on strata-poly, ornith = "
-                         "Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel "
-                         "Coder 35B-A3B (docs/BACKENDS.md), qwen36-strata = Qwen3.6-35B-A3B on the Strata project's "
+                         "Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel Coder 35B-A3B, minicpmv = MiniCPM-V 4.7 "
+                         "35B-A3B (docs/BACKENDS.md), qwen36-strata = Qwen3.6-35B-A3B on the Strata project's "
                          "own engine (UD-Q4_K_XL and up, 32 GB of RAM or more)")
     ap.add_argument("--model", choices=list(dict.fromkeys(
         [*MODELS, *(m for f in FAMILIES.values() for m in f.get("models", {})),
