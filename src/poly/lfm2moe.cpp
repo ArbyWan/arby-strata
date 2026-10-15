@@ -151,7 +151,9 @@ void Lfm2Moe::assign_scratch() {
     k_ = fbuf(kv);
     v_ = fbuf(kv);
     att_ = fbuf(heads);
-    score_ = fbuf((size_t) chunk_ * n_head_ * opt_.max_context);
+    score_n_ = std::max((size_t) chunk_ * n_head_ * opt_.max_context,
+                        attend_split_floats(chunk_, n_head_, opt_.max_context, head_dim_));
+    score_ = fbuf(score_n_);
     if (rows_ >= kStageRows) awork_ = fbuf(heads + heads / 2 + 1 + 3 * n * n_head_);   // a prompt batch's attention
 }
 
@@ -228,7 +230,7 @@ void Lfm2Moe::attn(Block& B, int64_t pos, int n) {
                      att_, head_dim_, n_head_, n_kv_, scale, st_);
     else
         attend(q_, B.keys, B.vals, pos, n, score_, chunk_, att_, head_dim_, n_head_, n_kv_, scale, st_, 0, 0, false,
-               at, at ? room(n) : 0);
+               at, at ? room(n) : 0, score_n_);
     lin(B.wo, att_, ao_, n);
 }
 

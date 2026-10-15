@@ -73,6 +73,7 @@ private:
     float *qraw_ = nullptr, *q_ = nullptr, *kraw_ = nullptr, *k_ = nullptr, *v_ = nullptr, *att_ = nullptr,
           *score_ = nullptr;
     float* awork_ = nullptr;   ///< a prompt batch's attention (attend_batch)
+    size_t score_n_ = 0;       ///< the floats of score_: room for attend()'s blocks of rows too
 };
 
 }  // namespace strata::poly

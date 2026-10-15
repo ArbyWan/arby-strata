@@ -172,9 +172,17 @@ void head_norm_rope(const float* x, int x_stride, const float* w, float* y, int 
 /// window - 1 + rows of them.
 /// With `at`, the tokens start at the position the card holds there; the launches are sized for `room` rows,
 /// which must be no fewer than a launch's tokens attend between them, and score has room for them.
+/// score_floats: the floats score holds, when more than the above.  Heads of 64 values in groups of 4 over the
+/// whole conversation then take a launch block each block of rows, where score has room for those blocks' sums
+/// of chunk tokens at the longest the call can attend (attend_split_floats()); the results differ from the other
+/// kernels' in the last bits.
 void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows, float* score,
             int chunk, float* out, int dim, int n_head, int kv_heads, float scale, void* stream, int window = 0,
-            int ring = 0, bool whole = false, const long long* at = nullptr, int room = 0);
+            int ring = 0, bool whole = false, const long long* at = nullptr, int room = 0,
+            size_t score_floats = 0);
+/// The floats of score that attend()'s blocks of rows take for calls of up to chunk tokens attending up to max_rows
+/// rows (score_floats): with that much a model's every call takes them.
+size_t attend_split_floats(int chunk, int n_head, int max_rows, int dim);
 /// attend() for a prompt batch: the same attention with cuBLAS products on the tensor cores, several times
 /// faster on many tokens.  The products read the cache's halves where they lie, take the queries and the
 /// softmax's weights rounded to halves, and sum floats.  A token's result depends on the tokens beside it, so

@@ -1045,11 +1045,11 @@ __global__ void attn_score_kernel(const float* __restrict__ q, const half* __res
 // each of its steps a lane adds the part a lane `off` away has.  While a lane holds more than one score it keeps
 // half of them and gives the other half away, so one exchange serves two scores; then the four lanes of a score
 // finish it.  A sum is the other tree's to the bit, since a + b is b + a.  Returns the lane's score, `which` of the N.
-template <int N>
+template <int N, int FROM = WARP / 2>
 __device__ __forceinline__ float scores_sum(float* v, int lane, int* which) {
     int idx = 0;
 #pragma unroll
-    for (int off = WARP / 2, m = N; off > 0; off >>= 1) {
+    for (int off = FROM, m = N; off > 0; off >>= 1) {
         if (m > 1) {
             const int half = m / 2;
             const bool upper = lane & off;
@@ -1232,6 +1232,123 @@ __global__ void attn_value_kernel(const float* __restrict__ score, const half* _
         const int query = q0 + i;
         out[((size_t(first) + query / per) * n_head + g * per + query % per) * dim + d] = sum;
     }
+}
+
+// attend() for a few tokens over the whole conversation, for heads of 64 values in groups of 4 (LFM2's): the keys
+// in blocks of SPLIT_KEYS, a launch block each with a group and a token, which scores them (half a warp a row),
+// takes the softmax's exponentials of its block for each head (a warp a head) and their values; attn_join_kernel
+// adds the blocks up.  For a token of this shape the score, softmax and value kernels launch 16 and 32 blocks, each
+// walking the whole conversation.  A block's rows are counted from the cache's first, so a token comes out the
+// same whatever tokens the call has beside it.
+constexpr int SPLIT_KEYS = 64, SPLIT_THREADS = 128;
+
+__global__ void __launch_bounds__(SPLIT_THREADS)
+attn_split_kernel(const float* __restrict__ q, const half* __restrict__ kcache, const half* __restrict__ vcache,
+                  float* __restrict__ part, int n_head, int kv_heads, long long pos, int first, int tokens, float scale,
+                  int blocks, const long long* __restrict__ at) {
+    constexpr int DIM = 64, G = 4, HALF = WARP / 2, WARPS = SPLIT_THREADS / WARP;
+    static_assert(SCORE_VALUES * HALF == DIM && WARPS == G, "half a warp a row, a warp a head");
+    __shared__ float e[G][SPLIT_KEYS];
+    const int g = blockIdx.y, b = blockIdx.x, t = blockIdx.z, lane = threadIdx.x % WARP, w = threadIdx.x / WARP;
+    const int side = lane / HALF, hl = lane % HALF;
+    const long long p = (at ? *at : pos) + first;
+    const int k0 = b * SPLIT_KEYS, span = int(p) + tokens;   // the call's tokens attend rows [0, span)
+    if (k0 >= span) return;
+    const int nk = min(SPLIT_KEYS, span - k0);
+    const int own = int(p) + t + 1;   // the token attends rows [0, own)
+    const float* qt = q + ((size_t(first) + t) * n_head + g * G) * DIM + SCORE_VALUES * hl;
+    float4 y[G];
+#pragma unroll
+    for (int i = 0; i < G; ++i) y[i] = *reinterpret_cast<const float4*>(qt + i * DIM);
+    for (int pair = w; 2 * pair < nk; pair += WARPS) {   // every lane of the warp goes round alike
+        const int r = 2 * pair + side, key = k0 + r;
+        float acc[G];
+#pragma unroll
+        for (int i = 0; i < G; ++i) acc[i] = 0.0f;
+        if (r < nk && key < own) {
+            const half* k = kcache + (size_t(key) * kv_heads + g) * DIM + SCORE_VALUES * hl;
+            const unsigned long long bits = *reinterpret_cast<const unsigned long long*>(k);
+            float x[SCORE_VALUES];
+#pragma unroll
+            for (int j = 0; j < SCORE_VALUES; ++j)
+                x[j] = __half2float(__ushort_as_half((unsigned short) (bits >> 16 * j)));
+#pragma unroll
+            for (int i = 0; i < G; ++i) {
+                acc[i] += y[i].x * x[0];
+                acc[i] += y[i].y * x[1];
+                acc[i] += y[i].z * x[2];
+                acc[i] += y[i].w * x[3];
+            }
+        }
+        int which;
+        const float sum = scores_sum<G, HALF / 2>(acc, lane, &which);
+        if (r < nk && (hl & (HALF / G - 1)) == 0) e[which][r] = key < own ? sum * scale : -INFINITY;
+    }
+    __syncthreads();
+    float m = -INFINITY;
+    for (int j = lane; j < nk; j += WARP) m = fmaxf(m, e[w][j]);
+#pragma unroll
+    for (int o = WARP / 2; o > 0; o >>= 1) m = fmaxf(m, __shfl_xor_sync(0xffffffffu, m, o));
+    float l = 0.0f;
+    for (int j = lane; j < nk; j += WARP) {
+        const float x = m == -INFINITY ? 0.0f : expf(e[w][j] - m);   // a block the token sees none of: 0
+        e[w][j] = x;
+        l += x;
+    }
+    l = warp_sum(l);
+    __syncthreads();
+    // the values: warp w takes every WARPS-th row for all the heads, a lane two values of a row, so a row of
+    // the cache is read once; then warp w adds the warps' sums of head w
+    float o[G][2];
+#pragma unroll
+    for (int i = 0; i < G; ++i) o[i][0] = o[i][1] = 0.0f;
+    const half* v = vcache + (size_t(k0) * kv_heads + g) * DIM + 2 * lane;
+    for (int j = w; j < nk; j += WARPS) {
+        const float2 x = __half22float2(*reinterpret_cast<const half2*>(v + size_t(j) * kv_heads * DIM));
+#pragma unroll
+        for (int i = 0; i < G; ++i) {
+            o[i][0] += e[i][j] * x.x;
+            o[i][1] += e[i][j] * x.y;
+        }
+    }
+    __shared__ float2 sums[WARPS][G][WARP];
+#pragma unroll
+    for (int i = 0; i < G; ++i) sums[w][i][lane] = make_float2(o[i][0], o[i][1]);
+    __syncthreads();
+    float o0 = 0.0f, o1 = 0.0f;
+#pragma unroll
+    for (int k = 0; k < WARPS; ++k) {
+        o0 += sums[k][w][lane].x;
+        o1 += sums[k][w][lane].y;
+    }
+    float* out = part + ((size_t(t) * n_head + g * G + w) * blocks + b) * (DIM + 2);
+    out[2 * lane] = o0;
+    out[2 * lane + 1] = o1;
+    if (lane == 0) {
+        out[DIM] = m;
+        out[DIM + 1] = l;
+    }
+}
+
+// The blocks of attn_split_kernel added up for a head of a token: each block's sums scaled to the largest score.
+__global__ void attn_join_kernel(const float* __restrict__ part, float* __restrict__ out, int n_head, long long pos,
+                                 int first, int tokens, int blocks, const long long* __restrict__ at) {
+    constexpr int DIM = 64;
+    const int h = blockIdx.x, t = blockIdx.y, d = threadIdx.x;
+    const long long p = (at ? *at : pos) + first;
+    const int used = int((p + tokens + SPLIT_KEYS - 1) / SPLIT_KEYS);   // the blocks the split kernel wrote
+    const float* pb = part + (size_t(t) * n_head + h) * blocks * (DIM + 2);
+    float mx = -INFINITY;
+    for (int b = 0; b < used; ++b) mx = fmaxf(mx, pb[size_t(b) * (DIM + 2) + DIM]);
+    float l = 0.0f, o = 0.0f;
+    for (int b = 0; b < used; ++b) {
+        const float* x = pb + size_t(b) * (DIM + 2);
+        if (x[DIM] == -INFINITY) continue;
+        const float f = expf(x[DIM] - mx);
+        l += f * x[DIM + 1];
+        o += f * x[d];
+    }
+    out[((size_t(first) + t) * n_head + h) * DIM + d] = o / l;
 }
 
 // attn_value_kernel with the weights as attn_softmax_kernel leaves them with `wt`: a row's queries side by side,
@@ -1973,12 +2090,27 @@ void head_norm_rope(const float* x, int x_stride, const float* w, float* y, int 
 
 void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows, float* score,
             int chunk, float* out, int dim, int n_head, int kv_heads, float scale, void* stream, int window,
-            int ring, bool whole, const long long* at, int room) {
+            int ring, bool whole, const long long* at, int room, size_t score_floats) {
     if (at && (whole || room < 1)) throw std::invalid_argument("attend: a position on the card needs its room");
     if (dim % SCORE_VALUES || uintptr_t(q) % (SCORE_VALUES * sizeof(float)) || uintptr_t(kcache) % (SCORE_VALUES * 2))
         throw std::invalid_argument("attend: queries and keys are read four values at a time");
     const long long last = whole ? pos + rows - 1 : -1;
     const int per = n_head / kv_heads;
+    // attn_split_kernel, where score has room for every block's sums at the longest the call can attend
+    const int most = grid(size_t(at ? room : pos + rows), SPLIT_KEYS);
+    if (dim == 64 && per == 4 && window == 0 && ring == 0 && !whole &&
+        size_t(chunk) * n_head * most * (dim + 2) <= score_floats) {
+        for (int first = 0; first < rows; first += chunk) {
+            const int c = std::min(chunk, rows - first);
+            const int blocks = grid(size_t(at ? room : pos + first + c), SPLIT_KEYS);
+            attn_split_kernel<<<dim3(blocks, kv_heads, c), SPLIT_THREADS, 0, cs(stream)>>>(
+                q, (const half*) kcache, (const half*) vcache, score, n_head, kv_heads, (long long) pos, first, c,
+                scale, blocks, at);
+            attn_join_kernel<<<dim3(n_head, c), dim, 0, cs(stream)>>>(score, out, n_head, (long long) pos, first, c,
+                                                                     blocks, at);
+        }
+        return;
+    }
     for (int first = 0; first < rows; first += chunk) {
         const int c = std::min(chunk, rows - first);
         // the launch's span: from the first row its first token attends to the last its last token does
@@ -2023,6 +2155,10 @@ void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int6
                                 cs(stream)>>>(score, (const half*) vcache, out, keys, dim, n_head, kv_heads,
                                               (long long) pos, first, c, window, ring, last, at);
     }
+}
+
+size_t attend_split_floats(int chunk, int n_head, int max_rows, int dim) {
+    return size_t(chunk) * n_head * grid(size_t(max_rows), SPLIT_KEYS) * (dim + 2);
 }
 
 void attend_batch(void* blas, const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows,
