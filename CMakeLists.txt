@@ -1859,6 +1859,11 @@ if(STRATA_NATIVE_EXPERTS AND (STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP) AND NOT S
                                                       ${_strata_gpu_include_directories})
   target_link_libraries(poly_norm_q8_test PRIVATE strata_kernels ${_strata_gpu_blas_target}
                                                   ${_strata_gpu_runtime_target})
+  # a prompt batch's products with few outputs against the same sums on the host; needs a card, run by hand
+  add_executable(poly_gemm_small_test src/poly/gemm_small_test.cu src/poly/kernels.cu)
+  target_include_directories(poly_gemm_small_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+                                                         ${_strata_gpu_include_directories})
+  target_link_libraries(poly_gemm_small_test PRIVATE ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target})
   # attend()'s blocks of rows against its other kernels and itself; needs a card, so it is run by hand
   add_executable(poly_attend_test src/poly/attend_test.cu src/poly/kernels.cu)
   target_include_directories(poly_attend_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include

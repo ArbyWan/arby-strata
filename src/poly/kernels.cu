@@ -110,22 +110,38 @@ void gemv(const W* w, const float* x, float* y, int n_in, int n_out, int rows_pe
 // and SMALL_OUT outputs, a warp a token and a lane an output, and takes the inputs SMALL_K values at a time.
 constexpr int SMALL_TOK = 8, SMALL_OUT = 32, SMALL_K = 64;
 
-__global__ void gemm_small_kernel(const float* __restrict__ w, const float* __restrict__ x, float* __restrict__ y,
-                                  int n_in, int n_out, int rows) {
+__global__ void __launch_bounds__(SMALL_TOK * WARP)
+gemm_small_kernel(const float* __restrict__ w, const float* __restrict__ x, float* __restrict__ y, int n_in, int n_out,
+                  int rows) {
+    constexpr int THREADS = SMALL_TOK * WARP, XS = SMALL_TOK * SMALL_K / THREADS, WS = SMALL_OUT * SMALL_K / THREADS;
     __shared__ float sx[SMALL_TOK][SMALL_K + 1], sw[SMALL_OUT][SMALL_K + 1];
     const int t0 = blockIdx.x * SMALL_TOK, o0 = blockIdx.y * SMALL_OUT;
     const int tt = threadIdx.x / WARP, oo = threadIdx.x % WARP;
+    // the next step's inputs and weights, read while this one is worked on
+    float xr[XS], wr[WS];
+    const auto fetch = [&](int k0) {
+        for (int j = 0; j < XS; ++j) {
+            const int i = threadIdx.x + j * THREADS, t = t0 + i / SMALL_K, k = k0 + i % SMALL_K;
+            xr[j] = t < rows && k < n_in ? x[size_t(t) * n_in + k] : 0.0f;
+        }
+        for (int j = 0; j < WS; ++j) {
+            const int i = threadIdx.x + j * THREADS, o = o0 + i / SMALL_K, k = k0 + i % SMALL_K;
+            wr[j] = o < n_out && k < n_in ? w[size_t(o) * n_in + k] : 0.0f;
+        }
+    };
+    fetch(0);
     float acc = 0.0f;
     for (int k0 = 0; k0 < n_in; k0 += SMALL_K) {
-        for (int i = threadIdx.x; i < SMALL_TOK * SMALL_K; i += blockDim.x) {
-            const int r = i / SMALL_K, c = i % SMALL_K, t = t0 + r, k = k0 + c;
-            sx[r][c] = t < rows && k < n_in ? x[size_t(t) * n_in + k] : 0.0f;
+        for (int j = 0; j < XS; ++j) {
+            const int i = threadIdx.x + j * THREADS;
+            sx[i / SMALL_K][i % SMALL_K] = xr[j];
         }
-        for (int i = threadIdx.x; i < SMALL_OUT * SMALL_K; i += blockDim.x) {
-            const int r = i / SMALL_K, c = i % SMALL_K, o = o0 + r, k = k0 + c;
-            sw[r][c] = o < n_out && k < n_in ? w[size_t(o) * n_in + k] : 0.0f;
+        for (int j = 0; j < WS; ++j) {
+            const int i = threadIdx.x + j * THREADS;
+            sw[i / SMALL_K][i % SMALL_K] = wr[j];
         }
         __syncthreads();
+        if (k0 + SMALL_K < n_in) fetch(k0 + SMALL_K);
 #pragma unroll 16
         for (int c = 0; c < SMALL_K; ++c) acc = fmaf(sx[tt][c], sw[oo][c], acc);
         __syncthreads();
