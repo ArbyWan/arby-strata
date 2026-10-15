@@ -271,6 +271,11 @@ public:
     /// Between requests: the cache gives up VRAM when little is free, and takes VRAM that came free (see the
     /// definition for how much stays free).  True when it changed.
     bool mind_vram();
+    /// At a request's start, the engine at the furthest point of its `end` tokens it could come back to: the
+    /// attention caches give back the rows past `end` that the request before did not reach either.  One long
+    /// request leaves them grown, and the expert cache would stay that much smaller for every request after it.
+    /// Returns the bytes given back, which mind_vram() hands to the expert cache.
+    size_t trim_kv(int64_t end);
     void save_profile() const;
 
 protected:
@@ -449,6 +454,8 @@ protected:
     int grow_cache(size_t bytes);
     void resize_card_cache(int mib);   ///< resize_cache() and mind_vram() for this engine's card
     bool mind_card_vram();
+    size_t trim_card_kv(int64_t end);
+    int64_t kv_rows_for(int64_t end) const;   ///< the rows cover() maps for `end`
     void held_is_budget();
     void settle_swaps();
 
@@ -531,6 +538,7 @@ protected:
     size_t grain_ = 0;           ///< what the card maps VRAM in
     std::vector<Kv> kv_;         ///< the attention caches that grow with the sequence
     int64_t kv_rows_ = 0;        ///< the rows they have VRAM for
+    int64_t kv_reach_ = 0;       ///< the furthest row cover() was asked for since the last trim_kv()
     size_t budget_ = 0;          ///< their VRAM and the expert cache's together, as the cache was filled
     int asked_reserve_mib_ = -1; ///< Options::vram_reserve_mib as load() got it
     int reserve_mib_ = 0;        ///< what the cache was sized to leave free

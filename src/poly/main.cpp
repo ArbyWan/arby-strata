@@ -350,6 +350,13 @@ struct Session {
         Clock::time_point t0 = Clock::now(), shown = t0;   // bringing a parked conversation back is prompt time
         engine.images(pictures.at.data(), (int) pictures.at.size());
         r.resume = kept.resume(ids);
+        if (const size_t freed = engine.trim_kv(n)) {
+            const int had = engine.cached_experts();
+            engine.mind_vram();
+            std::fprintf(stderr, "strata-poly: the attention caches gave back %.2f GiB that this request and the one "
+                                 "before do not reach; the expert cache %d -> %d experts\n",
+                         double(freed) / double(1ull << 30), had, engine.cached_experts());
+        }
         kept.turn_at(turn_at);
         asked += n;
         reused += r.resume;

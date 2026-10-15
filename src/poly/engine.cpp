@@ -530,12 +530,14 @@ void* Engine::kv_alloc(size_t bytes, int per) {
 // reserve stays for what is recorded later.  A quarter of the reserve stays free whatever else took VRAM since
 // (mind_vram()).
 void Engine::cover(int64_t end) {
+    kv_reach_ = std::max(kv_reach_, end);
     if (kv_.empty() || end <= kv_rows_) return;
-    const int64_t rows = std::min<int64_t>(opt_.max_context, (end + kKvAhead + kKvGrow - 1) / kKvGrow * kKvGrow);
+    const int64_t rows = kv_rows_for(end);
     const auto size = [rows](const Kv& k) { return (size_t) ((rows + k.per - 1) / k.per) * k.bytes; };
     size_t more = 0, held = arena_.mapped;
     for (const Kv& k : kv_) {
-        more += std::min(up_to(size(k), grain_), k.reserved) - k.mapped;
+        const size_t want = std::min(up_to(size(k), grain_), k.reserved);
+        if (want > k.mapped) more += want - k.mapped;   // trim_card_kv() leaves a piece it cuts through
         held += k.mapped;
     }
     if (exp_) {
@@ -546,8 +548,39 @@ void Engine::cover(int64_t end) {
         if (free_b < more + quarter) cut = std::max(cut, more + quarter - free_b);
         if (cut) shrink_cache(cut);
     }
-    for (Kv& k : kv_) vmm_map(k, size(k), SIZE_MAX, "the attention cache");
+    // in pieces of kKvGrow rows, so that trim_card_kv() can give back what a long read mapped in one go
+    for (Kv& k : kv_)
+        vmm_map(k, size(k), (size_t) ((kKvGrow + k.per - 1) / k.per) * k.bytes, "the attention cache");
     kv_rows_ = rows;
+}
+
+int64_t Engine::kv_rows_for(int64_t end) const {
+    return std::min<int64_t>(opt_.max_context, (end + kKvAhead + kKvGrow - 1) / kKvGrow * kKvGrow);
+}
+
+size_t Engine::trim_kv(int64_t end) {
+    size_t freed = 0;
+    for (Engine* e = this; e; e = e->next_.get()) freed += e->trim_card_kv(end);
+    return freed;
+}
+
+// A card that holds every expert keeps the whole context's rows (load()): nothing would take what they give back.
+size_t Engine::trim_card_kv(int64_t end) {
+    const int64_t before = kv_reach_;
+    kv_reach_ = end;
+    if (kv_.empty() || !exp_ || all_cached()) return 0;
+    const int64_t rows = kv_rows_for(std::max(end, before));
+    if (rows >= kv_rows_) return 0;
+    OnCard here(device_, split_);
+    ck(cudaDeviceSynchronize(), "the attention cache");
+    size_t freed = 0;
+    for (Kv& k : kv_) {
+        const size_t had = k.mapped;
+        vmm_unmap(k, (size_t) ((rows + k.per - 1) / k.per) * k.bytes);
+        freed += had - k.mapped;
+    }
+    kv_rows_ = rows;
+    return freed;
 }
 
 // Every expert on its way into the cache arrives and takes its slot.
