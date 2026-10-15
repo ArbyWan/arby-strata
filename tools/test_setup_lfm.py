@@ -49,11 +49,15 @@ class Pins(unittest.TestCase):
 class Batch(unittest.TestCase):
     def test_where_the_card_holds_every_expert_beside_it(self):
         sizes = FAM["models"]
-        for vram, ctx, want in ((8.0, 32768, []), (23.6, 32768, ["UD-Q4_K_XL", "UD-Q3_K_XL", "QAD-Q4_0"]),
-                                (23.6, 131072, ["UD-Q4_K_XL", "UD-Q3_K_XL", "QAD-Q4_0"]), (31.8, 32768, list(sizes)),
-                                (31.8, 131072, list(sizes))):
+        # LFM2.5 on any card from 8 GB; Qwen3.6 where the card holds every expert of the size
+        for vram, want in ((6.0, []), (7.6, list(sizes)), (31.8, list(sizes))):
+            with self.subTest(vram=vram):
+                self.assertEqual([m for m, d in sizes.items() if setup.poly_batch(FAM, d, vram, 32768)], want)
+        qwen = setup.FAMILIES["qwen36"]
+        for vram, ctx, want in ((8.0, 32768, []), (23.6, 32768, ["UD-Q3_K_M", "UD-Q2_K_XL"]),
+                                (23.6, 131072, ["UD-Q3_K_M", "UD-Q2_K_XL"]), (31.8, 131072, list(qwen["models"]))):
             with self.subTest(vram=vram, ctx=ctx):
-                self.assertEqual([m for m, d in sizes.items() if setup.poly_batch(FAM, d, vram, ctx)], want)
+                self.assertEqual([m for m, d in qwen["models"].items() if setup.poly_batch(qwen, d, vram, ctx)], want)
         # a family without the figure keeps the engine's batch
         self.assertFalse(setup.poly_batch(setup.FAMILIES["gemma4"], setup.FAMILIES["gemma4"]["models"]["UD-Q2_K_XL"],
                                           96.0, 32768))
@@ -78,8 +82,9 @@ class Main(unittest.TestCase):
                 args = cfg["args"]
                 self.assertEqual(Path(args[args.index("--model") + 1]), self.t / "models" / tag / file)
                 self.assertEqual(Path(args[args.index("--expert-profile") + 1]), pack / "expert-profile.txt")
-                for flag in ("--draft-model", "--tail-skip", "--prompt-batch"):
+                for flag in ("--draft-model", "--tail-skip"):
                     self.assertNotIn(flag, args)
+                self.assertEqual(args[args.index("--prompt-batch") + 1], "2048")   # on the 8 GB card too
                 self.assertEqual(cfg["model_name"], f"lfm2.5-24b-a2b-{size.lower()}")
                 self.assertEqual(cfg["display_name"], f"LFM2.5-24B-A2B {size}")
                 self.assertNotIn("vision", cfg)

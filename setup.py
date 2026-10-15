@@ -515,7 +515,8 @@ FAMILIES = {
     # "ran_on_gb": the smallest card it has run on, 32 GB without the key.  "tail_skip": the engine's --tail-skip,
     # for the family whose answers it moves no more than the Strata project's default moves its own (docs/BACKENDS.md).
     # "batch_gb": the VRAM the engine's prompt batch takes for a second 1,024 tokens, measured on the RTX 5090; a card
-    # that holds every expert beside it reads with 2,048 (poly_batch()).
+    # that holds every expert beside it reads with 2,048 (poly_batch()).  "batch_from_gb": the family reads with 2,048
+    # on any card from this much VRAM (GiB) on, where the 8 GB laptop read faster that way and wrote no slower.
     # LFM2.5 (llama.cpp's lfm2moe): no draft block and no image encoder.  QAD-Q4_0 is Liquid AI's own file, trained
     # for that quantization; the other sizes are Unsloth's.
     "lfm25": {"title": "LFM2.5-24B-A2B", "by": "Liquid AI; quantized by Unsloth and Liquid AI",
@@ -523,7 +524,7 @@ FAMILIES = {
                        "beside an 8 GB card; four other sizes too, no images",
               "hf": hf("unsloth/LFM2.5-24B-A2B-GGUF"), "file": "LFM2.5-24B-A2B-{q}.gguf", "shards": 1,
               "tag": "lfm25-", "name": "lfm2.5-24b-a2b", "engine": "poly", "vision": False, "experimental": True,
-              "windows": True, "ran_on_gb": 8, "row_bytes": 20480, "batch_gb": 0.4,
+              "windows": True, "ran_on_gb": 8, "row_bytes": 20480, "batch_gb": 0.4, "batch_from_gb": 7.5,
               "models": {"UD-Q4_K_XL": {"about": "4-bit experts (Unsloth Dynamic), 5- and 6-bit where they write",
                                         "download_gb": 14.9, "ram_gb": 20, "arena_gb": 14.0, "vram_beside_gb": 4.1},
                          "UD-Q3_K_XL": {"about": "3-bit i-quant experts, 4-bit where they write: the least RAM",
@@ -5778,9 +5779,13 @@ def poly_held_gb(d, vram_gb) -> float:
 
 
 def poly_batch(fam, d, vram_gb, ctx) -> bool:
-    """Whether a card holds every expert of a size beside a prompt batch of 2,048 tokens and the context's rows past
-    32K, with a GiB to spare: llama.cpp's matrix kernels then get twice the rows of each expert, and a long prompt is
-    read 14% (Qwen3.6) to 30% (LFM2.5) faster.  A family without "batch_gb" keeps the engine's 1,024."""
+    """Whether setup's config reads a prompt 2,048 tokens at a time instead of the engine's 1,024: on a card that holds
+    every expert of a size beside the larger batch and the context's rows past 32K, with a GiB to spare, llama.cpp's
+    matrix kernels get twice the rows of each expert and a long prompt is read 14% (Qwen3.6) to 30% (LFM2.5) faster;
+    on a smaller card the experts outside VRAM are copied to it half as often.  A family without "batch_gb" keeps
+    1,024, one with "batch_from_gb" takes 2,048 on any card from that size on."""
+    if fam.get("batch_from_gb") and vram_gb >= fam["batch_from_gb"]:
+        return True
     if not fam.get("batch_gb"):
         return False
     rows = max(0, ctx - 32768) * fam.get("row_bytes", GLM_ROW_BYTES) / 2**30
@@ -6345,7 +6350,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         args += ["--tail-skip", str(fam["tail_skip"])]
     if not multi and poly_batch(fam, d, vram, ctx):
         args += ["--prompt-batch", "2048"]
-        ok("the card holds every expert: prompts are read 2,048 tokens at a time (--prompt-batch in the config)")
+        ok("prompts are read 2,048 tokens at a time (--prompt-batch in the config)")
     # The engine's own count is every logical CPU.  On a hybrid CPU that is the slowest: an efficiency core runs
     # an expert at half the speed, and a layer waits for its slowest part (hybrid_pool_workers()).
     cores = cpu_cores()
