@@ -1383,7 +1383,9 @@ __global__ void gdn_state_kernel(const float* __restrict__ qkv, const float* __r
 }
 
 // gdn_state_kernel with the warp's column in registers, PER values a lane, for the whole walk over the tokens:
-// a token reads and writes no state.  The sums go in the same order, so the result is the same to the bit.
+// a token reads and writes no state.  The sums go in the same order, so the result is the same to the bit.  A
+// token's inputs are read while the token before is computed: a walk that waited for each token's reads took
+// about a microsecond a token, the latency of those reads.
 template <int PER>
 __global__ void gdn_state_reg_kernel(const float* __restrict__ qkv, const float* __restrict__ decay,
                                      const float* __restrict__ share, float* __restrict__ s, float* __restrict__ out,
@@ -1400,31 +1402,45 @@ __global__ void gdn_state_reg_kernel(const float* __restrict__ qkv, const float*
     float c[PER];
 #pragma unroll
     for (int k = 0; k < PER; ++k) c[k] = col[lane + k * WARP];
-    for (int row = 0; row < rows; ++row) {
+    // a token's inputs: its query and key values of this lane, its value of the column, its decay and share
+    float qa[PER], ka[PER], va = 0.0f, da = 0.0f, sa = 0.0f;
+    auto fetch = [&](int row, float* q, float* kk, float& v, float& dc, float& sh) {
         const float* x = qkv + size_t(row) * row_n;
-        const float* qn = x + size_t(hk) * dim;
-        const float* kn = x + keys + size_t(hk) * dim;
-        const float v = x[2 * keys + size_t(h) * dim + j];
-        const float dc = decay[size_t(row) * n_head + h];
+#pragma unroll
+        for (int k = 0; k < PER; ++k) {
+            q[k] = x[size_t(hk) * dim + lane + k * WARP];
+            kk[k] = x[keys + size_t(hk) * dim + lane + k * WARP];
+        }
+        v = x[2 * keys + size_t(h) * dim + j];
+        dc = decay[size_t(row) * n_head + h];
+        sh = share[size_t(row) * n_head + h];
+    };
+    if (rows > 0) fetch(0, qa, ka, va, da, sa);
+    for (int row = 0; row < rows; ++row) {
+        float qb[PER], kb[PER], vb = 0.0f, db = 0.0f, sb = 0.0f;
+        if (row + 1 < rows) fetch(row + 1, qb, kb, vb, db, sb);
         // the products and sums as gdn_state_kernel's compiled code has them, so that the result is the same bits
         float sk = 0.0f;
 #pragma unroll
-        for (int k = 0; k < PER; ++k) sk = __fmaf_rn(__fmul_rn(dc, c[k]), kn[lane + k * WARP], sk);
+        for (int k = 0; k < PER; ++k) sk = __fmaf_rn(__fmul_rn(da, c[k]), ka[k], sk);
         sk = warp_sum(sk);
-        const float d = __fmul_rn(__fsub_rn(v, sk), share[size_t(row) * n_head + h]);
+        const float d = __fmul_rn(__fsub_rn(va, sk), sa);
         float o = 0.0f;
         float* m = snap_of(snap, stride, snaps, row);
         if (m) m += mine;
 #pragma unroll
         for (int k = 0; k < PER; ++k) {
             const int i = lane + k * WARP;
-            const float n = __fmaf_rn(dc, c[k], __fmul_rn(kn[i], d));
+            const float n = __fmaf_rn(da, c[k], __fmul_rn(ka[k], d));
             c[k] = n;
             if (m) m[i] = n;
-            o = __fmaf_rn(n, qn[i], o);
+            o = __fmaf_rn(n, qa[k], o);
         }
         o = warp_sum(o);
         if (lane == 0) out[size_t(row) * d_inner + size_t(h) * dim + j] = o;
+#pragma unroll
+        for (int k = 0; k < PER; ++k) qa[k] = qb[k], ka[k] = kb[k];
+        va = vb, da = db, sa = sb;
     }
 #pragma unroll
     for (int k = 0; k < PER; ++k) col[lane + k * WARP] = c[k];
