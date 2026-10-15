@@ -84,6 +84,8 @@ __global__ void gemv_kernel(const W* __restrict__ w, const float* __restrict__ x
     if (threadIdx.x == 0) y[tok * n_out + o] = acc;
 }
 
+}  // namespace
+
 // The threads of a block that sums over n values.  A thread reads its values one after the other, and a kernel
 // this small takes as long as those reads in a row: four a thread at most, while a block has the threads.  With
 // 256 threads for 4096 values, GLM 5.3 Flash's layer norms, small products and stream mixing were 2.7 of the 11
@@ -93,6 +95,8 @@ int sum_threads(int n) {
     while (threads < 1024 && threads * 4 < n) threads *= 2;
     return threads;
 }
+
+namespace {
 
 template<typename W>
 void gemv(const W* w, const float* x, float* y, int n_in, int n_out, int rows_per_x, int rows, void* stream) {

@@ -38,6 +38,13 @@ bool native_mmvq_multi_exact();
 void native_quantize_q8_1(const float* x, void* x_q8_1, int n_in, int ncols,
                           void* stream);
 
+/// An RMS norm of `rows` rows of n values and native_quantize_q8_1() of its output in one launch, bit for bit what
+/// the two launches give: y = x / rms(x) * w as poly's rms_norm() writes it with `threads` a block (its
+/// sum_threads(n)), and y_q8_1 its Q8_1 blocks.  With `add` (null: none), x += add first, as axpy() adds, and x
+/// keeps the sum.  n is a multiple of 32.
+void native_add_rms_norm_q8_1(float* x, const float* add, const float* w, float* y, void* y_q8_1, int n, int rows,
+                              float eps, int threads, void* stream);
+
 void native_swiglu_quantize_q8_1(const float* gate, const float* up, void* x_q8_1,
                                  int n_in, int ncols, void* stream);
 

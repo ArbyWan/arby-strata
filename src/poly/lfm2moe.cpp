@@ -243,19 +243,18 @@ void Lfm2Moe::dense_ffn(Block& B, int il, int n) {
 }
 
 // A layer from its input to its router's copy (a dense layer: to its end).  A prompt batch's MoE (moe_rows) does
-// its own routing.
+// its own routing.  A norm and its quantization are one launch, and so are the residual's sum and the next norm:
+// a token's step is mostly small launches.
 void Lfm2Moe::layer_head(Layer& L, int il, int n) {
     Block& B = blocks_[(size_t) il];
-    rms_norm(r_, fp(L.attn_norm), xn_, n_embd_, n, rms_eps_, st_);
-    kernels::native_quantize_q8_1(xn_, xq_, n_embd_ * n, 1, st_);
+    const int threads = sum_threads(n_embd_);
+    kernels::native_add_rms_norm_q8_1(r_, nullptr, fp(L.attn_norm), xn_, xq_, n_embd_, n, rms_eps_, threads, st_);
     dbg("attn_in", il, xn_, n_embd_);
     if (B.attn) attn(B, pos_, n);
     else conv(B, n);
     dbg("attn", il, ao_, n_embd_);
-    axpy(ao_, 1.f, r_, n * n_embd_, true, st_);
 
-    rms_norm(r_, fp(L.ffn_norm), xn_, n_embd_, n, rms_eps_, st_);
-    kernels::native_quantize_q8_1(xn_, xq_, n_embd_ * n, 1, st_);
+    kernels::native_add_rms_norm_q8_1(r_, ao_, fp(L.ffn_norm), xn_, xq_, n_embd_, n, rms_eps_, threads, st_);
     dbg("ffn_in", il, xn_, n_embd_);
     if (!L.moe) {
         dense_ffn(B, il, n);

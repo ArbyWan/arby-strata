@@ -30,6 +30,8 @@ void bf16_to_f32(const uint16_t* w, float* out, size_t n, void* stream);
 /// rows) may be null.  A row of y starts y_stride values after the one before it (0: n), so two calls can fill
 /// the two halves of rows twice as long.
 void rms_norm(const float* x, const float* w, float* y, int n, int rows, float eps, void* stream, int y_stride = 0);
+/// The threads of a block that sums over n values (rms_norm()'s among them).
+int sum_threads(int n);
 /// y = (x - mean) / sqrt(var + eps) * w + b.
 void layer_norm(const float* x, const float* w, const float* b, float* y, int n, int rows, float eps, void* stream);
 

@@ -191,6 +191,46 @@ __global__ void native_swiglu_quantize_q8_1_kernel(const float* __restrict__ gat
     if (i % Q8K == 0) y[i / Q8K].ds = q8_1_ds(d, sum);
 }
 
+// native_add_rms_norm_q8_1: a block a row.  The sum of squares, the scale and the product are poly's rms_norm_kernel
+// with its block size (SUM threads of the block) and its IEEE operations written out (this file is built with
+// --use_fast_math).  Then every thread of the block takes values, a warp 32 of one Q8_1 block, and quantizes them as
+// native_quantize_q8_1_kernel does: more threads than the sum's make the row's quantization fewer steps.
+template<int SUM>
+__launch_bounds__(1024, 1)
+__global__ void native_add_rms_norm_q8_1_kernel(float* __restrict__ x, const float* __restrict__ add,
+                                                const float* __restrict__ w, float* __restrict__ y,
+                                                Q81Block* __restrict__ yq, int n, float eps) {
+    __shared__ float part[SUM / WARP];
+    float* xr = x + std::size_t(blockIdx.x) * n;
+    const float* ar = add ? add + std::size_t(blockIdx.x) * n : nullptr;
+    float* yr = y + std::size_t(blockIdx.x) * n;
+    Q81Block* qr = yq + std::size_t(blockIdx.x) * (n / Q8K);
+    if (threadIdx.x < SUM) {
+        float ss = 0.0f;
+        for (int i = threadIdx.x; i < n; i += SUM) {
+            float v = xr[i];
+            if (ar) xr[i] = v = __fadd_rn(v, ar[i]);
+            ss = __fmaf_rn(v, v, ss);
+        }
+        ss = warp_sum(ss);
+        if ((threadIdx.x & 31) == 0) part[threadIdx.x >> 5] = ss;
+    }
+    __syncthreads();
+    float sum = 0.0f;
+    for (int k = 0; k < SUM / WARP; ++k) sum = __fadd_rn(sum, part[k]);
+    const float scale = __fdiv_rn(1.0f, __fsqrt_rn(__fadd_rn(__fdiv_rn(sum, float(n)), eps)));
+    for (int i = threadIdx.x; i < n; i += blockDim.x) {   // n is a multiple of 32: a warp's 32 values are one block
+        const float xi = __fmul_rn(__fmul_rn(xr[i], scale), w[i]);
+        yr[i] = xi;
+        const float amax = warp_max(fabsf(xi));
+        const float bsum = warp_sum(xi);
+        const float d = q8_1_finite(amax / 127.0f);
+        const int8_t q = q8_1_quant(xi, d, amax);
+        qr[i / Q8K].qs[i % Q8K] = q;
+        if (i % Q8K == 0) qr[i / Q8K].ds = q8_1_ds(d, bsum);
+    }
+}
+
 // Exact pinned vec_dot_q5_K_q8_1_impl_vmmq expression and integer dot order.
 __device__ __forceinline__ float q5_q8_dot_impl(
     const int* __restrict__ vl, const int* __restrict__ vh, const int* __restrict__ u,
@@ -2314,6 +2354,28 @@ void native_swiglu_quantize_q8_1(const float* gate, const float* up, void* x_q8_
     native_swiglu_quantize_q8_1_kernel<<<blocks, QUANT_THREADS, 0,
                                          static_cast<cudaStream_t>(stream)>>>(
         gate, up, static_cast<Q81Block*>(x_q8_1), n_total);
+    launch_check();
+}
+
+void native_add_rms_norm_q8_1(float* x, const float* add, const float* w, float* y, void* y_q8_1, int n, int rows,
+                              float eps, int threads, void* stream) {
+    validate_shape(n, 1);
+    validate_pointer(x);
+    validate_pointer(w);
+    validate_pointer(y);
+    validate_pointer(y_q8_1);
+    validate_stream(stream);
+    if (rows < 1) return;
+    const auto s = static_cast<cudaStream_t>(stream);
+    auto* q = static_cast<Q81Block*>(y_q8_1);
+    const int block = std::max(threads, std::min(1024, n));   // n is a multiple of 32, and so is this
+    switch (threads) {
+    case 128: native_add_rms_norm_q8_1_kernel<128><<<rows, block, 0, s>>>(x, add, w, y, q, n, eps); break;
+    case 256: native_add_rms_norm_q8_1_kernel<256><<<rows, block, 0, s>>>(x, add, w, y, q, n, eps); break;
+    case 512: native_add_rms_norm_q8_1_kernel<512><<<rows, block, 0, s>>>(x, add, w, y, q, n, eps); break;
+    case 1024: native_add_rms_norm_q8_1_kernel<1024><<<rows, block, 0, s>>>(x, add, w, y, q, n, eps); break;
+    default: throw std::invalid_argument("native_add_rms_norm_q8_1: 128, 256, 512 or 1024 threads");
+    }
     launch_check();
 }
 
