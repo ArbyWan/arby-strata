@@ -100,6 +100,36 @@ void gemv(const W* w, const float* x, float* y, int n_in, int n_out, int rows_pe
     gemv_kernel<W><<<dim3(n_out, rows), threads, 0, (cudaStream_t) stream>>>(w, x, y, n_in, n_out, rows_per_x);
 }
 
+// A prompt batch's product with a matrix of few rows (a gate a head, the indexer's weights).  cuBLAS cuts such a
+// product into a few blocks that each walk all of n_in: 0.44 ms for 1,024 tokens of 2,048 values and 32 outputs on
+// an RTX 5090, a quarter of what Qwen3.6's recurrent layers took to read a prompt.  A block here has SMALL_TOK tokens
+// and SMALL_OUT outputs, a warp a token and a lane an output, and takes the inputs SMALL_K values at a time.
+constexpr int SMALL_TOK = 8, SMALL_OUT = 32, SMALL_K = 64;
+
+__global__ void gemm_small_kernel(const float* __restrict__ w, const float* __restrict__ x, float* __restrict__ y,
+                                  int n_in, int n_out, int rows) {
+    __shared__ float sx[SMALL_TOK][SMALL_K + 1], sw[SMALL_OUT][SMALL_K + 1];
+    const int t0 = blockIdx.x * SMALL_TOK, o0 = blockIdx.y * SMALL_OUT;
+    const int tt = threadIdx.x / WARP, oo = threadIdx.x % WARP;
+    float acc = 0.0f;
+    for (int k0 = 0; k0 < n_in; k0 += SMALL_K) {
+        for (int i = threadIdx.x; i < SMALL_TOK * SMALL_K; i += blockDim.x) {
+            const int r = i / SMALL_K, c = i % SMALL_K, t = t0 + r, k = k0 + c;
+            sx[r][c] = t < rows && k < n_in ? x[size_t(t) * n_in + k] : 0.0f;
+        }
+        for (int i = threadIdx.x; i < SMALL_OUT * SMALL_K; i += blockDim.x) {
+            const int r = i / SMALL_K, c = i % SMALL_K, o = o0 + r, k = k0 + c;
+            sw[r][c] = o < n_out && k < n_in ? w[size_t(o) * n_in + k] : 0.0f;
+        }
+        __syncthreads();
+#pragma unroll 16
+        for (int c = 0; c < SMALL_K; ++c) acc = fmaf(sx[tt][c], sw[oo][c], acc);
+        __syncthreads();
+    }
+    const int t = t0 + tt, o = o0 + oo;
+    if (t < rows && o < n_out) y[size_t(t) * n_out + o] = acc;
+}
+
 __global__ void bf16_to_f32_kernel(const uint16_t* __restrict__ w, float* __restrict__ out, size_t n) {
     const size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
     if (i < n) out[i] = ldw(w, i);
@@ -1466,6 +1496,13 @@ void gemm_f32(void* blas, const float* w, const float* x, float* y, int n_in, in
     const cublasHandle_t h = (cublasHandle_t) blas;
     const float one = 1.0f, zero = 0.0f;
     const int groups = n_out / rows_per_x;
+    if (groups == 1 && n_out <= 8 * SMALL_OUT) {
+        cudaStream_t stream = nullptr;
+        blas_ck(cublasGetStream(h, &stream), "cublasGetStream");
+        gemm_small_kernel<<<dim3((rows + SMALL_TOK - 1) / SMALL_TOK, (n_out + SMALL_OUT - 1) / SMALL_OUT),
+                            SMALL_TOK * WARP, 0, stream>>>(w, x, y, n_in, n_out, rows);
+        return;
+    }
     if (groups == 1) {
         blas_ck(cublasSgemm(h, CUBLAS_OP_T, CUBLAS_OP_N, n_out, rows, n_in, &one, w, n_in, x, n_in, &zero, y, n_out),
                 "a batch's projection");

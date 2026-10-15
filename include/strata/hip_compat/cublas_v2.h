@@ -22,6 +22,7 @@
 #define cublasSgemm rocblas_sgemm
 #define cublasSgemmStridedBatched rocblas_sgemm_strided_batched
 #define cublasHandle_t rocblas_handle
+#define cublasGetStream rocblas_get_stream
 #define cublasSetStream rocblas_set_stream
 #define cublasSetWorkspace rocblas_set_workspace
 #define cublasStatus_t rocblas_status
@@ -74,6 +75,7 @@ inline rocblas_status cublasGemmStridedBatchedEx(rocblas_handle h, rocblas_opera
 #define cublasSgemm hipblasSgemm
 #define cublasSgemmStridedBatched hipblasSgemmStridedBatched
 #define cublasSetMathMode hipblasSetMathMode
+#define cublasGetStream hipblasGetStream
 #define cublasSetStream hipblasSetStream
 #define cublasSetWorkspace hipblasSetWorkspace
 #define cublasStatus_t hipblasStatus_t
