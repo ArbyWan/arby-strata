@@ -83,8 +83,24 @@ GLM4_PATTERN = (
 GEMMA4_PATTERN = r"[^\n]+|\n+"
 SPACE = "\u2581"
 
+# The `joyai-llm` pre-tokenizer (DeepSeek V4 Flash), llama.cpp's LLAMA_VOCAB_PRE_TYPE_JOYAI_LLM, which is
+# DEEPSEEK3_LLM's: three patterns one after the other.  Each splits every piece the one before left into its
+# matches and the text between them, which stays a piece of its own (llama.cpp's unicode_regex_split): runs of up to
+# three digits, then runs of CJK ideographs and kana, then the rest.
+DEEPSEEK3_SEQUENCE = (
+    r"\p{N}{1,3}",
+    r"[一-龥぀-ゟ゠-ヿ]+",
+    r"""[!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~][A-Za-z]+"""
+    r"|[^\r\n\p{L}\p{P}\p{S}]?[\p{L}\p{M}]+"
+    r"| ?[\p{P}\p{S}]+[\r\n]*"
+    r"|\s*[\r\n]+"
+    r"|\s+(?!\S)"
+    r"|\s+",
+)
+
 PRE_PATTERNS = {"glm4": GLM4_PATTERN, "glm5": GLM4_PATTERN,   # every other name: QWEN35_PATTERN, as before
                 "gemma4": GEMMA4_PATTERN}
+PRE_SEQUENCES = {"joyai-llm": DEEPSEEK3_SEQUENCE, "deepseek-v3": DEEPSEEK3_SEQUENCE}
 IGNORE_MERGES = ("glm4", "glm5")
 RAW = ("gemma4",)                      # vocabularies of UTF-8 pieces
 MODELS = {"gpt2": None, "gemma4": "gemma4"}   # tokenizer.ggml.model -> the pre-tokenizer it implies, if any
@@ -114,9 +130,11 @@ class Tokenizer:
             if not self.raw and (parts[0] not in self.ids or parts[1] not in self.ids):
                 raise ValueError("merge %d names a token outside the vocabulary: %r" % (i, m))
             self.ranks[(parts[0], parts[1])] = i
-        self.pre_pattern = PRE_PATTERNS.get(pre, QWEN35_PATTERN)
+        self.pre_sequence = PRE_SEQUENCES.get(pre)
+        self.pre_pattern = self.pre_sequence[-1] if self.pre_sequence else PRE_PATTERNS.get(pre, QWEN35_PATTERN)
         self.ignore_merges = pre in IGNORE_MERGES
         self._re = regex.compile(self.pre_pattern)
+        self._seq = [regex.compile(x) for x in self.pre_sequence] if self.pre_sequence else None
 
         # The literals matched directly instead of being run through BPE.  GGUF token types: 3 = CONTROL,
         # 4 = USER_DEFINED.  The two classes behave DIFFERENTLY and llama.cpp's own tokenizer settled which:
@@ -285,6 +303,27 @@ class Tokenizer:
             out.extend(got)
         return out
 
+    def _pieces(self, text: str) -> list[str]:
+        """The pre-tokenizer's pieces: one pattern's matches, or a sequence's, where each pattern splits what the
+        one before left into its matches and the text between them."""
+        if not self._seq:
+            return self._re.findall(text)
+        pieces = [text]
+        for pat in self._seq:
+            out = []
+            for piece in pieces:
+                at = 0
+                for m in pat.finditer(piece):
+                    if m.start() > at:
+                        out.append(piece[at:m.start()])
+                    if m.end() > m.start():
+                        out.append(m.group())
+                    at = m.end()
+                if at < len(piece):
+                    out.append(piece[at:])
+            pieces = out
+        return pieces
+
     def _encode_plain(self, text: str) -> list[int]:
         if self.raw:
             return self._encode_raw(text)
@@ -292,7 +331,7 @@ class Tokenizer:
         # A piece's ids depend on the piece alone, so repeated pieces (most of a resent conversation) are looked up
         # instead of merged again.  The ids are the ones _bpe gives: this only skips the work.
         cache = self._piece_ids
-        for piece in self._re.findall(text):
+        for piece in self._pieces(text):
             got = cache.get(piece)
             if got is None:
                 mapped = "".join(BYTE_TO_UNICODE[b] for b in piece.encode("utf-8"))
@@ -371,6 +410,11 @@ class Tokenizer:
                 byte = self.token_types and self.token_types[i] == 6 and len(t) == 6 and t.startswith("<0x")
                 b = cache[i] = bytes([int(t[3:5], 16)]) if byte else t.replace(SPACE, " ").encode("utf-8")
                 return b
+            if self.token_types and self.token_types[i] in (3, 4):
+                # a CONTROL or USER_DEFINED token is its text, as llama.cpp gives it: DeepSeek V4's
+                # <｜begin▁of▁sentence｜> is not in the byte alphabet
+                b = cache[i] = self.tokens[i].encode("utf-8")
+                return b
             raw = bytearray()
             for ch in self.tokens[i]:
                 v = UNICODE_TO_BYTE.get(ch)
@@ -400,7 +444,10 @@ def extract(gguf_path, out_dir) -> dict:
         # The pattern is SHIPPED, not recomputed by the reader: it is transcribed from llama.cpp for the
         # declared `pre` type, and a C++ port that re-derived it would be free to get `\p{M}` wrong again.
         "pre_pattern": tk.pre_pattern,
+        "pre_sequence": list(tk.pre_sequence) if tk.pre_sequence else None,
         "pre_pattern_source": "llama.cpp src/llama-vocab.cpp (LLAMA_VOCAB_PRE_TYPE_GEMMA4)" if tk.raw
+                              else "llama.cpp src/llama-vocab.cpp (LLAMA_VOCAB_PRE_TYPE_DEEPSEEK3_LLM)"
+                              if tk.pre_sequence
                               else "llama.cpp src/llama-vocab.cpp (LLAMA_VOCAB_PRE_TYPE_CHATGLM4)" if tk.ignore_merges
                               else ".ref/llama.cpp src/llama-vocab.cpp L396 (LLAMA_VOCAB_PRE_TYPE_QWEN35)",
         "ignore_merges": tk.ignore_merges,

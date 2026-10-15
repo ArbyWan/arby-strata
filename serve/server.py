@@ -148,7 +148,8 @@ VISION_START = "<|vision_start|>"
 # turn: strata-poly keeps a checkpoint there (turn_at), which the chat's next request goes on from.  The second one
 # ends the first turn: the system prompt with the tools, which "warm_start" keeps.
 TURN_OPENERS = {"function": ("<|im_start|>",), "gemma": ("<|turn>",),
-                "glm": ("<|system|>", "<|user|>", "<|assistant|>", "<|observation|>")}
+                "glm": ("<|system|>", "<|user|>", "<|assistant|>", "<|observation|>"),
+                "dsml": ("<｜User｜>", "<｜Assistant｜>")}
 WARM_MIN_TOKENS = 2048           # a shorter prompt start is quick to read again: not kept
 # #606: a reply that repeats one token this many times in a row is ended there ("length"): a model in a loop, or a
 # broken state that answers one token forever (an issue saw 36,689 tokens of "!"). The config's "repeat_stop_tokens"
@@ -3162,7 +3163,8 @@ class Service:
             if key in special}
         # how the model writes a tool call (serve/frontend.py's OutputParser)
         pre = getattr(tokenizer, "pre", "")
-        self.call_format = "glm" if pre in ("glm4", "glm5") else "gemma" if pre == "gemma4" else "function"
+        self.call_format = "glm" if pre in ("glm4", "glm5") else "gemma" if pre == "gemma4" else \
+            "dsml" if pre in ("joyai-llm", "deepseek-v3") else "function"
         self.turn_ids = frozenset(t[0] for t in (tokenizer.encode(s, parse_special=True)
                                                  for s in TURN_OPENERS[self.call_format]) if len(t) == 1)
         self.engine.turn_ids = self.turn_ids            # the GEN line's turn_at (StrataEngine.turn_key)
@@ -4010,7 +4012,7 @@ class Service:
         off = kwargs.get("enable_thinking") is False
         # said either way: Gemma's template thinks only when told to, the others unless told not to
         kwargs = {**self.template_tokens, **kwargs, "enable_thinking": not off}
-        if self.call_format == "gemma" and tools:      # its template reads a tool as OpenAI sends it
+        if self.call_format in ("gemma", "dsml") and tools:   # their templates read a tool as OpenAI sends it
             tools = [{"type": "function", "function": t} for t in tools]
         if not self.effort_end or (not off and effort in (None, "", "xhigh", "high")):
             prompt = self.template.render(messages, tools=tools, **kwargs)

@@ -49,6 +49,7 @@ class ChatTemplate:
 
         env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True, extensions=["jinja2.ext.loopcontrols"])
         env.filters["tojson"] = tojson
+        env.filters["from_json"] = json.loads           # DeepSeek V4's template reads a call's arguments with it
         env.globals["raise_exception"] = raise_exception
         self.source = Path(path).read_text(encoding="utf-8")
         self.template = env.from_string(self.source)
@@ -1012,6 +1013,53 @@ def parse_gemma_tool_call(body: str, schema: dict | None = None) -> ToolCall:
     return ToolCall(name=gemma_call_name(body + GEMMA_CALL_END), arguments=args)
 
 
+# DeepSeek V4 writes its calls in DSML: a <｜DSML｜tool_calls> block of <｜DSML｜invoke name="NAME"> calls, each with
+# <｜DSML｜parameter name="KEY" string="true|false">VALUE</｜DSML｜parameter> lines; string="false" is a JSON value
+# (its chat template).  A call here is one invoke; the block around the calls is not content.
+DSML = "｜DSML｜"
+DSML_INVOKE, DSML_INVOKE_END = "<" + DSML + 'invoke name="', "</" + DSML + "invoke>"
+DSML_PARAM, DSML_PARAM_END = "<" + DSML + "parameter", "</" + DSML + "parameter>"
+DSML_BLOCK = ("<" + DSML + "tool_calls>", "</" + DSML + "tool_calls>")
+_DSML_PARAM = re.compile(re.escape(DSML_PARAM) + r'\s+name="([^"]*)"(?:\s+string="(true|false)")?\s*>(.*?)'
+                         + re.escape(DSML_PARAM_END), re.S)
+
+
+def dsml_call_name(text: str) -> str | None:
+    """A DSML call's name, or None while it is still arriving."""
+    at = text.find('"')
+    return text[:at].strip() if at >= 0 else None
+
+
+def dsml_call_end(text: str) -> int:
+    """Where a DSML call's body ends: the first `</｜DSML｜invoke>` right after the name or a parameter's end, so a
+    value may contain the tag.  -1: not complete yet."""
+    at = text.find(DSML_INVOKE_END)
+    while at >= 0:
+        before = text[:at].rstrip()
+        if before.endswith(DSML_PARAM_END) or DSML_PARAM not in before:
+            return at
+        at = text.find(DSML_INVOKE_END, at + 1)
+    return -1
+
+
+def parse_dsml_tool_call(body: str, schema: dict | None = None) -> ToolCall:
+    """`NAME">` and its parameter lines -> ToolCall.  A string="false" value is JSON; one that is not, or a value
+    without the attribute, is typed as parse_tool_call types it."""
+    name = dsml_call_name(body + '"') or ""
+    props = ((schema or {}).get("parameters") or {}).get("properties") or {}
+    args = {}
+    for key, kind, value in _DSML_PARAM.findall(body):
+        declared = (props.get(key) or {}).get("type")
+        if kind == "true":
+            args[key] = value
+            continue
+        try:
+            args[key] = json.loads(value) if kind == "false" else param_value(value, declared)
+        except ValueError:
+            args[key] = param_value(value, declared)
+    return ToolCall(name=name, arguments=args)
+
+
 def gemma_model_turn(prompt: str, thinking: bool) -> str:
     """Gemma's template opens no turn for the model after an answer that came with text, tool calls and their
     results: the prompt ends on that closed turn and, with thinking on, on a thought opened outside any turn.  This
@@ -1038,9 +1086,13 @@ class OutputParser:
         # What tells a <function=...> call from a quoted one, or recovers one written beside the template's form
         # (a call inside the reasoning, `recover`), reads that form only and is not applied to these.
         self.whole = {"glm": (glm_call_name, glm_call_end, parse_glm_tool_call),
-                      "gemma": (gemma_call_name, gemma_call_end, parse_gemma_tool_call)}.get(call_format)
-        self.call_start, self.call_stop = (GEMMA_CALL, GEMMA_CALL_END) if call_format == "gemma" \
-            else (CALL_START, CALL_END)
+                      "gemma": (gemma_call_name, gemma_call_end, parse_gemma_tool_call),
+                      "dsml": (dsml_call_name, dsml_call_end, parse_dsml_tool_call)}.get(call_format)
+        self.call_start, self.call_stop = {"gemma": (GEMMA_CALL, GEMMA_CALL_END),
+                                           "dsml": (DSML_INVOKE, DSML_INVOKE_END)}.get(call_format,
+                                                                                        (CALL_START, CALL_END))
+        # tags around the calls that are neither a call nor content (DeepSeek V4's block of calls)
+        self.noise = DSML_BLOCK if call_format == "dsml" else ()
         # Gemma opens its reasoning itself, as a channel, and ends it with a token of its own; the others' reasoning
         # is opened by the prompt and ends with </think>.  `opened`: this prompt ended on Gemma's opening (its
         # template writes it after a tool's answer), so the reply starts inside the reasoning
@@ -1428,6 +1480,8 @@ class OutputParser:
                     if self.think_open.startswith(self.buf):
                         return out
                     self.opening = False
+                for tag in self.noise:
+                    self.buf = self.buf.replace(tag, "")
                 if self.lead:                                   # newlines right after </think> or a call
                     stripped = self.buf.lstrip("\n")
                     if not stripped:
@@ -1453,7 +1507,7 @@ class OutputParser:
                 if i < 0:
                     # Hold a partial tag AND the newlines before it: if a tool call follows, they are dropped,
                     # so emitting them early would make streamed and whole outputs differ.
-                    j = len(self.buf) - self._hold(self.buf, (self.call_start,))
+                    j = len(self.buf) - self._hold(self.buf, (self.call_start,) + self.noise)
                     if self.recover and self.schemas:            # a line that may be becoming a bare <function=
                         k = self.buf.rfind("\n") + 1
                         tail = self.buf[k:]
