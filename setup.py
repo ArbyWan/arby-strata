@@ -514,6 +514,8 @@ FAMILIES = {
     # less, and the third is by name (poly_default()).  "windows": installed by setup and run there, on one PC.
     # "ran_on_gb": the smallest card it has run on, 32 GB without the key.  "tail_skip": the engine's --tail-skip,
     # for the family whose answers it moves no more than the Strata project's default moves its own (docs/BACKENDS.md).
+    # "batch_gb": the VRAM the engine's prompt batch takes for a second 1,024 tokens, measured on the RTX 5090; a card
+    # that holds every expert beside it reads with 2,048 (poly_batch()).
     # LFM2.5 (llama.cpp's lfm2moe): no draft block and no image encoder.  QAD-Q4_0 is Liquid AI's own file, trained
     # for that quantization; the other sizes are Unsloth's.
     "lfm25": {"title": "LFM2.5-24B-A2B", "by": "Liquid AI; quantized by Unsloth and Liquid AI",
@@ -521,7 +523,7 @@ FAMILIES = {
                        "beside an 8 GB card; four other sizes too, no images",
               "hf": hf("unsloth/LFM2.5-24B-A2B-GGUF"), "file": "LFM2.5-24B-A2B-{q}.gguf", "shards": 1,
               "tag": "lfm25-", "name": "lfm2.5-24b-a2b", "engine": "poly", "vision": False, "experimental": True,
-              "windows": True, "ran_on_gb": 8, "row_bytes": 20480,
+              "windows": True, "ran_on_gb": 8, "row_bytes": 20480, "batch_gb": 0.4,
               "models": {"UD-Q4_K_XL": {"about": "4-bit experts (Unsloth Dynamic), 5- and 6-bit where they write",
                                         "download_gb": 14.9, "ram_gb": 20, "arena_gb": 14.0, "vram_beside_gb": 4.1},
                          "UD-Q3_K_XL": {"about": "3-bit i-quant experts, 4-bit where they write: the least RAM",
@@ -548,7 +550,7 @@ FAMILIES = {
                         "beside an 8 GB card; a smaller and a larger size too",
                "hf": hf("unsloth/Qwen3.6-35B-A3B-MTP-GGUF"), "file": "Qwen3.6-35B-A3B-{q}.gguf", "shards": 1,
                "tag": "qwen36-", "name": "qwen3.6-35b-a3b", "engine": "poly", "vision": True, "experimental": True,
-               "windows": True, "ran_on_gb": 8, "tail_skip": 6,
+               "windows": True, "ran_on_gb": 8, "tail_skip": 6, "batch_gb": 0.5,
                "row_bytes": 26624, "mmproj_hf": hf("unsloth/Qwen3.6-35B-A3B-MTP-GGUF"), "mmproj": "mmproj-F16.gguf",
                "vision_gb": 0.9, "vision_vram_gb": 1.6,
                "models": {"UD-Q3_K_M": {"about": "3-bit experts (Unsloth Dynamic), its draft block in the file",
@@ -5775,6 +5777,16 @@ def poly_held_gb(d, vram_gb) -> float:
     return min(d["arena_gb"], max(0.0, vram_gb - poly_beside_gb(d)) * 1.073741824)
 
 
+def poly_batch(fam, d, vram_gb, ctx) -> bool:
+    """Whether a card holds every expert of a size beside a prompt batch of 2,048 tokens and the context's rows past
+    32K, with a GiB to spare: llama.cpp's matrix kernels then get twice the rows of each expert, and a long prompt is
+    read 14% (Qwen3.6) to 30% (LFM2.5) faster.  A family without "batch_gb" keeps the engine's 1,024."""
+    if not fam.get("batch_gb"):
+        return False
+    rows = max(0, ctx - 32768) * fam.get("row_bytes", GLM_ROW_BYTES) / 2**30
+    return d["arena_gb"] <= poly_held_gb(d, vram_gb - fam["batch_gb"] - rows - 1)
+
+
 def poly_default(sizes, ram, vram_gb) -> str:
     """The size setup takes when none is named: the first whose RAM estimate this PC meets, else the one that wants
     the least."""
@@ -6331,6 +6343,9 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
            "that much less)")
     if fam.get("tail_skip"):
         args += ["--tail-skip", str(fam["tail_skip"])]
+    if not multi and poly_batch(fam, d, vram, ctx):
+        args += ["--prompt-batch", "2048"]
+        ok("the card holds every expert: prompts are read 2,048 tokens at a time (--prompt-batch in the config)")
     # The engine's own count is every logical CPU.  On a hybrid CPU that is the slowest: an efficiency core runs
     # an expert at half the speed, and a layer waits for its slowest part (hybrid_pool_workers()).
     cores = cpu_cores()

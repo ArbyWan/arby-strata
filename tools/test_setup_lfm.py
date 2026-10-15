@@ -46,6 +46,19 @@ class Pins(unittest.TestCase):
         self.assertIn(f"~{n:.0f} GB of RAM beside an 8 GB card", FAM["about"])
 
 
+class Batch(unittest.TestCase):
+    def test_where_the_card_holds_every_expert_beside_it(self):
+        sizes = FAM["models"]
+        for vram, ctx, want in ((8.0, 32768, []), (23.6, 32768, ["UD-Q4_K_XL", "UD-Q3_K_XL", "QAD-Q4_0"]),
+                                (23.6, 131072, ["UD-Q4_K_XL", "UD-Q3_K_XL", "QAD-Q4_0"]), (31.8, 32768, list(sizes)),
+                                (31.8, 131072, list(sizes))):
+            with self.subTest(vram=vram, ctx=ctx):
+                self.assertEqual([m for m, d in sizes.items() if setup.poly_batch(FAM, d, vram, ctx)], want)
+        # a family without the figure keeps the engine's batch
+        self.assertFalse(setup.poly_batch(setup.FAMILIES["gemma4"], setup.FAMILIES["gemma4"]["models"]["UD-Q2_K_XL"],
+                                          96.0, 32768))
+
+
 class Main(unittest.TestCase):
     setUp, tearDown, main = glm_tests.Main.setUp, glm_tests.Main.tearDown, glm_tests.Main.main
 
@@ -65,11 +78,17 @@ class Main(unittest.TestCase):
                 args = cfg["args"]
                 self.assertEqual(Path(args[args.index("--model") + 1]), self.t / "models" / tag / file)
                 self.assertEqual(Path(args[args.index("--expert-profile") + 1]), pack / "expert-profile.txt")
-                for flag in ("--draft-model", "--tail-skip"):
+                for flag in ("--draft-model", "--tail-skip", "--prompt-batch"):
                     self.assertNotIn(flag, args)
                 self.assertEqual(cfg["model_name"], f"lfm2.5-24b-a2b-{size.lower()}")
                 self.assertEqual(cfg["display_name"], f"LFM2.5-24B-A2B {size}")
                 self.assertNotIn("vision", cfg)
+
+    def test_a_card_that_holds_every_expert_reads_2048_tokens_at_a_time(self):
+        code, out, _ = self.main(family="lfm25", model="Q8_0", ram=64.0, vram=32607 / 1024)   # an RTX 5090
+        self.assertEqual(code, 0, out)
+        args = json.loads((self.t / "strata-lfm25-q8_0.json").read_text())["args"]
+        self.assertEqual(args[args.index("--prompt-batch") + 1], "2048")
 
     def test_the_size_taken_without_a_name(self):
         for ram, size in ((32.0, "UD-Q4_K_XL"), (14.0, "UD-Q3_K_XL")):
