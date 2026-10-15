@@ -12,8 +12,10 @@
 // Resident: prints "READY <n_embd>", then per stdin line
 //   ENC <image path> <output path>   ->  "OK <n_tokens> <nx> <ny> <ms>"  or  "ERR <message>"
 //   QUIT
-// The output file is  int32 {0x31455653 'SVE1', n_tokens, nx, ny, n_embd}  then float32 [n_tokens][n_embd],
-// row i at grid position (x = i % nx, y = i / nx).  The text model is opened vocab-only (no weights).
+// The output file is one or more records  int32 {0x31455653 'SVE1', n_tokens, nx, ny, n_embd}  then
+// float32 [n_tokens][n_embd], row i at grid position (x = i % nx, y = i / nx), in prompt order: one record for a
+// whole picture, or one per tile plus its text separators for a picture the encoder splits (MiniCPM-V 4.7).
+// The text model is opened vocab-only (no weights).
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "llama.h"
@@ -21,6 +23,7 @@
 #include "mtmd-helper.h"
 
 #include <algorithm>
+#include <array>
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <unistd.h>
@@ -30,6 +33,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -210,44 +214,79 @@ int main(int argc, char** argv) {
         if (err.empty()) {
             const mtmd_image_tokens* it = mtmd_input_chunk_get_tokens_image(ichunk);
             const int n_all = (int) mtmd_input_chunk_get_n_tokens(ichunk);
-            int n = n_all;
             // the grid from the decoder positions (nx/ny getters are deprecated): x and y of the last token.  A
             // model whose image tokens count up like text (Gemma 4) has both at n - 1: its grid is one line.
             const mtmd_decoder_pos last = mtmd_image_tokens_get_decoder_pos(it, 0, (size_t) n_all - 1);
             int nx = (int) last.x + 1, ny = (int) last.y + 1;
             if (n_all > 1 && nx == n_all && ny == n_all) ny = 1;
-            std::vector<char> keep((size_t) n_all, 1);
+            // the records to write: (rows, grid width, grid height).  One, unless the chunk is a canvas.
+            std::vector<std::array<int, 3>> recs{{n_all, nx, ny}};
+            std::vector<char> sep_rec{0};
             if (nx * ny != n_all) {
-                // MiniCPM-V 4.7's canvas: a text separator (</image>, \n) takes a token after each tile.  The
-                // image rows are the ones at the canvas origin (t == 0); the grid is their x and y range.
-                int x0 = 1 << 30, x1 = -(1 << 30), y0 = 1 << 30, y1 = -(1 << 30), n_img = 0;
-                for (int i = 0; i < n_all; ++i) {
+                // MiniCPM-V 4.7's canvas: one chunk holds the overview and every tile, and the encoder outputs a
+                // text separator (</image>, <slice>, </slice>, \n) after each of them.  The picture rows sit at
+                // the canvas origin (z = -1, held by the unsigned fields as 4294967295; t = the tile's place);
+                // the separators count up in z.  One record per tile - its grid is the number of x values it
+                // spans, the overview's x are stretched over the whole canvas - and one 1x1 per separator, so
+                // the engine gives each its own place and positions.
+                recs.clear();
+                sep_rec.clear();
+                int n_img = 0;
+                for (int i = 0; i < n_all;) {
                     const mtmd_decoder_pos p = mtmd_image_tokens_get_decoder_pos(it, 0, (size_t) i);
-                    if (p.t != 0) { keep[(size_t) i] = 0; continue; }
-                    ++n_img;
-                    x0 = std::min(x0, (int) p.x); x1 = std::max(x1, (int) p.x);
-                    y0 = std::min(y0, (int) p.y); y1 = std::max(y1, (int) p.y);
+                    if ((int32_t) p.z >= 0) {
+                        recs.push_back({1, 1, 1});
+                        sep_rec.push_back(1);
+                        ++i;
+                        continue;
+                    }
+                    const int t = (int) p.t;
+                    std::set<int> xs;
+                    int j = i;
+                    for (; j < n_all; ++j) {
+                        const mtmd_decoder_pos q = mtmd_image_tokens_get_decoder_pos(it, 0, (size_t) j);
+                        if ((int32_t) q.z >= 0 || (int) q.t != t) break;
+                        xs.insert((int) q.x);
+                    }
+                    const int gw = (int) xs.size(), rows = j - i;
+                    if (gw < 1 || rows % gw) {
+                        err = "the image is split into tiles, which this encoder cannot read (" +
+                              std::to_string(n_all) + " tokens)";
+                        break;
+                    }
+                    recs.push_back({rows, gw, rows / gw});
+                    sep_rec.push_back(0);
+                    n_img += rows;
+                    i = j;
                 }
-                nx = x1 - x0 + 1;
-                ny = y1 - y0 + 1;
-                if (n_img != nx * ny) err = "the image is split into tiles, which this encoder cannot read ("
-                                            + std::to_string(n_all) + " tokens)";
-                else n = n_img;
+                while (!sep_rec.empty() && sep_rec.back()) {   // the separator after the last tile, as for one tile
+                    recs.pop_back();
+                    sep_rec.pop_back();
+                }
+                if (err.empty() && n_img == 0)
+                    err = "the image is split into tiles, which this encoder cannot read (" +
+                          std::to_string(n_all) + " tokens)";
             }
+            int n = 0;
+            for (size_t k = 0; k < recs.size(); ++k) n += recs[k][0];
             const float* embd = mtmd_get_output_embd(ctx);
             FILE* f = err.empty() ? std::fopen(out.c_str(), "wb") : nullptr;
             if (err.empty() && !f) err = "cannot write " + out;
             if (f) {
-                const int32_t hdr[5] = {0x31455653, n, nx, ny, n_embd};
-                bool ok = std::fwrite(hdr, sizeof hdr, 1, f) == 1;
-                for (int i = 0; ok && i < n_all; ++i)
-                    if (keep[(size_t) i])
-                        ok = std::fwrite(embd + (size_t) i * n_embd, sizeof(float), (size_t) n_embd, f)
-                             == (size_t) n_embd;
+                bool ok = true;
+                size_t off = 0;
+                for (const auto& r : recs) {
+                    const int32_t hdr[5] = {0x31455653, r[0], r[1], r[2], n_embd};
+                    ok = std::fwrite(hdr, sizeof hdr, 1, f) == 1 &&
+                         std::fwrite(embd + off * n_embd, sizeof(float), (size_t) r[0] * n_embd, f) ==
+                             (size_t) r[0] * n_embd;
+                    if (!ok) break;
+                    off += (size_t) r[0];
+                }
                 std::fclose(f);
                 if (!ok) err = "short write to " + out;
                 const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-                if (ok) std::printf("OK %d %d %d %.0f\n", n, nx, ny, ms);
+                if (ok) std::printf("OK %d %d %d %.0f\n", n, recs[0][1], recs[0][2], ms);
             }
         }
         if (!err.empty()) std::printf("ERR %s\n", err.c_str());
