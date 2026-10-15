@@ -3,7 +3,7 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · **Español** · [Português](README.pt-BR.md)
 
 <p align="center"><b>Ejecuta modelos de IA grandes en tu propio PC</b><br>
-Qwen3.8-Flash-Next, GLM 5.3 Flash, DeepSeek V4 Flash, Qwen3.6, Ornith 1.5, Gemma 4 y Tiel Coder · libre y de código abierto</p>
+Qwen3.8-Flash-Next, GLM 5.3 Flash, DeepSeek V4 Flash, LFM2.5, Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder y MiniCPM-V · libre y de código abierto</p>
 
 <p align="center"><img src="docs/media/speed.svg" width="820" alt="Tokens por segundo al escribir una respuesta: 94 a 100 con Qwen3.6-35B-A3B en un portátil con tarjeta de 8 GB, 385 a 393 en una RTX 5090"></p>
 
@@ -17,14 +17,14 @@ Qwen3.8-Flash-Next, GLM 5.3 Flash, DeepSeek V4 Flash, Qwen3.6, Ornith 1.5, Gemma
 PolyStrata ejecuta modelos de IA grandes en un PC normal, modelos que normalmente necesitan un servidor.
 Conversan, escriben código y funcionan con tus aplicaciones y agentes de programación. Nada sale de tu PC.
 
-Ejecuta ocho modelos, con dos motores:
+Ejecuta nueve modelos, con dos motores:
 
 - **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** en una tarjeta gráfica NVIDIA o AMD de
   12 GB o más, en Windows o Linux. También entiende imágenes. Su motor es el de
   [Strata](https://github.com/Niko1221/Strata), sin cambios.
 
-Los otros siete usan un motor escrito para PolyStrata, con una tarjeta NVIDIA o [dos](docs/MULTI_GPU.md#the-strata-poly-models): los siete en Linux, y los cinco más
-pequeños también en Windows. Son experimentales: solo han funcionado en un PC con una tarjeta de 32 GB, y los cinco más
+Los otros ocho usan un motor escrito para PolyStrata, con una tarjeta NVIDIA o [dos](docs/MULTI_GPU.md#the-strata-poly-models): los ocho en Linux, y los seis más
+pequeños también en Windows. Son experimentales: solo han funcionado en un PC con una tarjeta de 32 GB, y los seis más
 pequeños además en un portátil con una tarjeta de 8 GB.
 
 - **[GLM 5.3 Flash](docs/GLM.md)**, el más grande: un archivo de 79 a 114 GB, que en su mayor parte se queda en la RAM.
@@ -39,6 +39,8 @@ pequeños además en un portátil con una tarjeta de 8 GB.
 - **[Gemma 4 26B-A4B](docs/BACKENDS.md)**, un archivo de 11 a 17 GB. También entiende imágenes.
 - **[Tiel Coder 35B-A3B](docs/BACKENDS.md)**, Ornith 1.5 cuantizado por peculiar-ragdoll para agentes de
   programación: un archivo de 14 a 23 GB. También entiende imágenes.
+- **[MiniCPM-V 4.7 35B-A3B](docs/BACKENDS.md)** de OpenBMB, con la arquitectura de Qwen3.6-35B-A3B y pesos propios,
+  hecho para leer imágenes: un archivo de 16 a 29 GB.
 
 El servidor puede cambiar entre los modelos instalados mientras está en marcha
 ([cómo](docs/BACKENDS.md#changing-the-model), en inglés).
@@ -275,7 +277,35 @@ Medido de la misma manera, en los mismos dos PC.
 
 Un prompt de 10,000 tokens se lee a 1,670 tokens/s en el portátil y a 6,300 en la estación de trabajo.
 
-Los siete modelos del motor propio de PolyStrata se midieron con su benchmark, que puedes ejecutar en tu PC:
+### MiniCPM-V 4.7 35B-A3B
+
+Medido de la misma manera, en los mismos dos PC. Su archivo no tiene bloque borrador, así que escribe un token cada vez.
+
+<table>
+<tr><th>NVIDIA: RTX 4070 Laptop (8 GB), Core i7-14700HX, 32 GB de RAM</th><th>NVIDIA: RTX 5090 (32 GB), Xeon Platinum 8470Q (25 vCPU), 120 GB de RAM</th></tr>
+<tr><td>
+
+| Tamaño | Escribe respuestas | Lee tu prompt |
+| --- | ---: | ---: |
+| **Q4_K_M** | 35-36 tokens/s | 1,260-1,270 tokens/s |
+| **mix_q3gud_im** | 43-44 tokens/s | 1,280 tokens/s |
+| **Q6_K** | 15-23 tokens/s | 770-800 tokens/s |
+
+</td><td>
+
+| Tamaño | Escribe respuestas | Lee tu prompt |
+| --- | ---: | ---: |
+| **Q4_K_M** | 308-311 tokens/s | 7,910-7,950 tokens/s |
+| **mix_q3gud_im** | 291-293 tokens/s | 7,730-7,740 tokens/s |
+| **Q6_K** | 277-278 tokens/s | 7,290-7,330 tokens/s |
+
+</td></tr>
+</table>
+
+Un prompt de 10,000 tokens se lee a 1,370 tokens/s en el portátil y a 8,790 en la estación de trabajo. En el portátil
+Q6_K llena los 32 GB de RAM, y por eso allí es lento.
+
+Los ocho modelos del motor propio de PolyStrata se midieron con su benchmark, que puedes ejecutar en tu PC:
 `python polystrata.py benchmark --model <name> --prompt-tokens 24000`
 ([qué envía y qué imprime](docs/BACKENDS.md#benchmark), en inglés).
 Lo que otros midieron en sus propias tarjetas, y cómo comparar con llama.cpp en la tuya:
@@ -411,7 +441,21 @@ El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows d
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
 tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
 
-Qué necesita cada uno de los cuatro y cómo se comprobó: [docs/BACKENDS.md](docs/BACKENDS.md#install) (en inglés).
+### MiniCPM-V 4.7 35B-A3B
+
+| | |
+| --- | --- |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 3.5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB y en la tarjeta de 8 GB de un portátil. En Linux una tarjeta AMD también lo ejecuta, en beta: el instalador compila el motor en tu PC; ha funcionado en una RX 7600. |
+| **RAM** | Unos **19, 25 o 31 GB** junto a una tarjeta de 8 GB para los tres tamaños, según la estimación del instalador. Una tarjeta de 32 GB guarda enteros los tres tamaños. Los tres tamaños han funcionado en un portátil con 32 GB. |
+| **Disco** | 16, 21 o 29 GB para el archivo del modelo, 1 GB más para leer imágenes. |
+| **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |
+
+El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
+última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
+compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
+tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
+
+Qué necesita cada uno de los cinco y cómo se comprobó: [docs/BACKENDS.md](docs/BACKENDS.md#install) (en inglés).
 
 ## Instalación
 
@@ -442,12 +486,12 @@ Te hace unas pocas preguntas:
 - si debe entender imágenes (GLM 5.3 Flash, DeepSeek V4 Flash y LFM2.5 no las entienden).
 
 Pulsa Enter cada vez para usar la respuesta recomendada. Después descarga el modelo (unos 70 GB para
-Qwen3.8-Flash-Next, de 79 a 114 GB para GLM 5.3 Flash, 91 GB para DeepSeek V4 Flash, de 11 a 25 GB para los otros cinco) y lo arranca. Si la
+Qwen3.8-Flash-Next, de 79 a 114 GB para GLM 5.3 Flash, 91 GB para DeepSeek V4 Flash, de 11 a 29 GB para los otros seis) y lo arranca. Si la
 descarga se detiene, vuelve a ejecutarlo: sigue donde lo dejó. Tu navegador abre la aplicación de PolyStrata en
 `http://127.0.0.1:8080`.
 
-Los ocho están en la lista de modelos del instalador. `./setup.sh --family glm`, `deepseek`, `lfm25`, `qwen36`, `ornith`,
-`gemma4` o `tiel` va directo a uno ([qué pregunta y qué escribe](docs/GLM.md#install), en inglés).
+Los nueve están en la lista de modelos del instalador. `./setup.sh --family glm`, `deepseek`, `lfm25`, `qwen36`, `ornith`,
+`gemma4`, `tiel` o `minicpmv` va directo a uno ([qué pregunta y qué escribe](docs/GLM.md#install), en inglés).
 
 > **Mientras el modelo arranca, tu PC puede ir lento o dejar de responder durante 1-3 minutos** (más la primera vez).
 > PolyStrata carga 35-55 GB en tu RAM y reserva una parte para la tarjeta gráfica. Es normal. Espera y no cierres la
@@ -595,9 +639,19 @@ Tres tamaños por ahora. El instalador toma UD-Q3_K_XL, o UD-IQ3_XXS en un PC co
 Una tarjeta más grande guarda más parte del modelo y necesita menos RAM: con UD-Q3_K_XL, unos 17 GB junto a una tarjeta de 12 GB, 13 GB junto a una de 16 GB y 10 GB cuando la tarjeta lo guarda todo. Son estimaciones del instalador. No se
 han comprobado en un PC así.
 
+### MiniCPM-V 4.7 35B-A3B
+
+Tres tamaños por ahora, de OpenBMB. El instalador toma Q4_K_M, o mix_q3gud_im en un PC con menos RAM. Q6_K se elige por su nombre: `--model Q6_K`.
+
+| Tamaño | Qué es | Descarga | RAM junto a una tarjeta de 8 GB |
+| --- | --- | ---: | ---: |
+| **Q4_K_M** | el modelo entero con expertos de 4 bits ([OpenBMB](https://huggingface.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf)) | 21 GB | unos 25 GB |
+| **mix_q3gud_im** | el mismo con expertos de 3 y 4 bits: el que menos RAM pide | 16 GB | unos 19 GB |
+| **Q6_K** | el mismo con expertos de 6 bits | 29 GB | unos 31 GB |
+
 ## Cómo usarlo
 
-Los ocho modelos se usan igual: la misma aplicación, la misma API.
+Los nueve modelos se usan igual: la misma aplicación, la misma API.
 
 <p align="center"><img src="docs/media/runpagoda.png" width="900" alt="La pestaña Monitor de la aplicación de PolyStrata junto a un agente de programación"><br>
 <sub>El <b>Monitor</b> de la aplicación de PolyStrata (izquierda) mientras un agente de programación escribe el jardín de la pagoda del vídeo (derecha). Una captura de <a href="https://github.com/Niko1221/Strata">Strata</a>.</sub></p>
@@ -617,12 +671,12 @@ Los ocho modelos se usan igual: la misma aplicación, la misma API.
 
 En qué se diferencian:
 
-| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | LFM2.5-24B-A2B | Qwen3.6-35B-A3B, Ornith 1.5, Gemma 4 26B-A4B, Tiel Coder 35B-A3B |
+| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | LFM2.5-24B-A2B | Qwen3.6-35B-A3B, Ornith 1.5, Gemma 4 26B-A4B, Tiel Coder 35B-A3B, MiniCPM-V 4.7 35B-A3B |
 | --- | --- | --- | --- | --- | --- |
 | **Imágenes** | Responde que sí a "Images?" en la instalación. Luego haz clic en **Picture** en el chat, o adjunta imágenes en tu aplicación. Las tarjetas AMD leen imágenes en Linux a través del procesador; en Windows todavía no. | Todavía no. | Solo lee texto. | Solo lee texto. | Responde que sí a "Images?" en la instalación, y luego como con Qwen3.8-Flash-Next. En una tarjeta de menos de 16 GB el codificador de imágenes funciona en el procesador, y una imagen tarda unos segundos. |
 | **Una petición cada vez** | Por defecto PolyStrata responde una petición y las demás esperan. Para responder varias a la vez, pon `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). En una tarjeta de 12 GB, cada respuesta va más lenta. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. | Una cada vez, las demás esperan. |
 | **Varias conversaciones** | La última se conserva, así que los mensajes siguientes empiezan en segundos. Dos argumentos del motor guardan varias en RAM ([detalles](docs/DETAILS.md#using-it)). | La última se conserva. La instalación pregunta si guardar varias en RAM, para que un agente y sus subagentes se turnen sin que se vuelvan a leer sus prompts ([cómo](docs/GLM.md#several-conversations-at-once)). | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. | Como GLM 5.3 Flash. |
-| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan de 1,3 a 1,5 segundos en la estación de trabajo y de 8 a 10 segundos en el portátil de 8 GB. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 20 segundos en el portátil de 8 GB. |
+| **Prompts largos** | PolyStrata lee entero el primer mensaje de un chat, más o menos 1 minuto por cada 30,000 tokens. Los mensajes siguientes empiezan en segundos. | El primer mensaje se lee entero, más o menos 40 segundos por cada 30,000 tokens. | El primer mensaje se lee entero, más o menos 29 segundos por cada 30,000 tokens. | El primer mensaje se lee entero: 30,000 tokens tardan de 1,3 a 1,5 segundos en la estación de trabajo y de 8 a 10 segundos en el portátil de 8 GB. | El primer mensaje se lee entero: 30,000 tokens tardan de 4 a 5 segundos en la estación de trabajo y de 14 a 25 segundos en el portátil de 8 GB. |
 
 Más: [dónde se guardan tus chats](docs/INSTALL.md#where-things-are-stored), [la API](docs/DETAILS.md#using-it).
 
@@ -821,6 +875,26 @@ Cada parte y sus cifras: [docs/BACKENDS.md](docs/BACKENDS.md#how-a-backend-works
 
 Cada parte y sus cifras: [docs/BACKENDS.md](docs/BACKENDS.md#how-a-backend-works) (en inglés).
 
+### MiniCPM-V 4.7 35B-A3B
+
+<p align="center"><img src="docs/media/how-it-works-minicpmv.svg" width="860" alt="Los 10,240 expertos del modelo: los que una respuesta elige una y otra vez en la tarjeta gráfica, los demás en la RAM y el archivo del modelo en el SSD"></p>
+
+- **La arquitectura de Qwen3.6-35B-A3B con los pesos de OpenBMB:** un equipo de 10,240 pequeños expertos, 256 en cada
+  una de 40 capas, y solo 8 de cada capa para cada palabra.
+- **Tu tarjeta gráfica** guarda todos los que caben: con Q4_K_M unos 2,000 en una tarjeta de 8 GB, y en una de 32 GB
+  caben todos. Mientras escribe, el motor trae a la tarjeta los expertos que la respuesta elige una y otra vez, y en la
+  tarjeta de 8 GB los que tiene sirven alrededor del 60 al 70 % de lo que usa una respuesta. **Tu RAM** tiene los
+  demás, y **tu procesador** los calcula al mismo tiempo. **Tu SSD** guarda el archivo del modelo, que se usa donde
+  está, sin una segunda copia.
+- **Una palabra cada vez:** su archivo no tiene bloque borrador, así que nada adivina por adelantado.
+- **Imágenes:** su propio codificador de imágenes lee una imagen grande como una vista general y unos cuantos
+  mosaicos. Una captura de 1,200 por 398 píxeles se convierte en unos 300 tokens, un gráfico de 2,520 por 1,620 en
+  unos 600.
+- **Los textos largos se leen en trozos grandes** (1,024 tokens cada vez). Cuando la tarjeta no tiene todos los
+  expertos, los demás pasan por ella una sola vez para todo el prompt.
+
+Cada parte y sus cifras: [docs/BACKENDS.md](docs/BACKENDS.md#how-a-backend-works) (en inglés).
+
 ## Créditos y licencia
 
 Qwen3.8-Flash-Next es del [equipo de Qwen](https://huggingface.co/Qwen/Qwen3.8-Flash-Next). Lo comprimieron
@@ -832,7 +906,8 @@ cuantización de [Unsloth](https://huggingface.co/unsloth). LFM2.5-24B-A2B es de
 propia Liquid AI. Ornith 1.5 es de ornith-ai, en la cuantización APEX de
 [mudler](https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF). Tiel Coder 35B-A3B es Ornith 1.5 en la cuantización de
 [peculiar-ragdoll](https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP);
-[u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) descubrió que funciona en PolyStrata. PolyStrata está hecho sobre [Strata](https://github.com/Niko1221/Strata) de Niko1221 y sus colaboradores,
+[u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) descubrió que funciona en PolyStrata. MiniCPM-V 4.7 35B-A3B es de [OpenBMB](https://huggingface.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf),
+en su propia cuantización; [iMilnb](https://github.com/iMilnb) lo trajo a PolyStrata. PolyStrata está hecho sobre [Strata](https://github.com/Niko1221/Strata) de Niko1221 y sus colaboradores,
 y usa partes de [llama.cpp / ggml](https://github.com/ggml-org/llama.cpp). Todos los créditos:
 [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md#credits). PolyStrata es de código abierto con la [licencia MIT](LICENSE).
 Algunas partes y cada modelo tienen sus propias licencias ([cuáles](docs/HOW_IT_WORKS.md#license)).

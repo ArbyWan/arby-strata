@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文** · [日本語](README.ja.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt-BR.md)
 
 <p align="center"><b>在你自己的电脑上运行大型 AI 模型</b><br>
-Qwen3.8-Flash-Next、GLM 5.3 Flash、DeepSeek V4 Flash、Qwen3.6、Ornith 1.5、Gemma 4 和 Tiel Coder · 免费开源</p>
+Qwen3.8-Flash-Next、GLM 5.3 Flash、DeepSeek V4 Flash、LFM2.5、Qwen3.6、Ornith 1.5、Gemma 4、Tiel Coder 和 MiniCPM-V · 免费开源</p>
 
 <p align="center"><img src="docs/media/speed.svg" width="820" alt="写回答时每秒的 token 数：8 GB 显存的笔记本上 Qwen3.6-35B-A3B 为 94 到 100，RTX 5090 上为 385 到 393"></p>
 
@@ -17,13 +17,13 @@ Qwen3.8-Flash-Next、GLM 5.3 Flash、DeepSeek V4 Flash、Qwen3.6、Ornith 1.5、
 PolyStrata 能在普通电脑上运行通常要用服务器才能跑的大型 AI 模型。它们能聊天、写代码，还能配合你的应用和编程智能体一起工作。
 所有数据都留在你的电脑上。
 
-它能跑八个模型，用两个引擎：
+它能跑九个模型，用两个引擎：
 
 - **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)**：12 GB 及以上的 NVIDIA 或 AMD 显卡，Windows 或
   Linux。它还能看图片。引擎是 Strata 项目的，没有改动。
 
-另外七个用的是为 PolyStrata 写的引擎，需要一张 NVIDIA 显卡，也可以用[两张](docs/MULTI_GPU.md#the-strata-poly-models)：七个都能在 Linux 上跑，五个小的也能在 Windows 上跑。
-目前是实验性的：只在一台 32 GB 显卡的电脑上跑过，五个小的另外在一台 8 GB 显卡的笔记本上跑过。
+另外八个用的是为 PolyStrata 写的引擎，需要一张 NVIDIA 显卡，也可以用[两张](docs/MULTI_GPU.md#the-strata-poly-models)：八个都能在 Linux 上跑，六个小的也能在 Windows 上跑。
+目前是实验性的：只在一台 32 GB 显卡的电脑上跑过，六个小的另外在一台 8 GB 显卡的笔记本上跑过。
 
 - **[GLM 5.3 Flash](docs/GLM.md)**：最大的一个，文件 79 到 114 GB，大部分留在内存里。
 - **[DeepSeek V4 Flash](docs/DEEPSEEK.md)**：文件 91 GB，大部分也留在内存里。它记对话占的显存很少：128K 上下文只比 32K 多占 0.7 GB。
@@ -33,6 +33,7 @@ PolyStrata 能在普通电脑上运行通常要用服务器才能跑的大型 AI
 - **[Ornith 1.5](docs/BACKENDS.md)**：结构和 Qwen3.6-35B-A3B 相同，权重不同，文件 14 到 24 GB。它还能看图片。
 - **[Gemma 4 26B-A4B](docs/BACKENDS.md)**：文件 11 到 17 GB。它还能看图片。
 - **[Tiel Coder 35B-A3B](docs/BACKENDS.md)**：peculiar-ragdoll 为编程智能体量化的 Ornith 1.5，文件 14 到 23 GB。它还能看图片。
+- **[MiniCPM-V 4.7 35B-A3B](docs/BACKENDS.md)**：OpenBMB 的模型，结构和 Qwen3.6-35B-A3B 相同，权重是自己训练的，专门做看图，文件 16 到 29 GB。
 
 服务器运行时可以在已安装的模型之间切换（[做法](docs/BACKENDS.md#changing-the-model)，英文）。
 
@@ -260,7 +261,34 @@ Q8_0 在笔记本上占满了 32 GB 内存，所以在那里慢；工作站能�
 
 10,000 个 token 的提示，笔记本每秒读 1,670 个，工作站每秒读 6,300 个。
 
-用 PolyStrata 自己引擎的这七个模型，都是用它自带的跑分测的，你也可以在自己的电脑上跑：
+### MiniCPM-V 4.7 35B-A3B
+
+测法相同，用的是同样的两台电脑。它的模型文件里没有预猜模块，所以一次只写一个 token。
+
+<table>
+<tr><th>NVIDIA：RTX 4070 Laptop（8 GB）、Core i7-14700HX、32 GB 内存</th><th>NVIDIA：RTX 5090（32 GB）、Xeon Platinum 8470Q（25 vCPU）、120 GB 内存</th></tr>
+<tr><td>
+
+| 规格 | 写回答 | 读提示 |
+| --- | ---: | ---: |
+| **Q4_K_M** | 35-36 tokens/s | 1,260-1,270 tokens/s |
+| **mix_q3gud_im** | 43-44 tokens/s | 1,280 tokens/s |
+| **Q6_K** | 15-23 tokens/s | 770-800 tokens/s |
+
+</td><td>
+
+| 规格 | 写回答 | 读提示 |
+| --- | ---: | ---: |
+| **Q4_K_M** | 308-311 tokens/s | 7,910-7,950 tokens/s |
+| **mix_q3gud_im** | 291-293 tokens/s | 7,730-7,740 tokens/s |
+| **Q6_K** | 277-278 tokens/s | 7,290-7,330 tokens/s |
+
+</td></tr>
+</table>
+
+10,000 个 token 的提示，笔记本每秒读 1,370 个，工作站每秒读 8,790 个。Q6_K 在笔记本上把 32 GB 内存占满了，所以在那里慢。
+
+用 PolyStrata 自己引擎的这八个模型，都是用它自带的跑分测的，你也可以在自己的电脑上跑：
 `python polystrata.py benchmark --model <name> --prompt-tokens 24000`
 （[它发什么、打印什么](docs/BACKENDS.md#benchmark)，英文）。
 别人在自己的显卡上测的结果，以及怎么在你的电脑上和 llama.cpp 对比：
@@ -389,7 +417,20 @@ Liquid AI 的许可证只允许年收入低于 1,000 万美元的公司商用（
 如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
 就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
 
-这四个模型各自需要什么、是怎么验证的：[docs/BACKENDS.md](docs/BACKENDS.md#install)（英文）。
+### MiniCPM-V 4.7 35B-A3B
+
+| | |
+| --- | --- |
+| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 3.5 GB。在 32 GB 的卡上和笔记本的 8 GB 显卡上跑过。 Linux 上的 AMD 显卡也能跑，属测试版：setup 在你电脑上编译引擎；在一张 RX 7600 上跑过。 |
+| **内存** | 配 8 GB 显卡，三个规格分别约需 **19、25、31 GB**，这是安装程序的估算。32 GB 的显卡三个规格的整个模型都放得下。三个规格都在一台 32 GB 内存的笔记本上跑过。 |
+| **硬盘** | 模型文件 16、21 或 29 GB，要看图片再加 1 GB。 |
+| **系统** | Linux 或 Windows 10 / 11，以及 NVIDIA 的最新显卡驱动。 |
+
+其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。在 Windows 上，安装程序直接从最新 release 下载编译好的引擎。
+如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
+就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
+
+这五个模型各自需要什么、是怎么验证的：[docs/BACKENDS.md](docs/BACKENDS.md#install)（英文）。
 
 ## 安装
 
@@ -417,10 +458,10 @@ PolyStrata 的 [MCP 服务器](docs/MCP_SERVER.md)来安装、启动和停止 Po
 - 上下文多大（模型能记住多少文字），
 - 是否要识别图片（GLM 5.3 Flash、DeepSeek V4 Flash 和 LFM2.5 不支持）。
 
-每次直接按回车就是推荐选项。之后它会下载模型（Qwen3.8-Flash-Next 约 70 GB，GLM 5.3 Flash 79 到 114 GB，DeepSeek V4 Flash 91 GB，另外五个 11 到 25 GB）并启动。
+每次直接按回车就是推荐选项。之后它会下载模型（Qwen3.8-Flash-Next 约 70 GB，GLM 5.3 Flash 79 到 114 GB，DeepSeek V4 Flash 91 GB，另外六个 11 到 29 GB）并启动。
 如果下载中断了，再运行一次即可：它会从中断的地方继续。浏览器会打开 PolyStrata 应用，地址是 `http://127.0.0.1:8080`。
 
-八个模型都在安装程序的模型列表里。想直接装其中一个，运行 `./setup.sh --family glm`（或 `deepseek`、`lfm25`、`qwen36`、`ornith`、`gemma4`、`tiel`）
+九个模型都在安装程序的模型列表里。想直接装其中一个，运行 `./setup.sh --family glm`（或 `deepseek`、`lfm25`、`qwen36`、`ornith`、`gemma4`、`tiel`、`minicpmv`）
 （[它会问什么、写什么](docs/GLM.md#install)）。
 
 > **模型启动时，你的电脑可能会变慢或卡住 1-3 分钟**（第一次最久）。
@@ -562,9 +603,19 @@ UD-Q4_K_XL 95.5%，QAD-Q4_0 92.7%，UD-Q3_K_XL 91.6%。
 显卡越大，放得下的模型越多，需要的内存越少：UD-Q3_K_XL 配 12 GB 显卡约 17 GB，配 16 GB 显卡约 13 GB，整个模型都放进显卡之后是 10 GB。
 这些是安装程序的估算，还没有在这样的电脑上验证过。
 
+### MiniCPM-V 4.7 35B-A3B
+
+目前有三个规格，来自 OpenBMB。安装程序默认选 Q4_K_M，内存不够时选 mix_q3gud_im；Q6_K 要指名：`--model Q6_K`。
+
+| 规格 | 是什么 | 下载 | 配 8 GB 显卡需要的内存 |
+| --- | --- | ---: | ---: |
+| **Q4_K_M** | 完整模型，专家是 4 bit（[OpenBMB](https://huggingface.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf)） | 21 GB | 约 25 GB |
+| **mix_q3gud_im** | 同上，专家是 3 bit 和 4 bit：需要的内存最少 | 16 GB | 约 19 GB |
+| **Q6_K** | 同上，专家是 6 bit | 29 GB | 约 31 GB |
+
 ## 使用方法
 
-八个模型的用法一样：同一个应用，同一套 API。
+九个模型的用法一样：同一个应用，同一套 API。
 
 <p align="center"><img src="docs/media/runpagoda.png" width="900" alt="应用的 Monitor 标签页，旁边是一个编程智能体"><br>
 <sub>应用的 <b>Monitor</b>（左），编程智能体正在写视频里的宝塔花园（右）。截图来自 <a href="https://github.com/Niko1221/Strata">Strata</a>。</sub></p>
@@ -584,12 +635,12 @@ UD-Q4_K_XL 95.5%，QAD-Q4_0 92.7%，UD-Q3_K_XL 91.6%。
 
 它们不一样的地方：
 
-| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | LFM2.5-24B-A2B | Qwen3.6-35B-A3B、Ornith 1.5、Gemma 4 26B-A4B、Tiel Coder 35B-A3B |
+| | Qwen3.8-Flash-Next | GLM 5.3 Flash | DeepSeek V4 Flash | LFM2.5-24B-A2B | Qwen3.6-35B-A3B、Ornith 1.5、Gemma 4 26B-A4B、Tiel Coder 35B-A3B、MiniCPM-V 4.7 35B-A3B |
 | --- | --- | --- | --- | --- | --- |
 | **图片** | 在安装时对“Images?”选是。然后在聊天里点 **Picture**，或在你的应用里附上图片。AMD 显卡在 Linux 上通过处理器识别图片；在 Windows 上暂时还不行。 | 暂时不支持。 | 只能处理文字。 | 只能处理文字。 | 在安装时对“Images?”选是，之后和 Qwen3.8-Flash-Next 一样。显存不到 16 GB 的卡上，图片编码器在处理器上跑，一张图片要几秒。 |
 | **多个请求** | 默认一次只回答一个，其他请求排队等待。设置 `"parallel": 2` 可以同时回答多个（[BATCHING.md](docs/BATCHING.md)）；在 12 GB 显卡上，这会让每个回答变慢。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 | 一次只回答一个，其他请求排队等待。 |
 | **多个对话** | 保留最近的一个对话，所以后续消息几秒内就开始回答。加两个引擎参数可以在内存里保留多个（[详情](docs/DETAILS.md#using-it)）。 | 保留最近的一个对话。安装程序会问要不要在内存里保留多个，这样智能体和子代理轮流请求时不用重读提示（[原理](docs/GLM.md#several-conversations-at-once)）。 | 和 GLM 5.3 Flash 一样。 | 和 GLM 5.3 Flash 一样。 | 和 GLM 5.3 Flash 一样。 |
-| **长提示** | 对话的第一条消息要完整读入，大约每 30,000 个 token 需要 1 分钟。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 40 秒。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 29 秒。 | 第一条消息要完整读入：30,000 个 token 在工作站上要 1.3 到 1.5 秒，在 8 GB 笔记本上要 8 到 10 秒。 | 第一条消息要完整读入：30,000 个 token，工作站要 4 到 5 秒，8 GB 显卡的笔记本要 14 到 20 秒。 |
+| **长提示** | 对话的第一条消息要完整读入，大约每 30,000 个 token 需要 1 分钟。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 40 秒。 | 第一条消息要完整读入，大约每 30,000 个 token 需要 29 秒。 | 第一条消息要完整读入：30,000 个 token 在工作站上要 1.3 到 1.5 秒，在 8 GB 笔记本上要 8 到 10 秒。 | 第一条消息要完整读入：30,000 个 token，工作站要 4 到 5 秒，8 GB 显卡的笔记本要 14 到 25 秒。 |
 
 更多：[聊天记录存在哪里](docs/INSTALL.md#where-things-are-stored)、[API](docs/DETAILS.md#using-it)。
 
@@ -750,6 +801,20 @@ UD-Q4_K_XL 95.5%，QAD-Q4_0 92.7%，UD-Q3_K_XL 91.6%。
 
 每个部分及其数据：[docs/BACKENDS.md](docs/BACKENDS.md#how-a-backend-works)（英文）。
 
+### MiniCPM-V 4.7 35B-A3B
+
+<p align="center"><img src="docs/media/how-it-works-minicpmv.svg" width="860" alt="模型的 10,240 个专家：回答反复用到的在显卡上，其余的在内存里，模型文件在 SSD 上"></p>
+
+- **Qwen3.6-35B-A3B 的结构，OpenBMB 的权重：** 10,240 个小专家组成的团队，40 层，每层 256 个，每个词只需要从每一层里用 8 个。
+- **你的显卡** 能放多少放多少：用 Q4_K_M 时 8 GB 的卡上约 2,000 个，32 GB 的卡能全部放下。写回答时，引擎会把回答反复选中的专家换进显存，
+  在 8 GB 的卡上，回答用到的专家里约有 60% 到 70% 由显卡提供。**你的内存** 存放其余的，**你的处理器** 同时把它们算出来。
+  **你的 SSD** 存放模型文件，文件原地使用，硬盘上不会多出一份副本。
+- **一次一个词：** 它的模型文件里没有预猜模块，所以不会提前猜词。
+- **图片：** 它有自己的图片编码器，大图会分成一张缩略图和几块细节图来读。1,200×398 的截图约 300 个 token，2,520×1,620 的图表约 600 个。
+- **长文本分大块读入**（每次 1,024 个 token）。显卡放不下全部专家时，其余的专家在整段提示里只经过显卡一遍。
+
+每个部分及其数据：[docs/BACKENDS.md](docs/BACKENDS.md#how-a-backend-works)（英文）。
+
 ## 致谢与许可证
 
 Qwen3.8-Flash-Next 来自 [Qwen 团队](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)，由
@@ -757,7 +822,7 @@ Qwen3.8-Flash-Next 来自 [Qwen 团队](https://huggingface.co/Qwen/Qwen3.8-Flas
 和 Unsloth 压缩。GLM 5.3 Flash 用的是
 [neuralll](https://huggingface.co/neuralll/GLM-5.3-Flash-GSQ-RCO-3.0bit-Q4Kattn-GGUF)、Unsloth 和 patrickbdevaney 的文件。
 Qwen3.6-35B-A3B 来自 Qwen 团队，Gemma 4 来自 Google，DeepSeek V4 Flash 来自 DeepSeek，用的都是 [Unsloth](https://huggingface.co/unsloth) 的量化版本。LFM2.5-24B-A2B 来自 [Liquid AI](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B)，用的是 Unsloth 的量化版本和 Liquid AI 自己的 QAD-Q4_0。Ornith 1.5 来自
-ornith-ai，用的是 [mudler](https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF) 的 APEX 量化版本。Tiel Coder 35B-A3B 是 [peculiar-ragdoll](https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP) 量化的 Ornith 1.5，[u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) 发现它能在 PolyStrata 上跑。PolyStrata 基于
+ornith-ai，用的是 [mudler](https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF) 的 APEX 量化版本。Tiel Coder 35B-A3B 是 [peculiar-ragdoll](https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP) 量化的 Ornith 1.5，[u/Sensitive_Song4219](https://www.reddit.com/r/LocalLLM/comments/1x22inc/comment/pf3r111/) 发现它能在 PolyStrata 上跑。MiniCPM-V 4.7 35B-A3B 来自 [OpenBMB](https://huggingface.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf)，用的是他们自己的量化版本，由 [iMilnb](https://github.com/iMilnb) 接入 PolyStrata。PolyStrata 基于
 Niko1221 和各位贡献者的 [Strata](https://github.com/Niko1221/Strata)，并使用了
 [llama.cpp / ggml](https://github.com/ggml-org/llama.cpp) 的部分代码。完整致谢：
 [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md#credits)。PolyStrata 以 [MIT 许可证](LICENSE)开源。少数部分和每个模型
