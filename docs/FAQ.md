@@ -151,6 +151,14 @@ window says how many messages it left out. Each request is cut again from the fu
 the model has forgotten what was dropped. Claude Code, Codex and OpenCode compact the conversation themselves and do
 not need it. A larger context (`--max-context` in the same file) keeps more of the chat.
 
+### Can the model see what it thought in earlier turns?
+
+With Qwen3.6, Ornith and Tiel Coder, if you ask for it. Their template leaves the thinking of earlier answers out of
+the prompt, so a model that thought of two numbers and said one makes the other up when asked for it later. Add
+`"preserve_thinking": true` to `strata-<model>.json` and restart, or send `"chat_template_kwargs":
+{"preserve_thinking": true}` with a request, as with llama.cpp. Your app has to send the earlier thinking back, as
+`reasoning_content`, as Anthropic thinking blocks, or inside the reply's text.
+
 ### Who maintains it?
 
 Me, and it's MIT licensed. Strata's engine inside it comes from Strata's releases, and the added engine is all in

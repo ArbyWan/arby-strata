@@ -579,11 +579,15 @@ def openai_to_messages(req: dict) -> tuple[list[dict], list[dict] | None, dict]:
     # `false` is a level (thinking off, effort_kwargs): an `or` between the two fields dropped it
     kwargs.update(effort_kwargs(given if given is not None and given != "" else reasoning.get("effort")))
     # the vLLM / llama.cpp convention: {"chat_template_kwargs": {"enable_thinking": false, "reasoning_effort": "low"}}
-    for k, v in (req.get("chat_template_kwargs") or {}).items():
+    ctk = req.get("chat_template_kwargs") or {}
+    for k, v in ctk.items():
         if k == "enable_thinking" and not v:
             kwargs = {"enable_thinking": False}
         elif k == "reasoning_effort" and "enable_thinking" not in kwargs:
             kwargs.update(effort_kwargs(v))
+    # #25: earlier turns keep their thinking (Qwen3.6's template), as llama.cpp's --chat-template-kwargs passes it
+    if isinstance(ctk.get("preserve_thinking"), bool):
+        kwargs["preserve_thinking"] = ctk["preserve_thinking"]
     return _answers_in_call_order(_env_to_user(_late_system_to_user(messages))), tools, kwargs
 
 

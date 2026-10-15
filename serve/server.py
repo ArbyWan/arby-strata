@@ -3064,6 +3064,7 @@ class Service:
         self.engine, self.tok, self.template, self.model, self.vision = engine, tokenizer, template, model_name, vision
         self.fit_max_tokens = fit_max_tokens          # --fit-max-tokens: clamp the output cap instead of 400
         self.drop_oldest = False                      # #17 (opt-in): a conversation too long loses its oldest turns
+        self.preserve_thinking = False                # #25 (opt-in): earlier turns keep their thinking in the prompt
         self.aliases: list[str] = []                  # #297: other names of the model (the config's `aliases`)
         self.reasoning_close_retry = False            # #1053 (opt-in): close the thinking once when a reply ends inside it
         self.codex_compaction_cache = False           # #924 (opt-in): a Codex compaction is rendered with its conversation's tools
@@ -4011,8 +4012,10 @@ class Service:
             raise ValueError("No messages provided.")
         effort = kwargs.get("reasoning_effort")
         off = kwargs.get("enable_thinking") is False
-        # said either way: Gemma's template thinks only when told to, the others unless told not to
-        kwargs = {**self.template_tokens, **kwargs, "enable_thinking": not off}
+        # said either way: Gemma's template thinks only when told to, the others unless told not to.  The config's
+        # preserve_thinking is the default; a request's chat_template_kwargs can still turn it off.
+        kwargs = {**self.template_tokens, **({"preserve_thinking": True} if self.preserve_thinking else {}), **kwargs,
+                  "enable_thinking": not off}
         if self.call_format in ("gemma", "dsml") and tools:   # their templates read a tool as OpenAI sends it
             tools = [{"type": "function", "function": t} for t in tools]
         if not self.effort_end or (not off and effort in (None, "", "xhigh", "high")):
@@ -7122,6 +7125,7 @@ def main() -> int:
                   fit_max_tokens=a.fit_max_tokens or cfg.get("fit_max_tokens") is True)
     svc.reasoning_close_retry = cfg.get("reasoning_close_retry") is True    # #1053: opt-in, off by default
     svc.drop_oldest = cfg.get("drop_oldest") is True                        # #17: opt-in, off by default
+    svc.preserve_thinking = cfg.get("preserve_thinking") is True            # #25: opt-in, off by default
     if cfg.get("images"):                               # image generation (serve/images.py), set up by setup --images
         icfg = {k: (os.path.abspath(os.path.join(cfg.get("cwd") or ".", v))
                     if k in ("exe", "diffusion_model", "vae", "llm", "out_dir") and isinstance(v, str)
