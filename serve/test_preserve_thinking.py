@@ -3,6 +3,7 @@
     python -m unittest serve.test_preserve_thinking -v
 """
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -59,6 +60,53 @@ class PreserveThinking(unittest.TestCase):
     def test_with_thinking_off_too(self):
         req = {"messages": CHAT, "chat_template_kwargs": {"enable_thinking": False, "preserve_thinking": True}}
         self.assertIn("4821930571", self.prompt(req))
+
+
+class RememberedThinking(unittest.TestCase):
+    """A client that sends an answer back without its thinking (the chat page, Open WebUI, Copilot) gets it back
+    from the server that wrote the answer."""
+
+    def setUp(self):
+        tok = ByteTokenizer()
+        self.tok = tok
+        self.svc = Service(MockEngine(tok, "first 4821930571, second 9917263540</think>\n\n9917263540"), tok,
+                           ChatTemplate(PreserveThinking.path))
+        self.svc.preserve_thinking = True
+
+    @classmethod
+    def setUpClass(cls):
+        PreserveThinking.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        PreserveThinking.tearDownClass()
+
+    def answer(self, messages):
+        ids, thinking, max_new = self.svc.prepare(messages, None, {}, 64)
+        return list(self.svc.run(ids, thinking, None, max_new, {}, threading.Event()))
+
+    def test_the_thinking_comes_back(self):
+        self.answer(CHAT[:1])
+        bare = [CHAT[0], {"role": "assistant", "content": "9917263540"}, CHAT[2]]
+        ids, _, _ = self.svc.prepare(bare, None, {}, 64)
+        self.assertIn("4821930571", self.tok.decode([t for t in ids if t < 256]))
+
+    def test_off_remembers_nothing(self):
+        self.svc.preserve_thinking = False
+        self.answer(CHAT[:1])
+        self.assertEqual(len(self.svc.reasoning_memory), 0)
+
+    def test_another_answer_gets_none(self):
+        self.answer(CHAT[:1])
+        other = [CHAT[0], {"role": "assistant", "content": "1234567890"}, CHAT[2]]
+        ids, _, _ = self.svc.prepare(other, None, {}, 64)
+        self.assertNotIn("4821930571", self.tok.decode([t for t in ids if t < 256]))
+
+    def test_the_memory_is_bounded(self):
+        for i in range(600):
+            self.svc.remember_reasoning(f"answer {i}", f"thought {i}")
+        self.assertEqual(len(self.svc.reasoning_memory), 512)
+        self.assertNotIn("answer 0", self.svc.reasoning_memory)
 
 
 if __name__ == "__main__":

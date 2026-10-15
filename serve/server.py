@@ -3065,6 +3065,7 @@ class Service:
         self.fit_max_tokens = fit_max_tokens          # --fit-max-tokens: clamp the output cap instead of 400
         self.drop_oldest = False                      # #17 (opt-in): a conversation too long loses its oldest turns
         self.preserve_thinking = False                # #25 (opt-in): earlier turns keep their thinking in the prompt
+        self.reasoning_memory: collections.OrderedDict[str, str] = collections.OrderedDict()   # remember_reasoning()
         self.aliases: list[str] = []                  # #297: other names of the model (the config's `aliases`)
         self.reasoning_close_retry = False            # #1053 (opt-in): close the thinking once when a reply ends inside it
         self.codex_compaction_cache = False           # #924 (opt-in): a Codex compaction is rendered with its conversation's tools
@@ -4125,6 +4126,8 @@ class Service:
         # `cancel` (#1999): set when the client hangs up; the downloads, the wait for the turn and the encodes stop
         # between pictures and raise ClientGone
         fetched = self._note_unreadable_tool_images(messages, cancel)
+        if self.preserve_thinking and kwargs.get("preserve_thinking") is not False:
+            messages = self.restore_reasoning(messages)
         ids = self.encode_prompt(messages, tools, kwargs)
         if self.drop_oldest:
             messages, ids = self.drop_oldest_turns(messages, tools, kwargs, ids, max_new)
@@ -4353,10 +4356,41 @@ class Service:
         if ka is not None:
             ka.acquire()
         try:
-            yield from self._run(ids, thinking, tools, max_new, sampling, cancel, force)
+            if not self.preserve_thinking:
+                yield from self._run(ids, thinking, tools, max_new, sampling, cancel, force)
+                return
+            reasoning, text = [], []
+            for kind, payload in self._run(ids, thinking, tools, max_new, sampling, cancel, force):
+                if kind == "event" and payload.kind in ("reasoning", "content"):
+                    (reasoning if payload.kind == "reasoning" else text).append(payload.text or "")
+                yield kind, payload
+            self.remember_reasoning("".join(text), "".join(reasoning))
         finally:
             if ka is not None:
                 ka.release()
+
+    def remember_reasoning(self, text: str, reasoning: str):
+        """#25: an answer's thinking, by its text, for a client that sends the answer back without it (the chat page,
+        Open WebUI and VS Code's Copilot do): restore_reasoning() puts it back.  The last 512 answers with text."""
+        key, reasoning = text.strip(), reasoning.strip()
+        if not key or not reasoning:
+            return
+        self.reasoning_memory[key] = reasoning
+        self.reasoning_memory.move_to_end(key)
+        while len(self.reasoning_memory) > 512:
+            self.reasoning_memory.popitem(last=False)
+
+    def restore_reasoning(self, messages):
+        """The earlier answers of `messages` with their thinking where the client left it out and this server wrote
+        them (remember_reasoning())."""
+        out = []
+        for m in messages:
+            text = m.get("content") if m.get("role") == "assistant" else None
+            if (isinstance(text, str) and not m.get("reasoning_content") and "</think>" not in text
+                    and text.strip() in self.reasoning_memory):
+                m = {**m, "reasoning_content": self.reasoning_memory[text.strip()]}
+            out.append(m)
+        return out
 
     def _run(self, ids, thinking, tools, max_new, sampling, cancel, force=None) -> Iterator[tuple[str, object]]:
         """Yields ("event", Event) as text arrives, then ("done", {"finish": .., "completion_tokens": ..}).
