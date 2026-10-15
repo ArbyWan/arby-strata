@@ -94,6 +94,7 @@ struct Dev {
 /// What a layer has in every architecture.  Its attention's weights, and a dense FFN's, are the architecture's.
 struct Layer {
     bool moe = false;
+    bool mmq = false;     ///< the card has MMQ tiles for its routed experts' types (Engine::batched())
     bool fixed = false;   ///< one token's launches can be recorded and replayed for the next ones (eval()): they
                           ///< are the same for every token, or read the position on the card (Engine::at_)
     Dev attn_norm, ffn_norm;   ///< the norms ahead of the attention and of the FFN
@@ -392,6 +393,9 @@ protected:
     void save_last(uint8_t* dst);
     void moe_router(const Layer& L, int n);
     bool moe(Layer& L, int il, int n, const std::function<void()>* first = nullptr);
+    /// Whether n tokens take layer L's routed experts as a prompt batch, through MMQ (moe_rows()), and not a few at
+    /// a time (moe()).
+    bool batched(const Layer& L, int n) const;
     void moe_add(int n);
     template <class F>
     void* record(F&& work);

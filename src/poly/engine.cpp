@@ -1521,16 +1521,17 @@ void Engine::alloc() {
     alloc_caches();
     cover(1);   // a short conversation's rows, before the expert cache is sized
 
-    // A prompt batch runs its routed experts through MMQ when the card has a tile for each of their types.
-    // The model's layers: the draft block's experts never run a batch at a time.
+    // A prompt batch runs a layer's routed experts through MMQ when the card has a tile for each of their types
+    // (batched()).  The model's layers: the draft block's experts never run a batch at a time.
     const size_t n = (size_t) rows_;
-    bool tiles = opt_.gpu_experts && rows_ >= kStageRows && n_moe_ > 0;
+    bool tiles = false;
     size_t one_expert = 0;
     for (int il = 0; il < n_layer_; ++il) {
-        const Layer& L = layers_[(size_t) il];
+        Layer& L = layers_[(size_t) il];
         if (!L.moe) continue;
-        tiles = tiles && Mmq::fits((int) L.gu_type, 2 * n_ff_exp_, n_embd_) &&
+        L.mmq = opt_.gpu_experts && rows_ >= kStageRows && Mmq::fits((int) L.gu_type, 2 * n_ff_exp_, n_embd_) &&
                 Mmq::fits((int) L.d_type, n_embd_, n_ff_exp_);
+        tiles = tiles || L.mmq;
         one_expert = std::max(one_expert, 2 * L.gu_bytes + L.d_bytes);
     }
     if (tiles) mmq_ = std::make_unique<Mmq>();
@@ -1773,6 +1774,8 @@ void Engine::lin(const Dev& w, const float* x, float* y, int n, const void* xq, 
 }
 
 void Engine::router_scores(const Layer& L, int n) { lin(L.gate_inp, xn_, rl_, n, xq_); }
+
+bool Engine::batched(const Layer& L, int n) const { return mmq_ && L.mmq && n >= kStageRows; }
 
 // The router's scores, and the copies of them and of the experts' input to the host.
 void Engine::moe_router(const Layer& L, int n) {
@@ -2301,7 +2304,7 @@ void Engine::run(const int32_t* tokens, int n) {
         const size_t head = (size_t) head_key(il, m) * recs + rec;
         if (replay && L.fixed) replayed(L.heads, head, [&] { layer_head(L, il, m); });
         else layer_head(L, il, m);
-        if (!L.moe || (mmq_ && m >= kStageRows)) return;
+        if (!L.moe || batched(L, m)) return;
         ck(cudaEventRecord((cudaEvent_t) ev_, cs(st_)), "router");
         if (replay) replayed(L.shared, rec, [&] { moe_shared(L, il, m); });
         else moe_shared(L, il, m);
@@ -2400,7 +2403,7 @@ void Engine::run(const int32_t* tokens, int n) {
         Layer& L = layers_[(size_t) il];
         up(il, n, (size_t) n - 1);
         if (!L.moe) continue;
-        if (mmq_ && n >= kStageRows) moe_rows(L, il, n);
+        if (batched(L, n)) moe_rows(L, il, n);
         else if (moe(L, il, n)) moe_add(n);
         tail(il, n, (size_t) n - 1);
     }
@@ -2488,7 +2491,7 @@ void Engine::layer(int il, int n) {
     Layer& L = layers_[(size_t) il];
     layer_head(L, il, n);
     if (!L.moe) return;
-    if (mmq_ && n >= kStageRows) {
+    if (batched(L, n)) {
         moe_rows(L, il, n);
     } else {
         ck(cudaEventRecord((cudaEvent_t) ev_, cs(st_)), "router");

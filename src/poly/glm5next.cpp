@@ -546,7 +546,7 @@ void Glm5Next::layer_head(Layer& L, int il, int n) {
         dense_ffn(B, il, n);
         dbg("ffn", il, fo_, n_embd_);
         hc_post(fo_, hcw_, r_, n_embd_, n, st_);
-    } else if (!(mmq_ && n >= kStageRows)) {
+    } else if (!batched(L, n)) {
         moe_router(L, n);
     }
 }

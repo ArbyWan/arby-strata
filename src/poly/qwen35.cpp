@@ -321,7 +321,7 @@ void Qwen35::layer_head(Layer& L, int il, int n) {
     rms_norm(r_, fp(L.ffn_norm), xn_, n_embd_, n, rms_eps_, st_);
     kernels::native_quantize_q8_1(xn_, xq_, n_embd_ * n, 1, st_);
     dbg("ffn_in", il, xn_, n_embd_);
-    if (!(mmq_ && n >= kStageRows)) moe_router(L, n);
+    if (!batched(L, n)) moe_router(L, n);
 }
 
 void Qwen35::layer_tail(Layer&, int, int n) { axpy(fo_, 1.f, r_, n * n_embd_, true, st_); }

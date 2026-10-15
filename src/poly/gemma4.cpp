@@ -476,7 +476,7 @@ void Gemma4::layer_head(Layer& L, int il, int n) {
     rms_norm(r_, fp(B.pre_moe), xn_, n_embd_, n, rms_eps_, st_);
     kernels::native_quantize_q8_1(xn_, xq_, all, 1, st_);
     dbg("ffn_in", il, xn_, n_embd_);
-    if (!(mmq_ && n >= kStageRows)) moe_router(L, n);
+    if (!batched(L, n)) moe_router(L, n);
 }
 
 // The router reads the residual, normed and scaled a value at a time (rin_).
