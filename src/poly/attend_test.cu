@@ -13,13 +13,14 @@
 #include <cstdio>
 #include <cstring>
 #include <random>
+#include <utility>
 #include <vector>
 
 namespace {
 
 using namespace strata::poly;
 
-constexpr int kDim = 64, kHeads = 32, kKvHeads = 8, kChunk = 8, kMaxRows = 32768;
+constexpr int kDim = 64, kHeads = 32, kKvHeads = 8, kChunk = 8, kMaxRows = 32768, kBatch = 1024;
 
 template <typename T> T* upload(const std::vector<T>& v) {
     T* d = nullptr;
@@ -72,12 +73,38 @@ int check(const Buffers& b, long long pos, int rows) {
     return ok ? 0 : 1;
 }
 
+// a prompt batch of rows tokens from pos through attend_batch(), against attend(): the queries and the weights go
+// in as halves there, so the results differ in the third or fourth digit
+int check_batch(const Buffers& b, long long pos, int rows) {
+    const size_t n = size_t(rows) * kHeads * kDim;
+    const float scale = 0.125f;
+    std::vector<float> ref(n);
+    for (int first = 0; first < rows; first += kChunk) {
+        const int c = std::min(kChunk, rows - first);
+        const size_t o = size_t(first) * kHeads * kDim;
+        attend(b.q + o, b.k, b.v, pos + first, c, b.score, kChunk, b.out, kDim, kHeads, kKvHeads, scale, nullptr);
+        cudaMemcpy(ref.data() + o, b.out, size_t(c) * kHeads * kDim * sizeof(float), cudaMemcpyDeviceToHost);
+    }
+    attend_batch(nullptr, b.q, b.k, b.v, pos, rows, b.score, b.score_n, nullptr, b.out, kDim, kHeads, kKvHeads, scale,
+                 nullptr);
+    const std::vector<float> batch = download(b.out, n);
+    float most = 0.f, big = 0.f;
+    for (size_t i = 0; i < n; ++i) {
+        most = std::max(most, std::fabs(batch[i] - ref[i]));
+        big = std::max(big, std::fabs(ref[i]));
+    }
+    const bool ok = most <= 4e-3f;
+    std::printf("%s batch pos %5lld rows %4d: %.2e from attend() (results up to %.2f)\n", ok ? "ok  " : "FAIL", pos,
+                rows, most, big);
+    return ok ? 0 : 1;
+}
+
 }  // namespace
 
 int main() {
     std::mt19937 rng(5);
     std::normal_distribution<float> nd(0.f, 1.f);
-    std::vector<float> q(size_t(kChunk * 2) * kHeads * kDim);
+    std::vector<float> q(size_t(kBatch) * kHeads * kDim);
     for (float& x : q) x = 2.f * nd(rng);   // spread scores, so the softmax has a few large weights
     std::vector<uint16_t> k(size_t(kMaxRows) * kKvHeads * kDim), v(k.size());
     for (uint16_t& x : k) x = __half_as_ushort(__float2half(nd(rng)));
@@ -93,6 +120,8 @@ int main() {
         for (int rows : {1, 2, 4, 8}) bad += check(b, pos, rows);
     bad += check(b, 2000, 13);                  // two launches of a chunk
     bad += check(b, kMaxRows - 16, 16);         // to the end of the cache
+    const std::pair<long long, int> batches[] = {{0, 37}, {0, kBatch}, {1000, 517}, {30000, 700}};
+    for (const auto& [pos, rows] : batches) bad += check_batch(b, pos, rows);
     cudaFree(b.q), cudaFree(b.k), cudaFree(b.v), cudaFree(b.score), cudaFree(b.out), cudaFree(b.at);
     if (const cudaError_t e = cudaGetLastError(); e != cudaSuccess) {
         std::printf("CUDA: %s\n", cudaGetErrorString(e));

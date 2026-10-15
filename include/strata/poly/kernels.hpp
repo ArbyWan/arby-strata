@@ -191,6 +191,8 @@ size_t attend_split_floats(int chunk, int n_head, int max_rows, int dim);
 /// scores and weights, 6 bytes for each of a token's n_head heads, in the score_floats floats of `score`, which
 /// must hold 2 * n_head floats.  work: rows * n_head * (dim + dim / 2 + 3) + 1 floats.  Throws
 /// std::runtime_error.
+/// Heads of 64 values in groups of 4 over the whole conversation take one kernel instead, which keeps the scores in
+/// registers, on NVIDIA cards from Turing on; it uses neither blas, score nor work.
 void attend_batch(void* blas, const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows,
                   float* score, size_t score_floats, float* work, float* out, int dim, int n_head, int kv_heads,
                   float scale, void* stream, int window = 0, int ring = 0, bool whole = false);
