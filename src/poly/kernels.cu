@@ -306,6 +306,38 @@ __global__ void kda_conv_kernel(const float* __restrict__ proj, float* __restric
     st[2] = s2;
 }
 
+// kda_conv_kernel for a call that leaves no snapshots: a thread a channel of a token, the inputs before the call's
+// first token from the state, the same sum in the same order (conv4_silu_rows_kernel's reason).
+__global__ void kda_conv_rows_kernel(const float* __restrict__ proj, const float* __restrict__ state,
+                                     const float* __restrict__ wq, const float* __restrict__ wk,
+                                     const float* __restrict__ wv, float* __restrict__ out, int d_inner, int rows) {
+    const int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= 3 * d_inner) return;
+    const int m = t / d_inner, c = t % d_inner, row = blockIdx.y;
+    const float* w = (m == 0 ? wq : m == 1 ? wk : wv) + 4 * size_t(c);
+    const float* st = state + size_t(t) * 3;
+    const size_t first = size_t(m) * rows * d_inner + c;
+    auto in = [&](int r) { return r >= 0 ? proj[first + size_t(r) * d_inner] : st[3 + r]; };
+    const float s0 = in(row - 3), s1 = in(row - 2), s2 = in(row - 1), x = proj[first + size_t(row) * d_inner];
+    const float y = s0 * w[0] + s1 * w[1] + s2 * w[2] + x * w[3];
+    out[first + size_t(row) * d_inner] = y * sigmoid(y);
+}
+
+// The state after the call: its last three inputs, the state's own where the call has fewer.
+__global__ void kda_conv_state_kernel(const float* __restrict__ proj, float* __restrict__ state, int d_inner,
+                                      int rows) {
+    const int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= 3 * d_inner) return;
+    const int m = t / d_inner, c = t % d_inner;
+    float* st = state + size_t(t) * 3;
+    const size_t first = size_t(m) * rows * d_inner + c;
+    auto in = [&](int r) { return r >= 0 ? proj[first + size_t(r) * d_inner] : st[3 + r]; };
+    const float a = in(rows - 3), b = in(rows - 2), d = in(rows - 1);
+    st[0] = a;
+    st[1] = b;
+    st[2] = d;
+}
+
 // One block per head, and a column of the state to every `lanes` threads of it: a thread holds every lanes-th
 // value of its column, so a column's two sums are a few terms a thread and a sum over its threads.  A thread a
 // column read the column's 128 values one after the other, twice, and that was 25 microseconds a token.  The
@@ -1312,6 +1344,38 @@ __global__ void conv4_silu_kernel(const float* __restrict__ x, float* __restrict
     st[2] = s2;
 }
 
+// From this many tokens a causal convolution takes them all at once: a walk is one launch, and the two launches of
+// the parallel way cost a token alone more than its walk.
+constexpr int CONV_ROWS = 16;
+
+// conv4_silu_kernel for a call that leaves no snapshots: a thread a channel of a token, the inputs before the call's
+// first token from the state, the same sum in the same order.  A thread that walked a channel's tokens waited for
+// each token's input in turn: most of the time Qwen3.6's recurrent layers took to read a prompt.
+__global__ void conv4_silu_rows_kernel(const float* __restrict__ x, const float* __restrict__ state,
+                                       const float* __restrict__ w, float* __restrict__ out, int channels) {
+    const int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (c >= channels) return;
+    const int row = blockIdx.y;
+    const float* wc = w + 4 * size_t(c);
+    const float* st = state + size_t(c) * 3;
+    auto in = [&](int r) { return r >= 0 ? x[size_t(r) * channels + c] : st[3 + r]; };
+    const float s0 = in(row - 3), s1 = in(row - 2), s2 = in(row - 1), v = x[size_t(row) * channels + c];
+    const float y = s0 * wc[0] + s1 * wc[1] + s2 * wc[2] + v * wc[3];
+    out[size_t(row) * channels + c] = y * sigmoid(y);
+}
+
+// The state after the call: its last three inputs, the state's own where the call has fewer.
+__global__ void conv4_state_kernel(const float* __restrict__ x, float* __restrict__ state, int channels, int rows) {
+    const int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (c >= channels) return;
+    float* st = state + size_t(c) * 3;
+    auto in = [&](int r) { return r >= 0 ? x[size_t(r) * channels + c] : st[3 + r]; };
+    const float a = in(rows - 3), b = in(rows - 2), d = in(rows - 1);
+    st[0] = a;
+    st[1] = b;
+    st[2] = d;
+}
+
 // The gated delta net's step, in four launches.  A token's queries and keys are normed without the state, its
 // decay and its share of the error are a head's alone, and its output is normed without the tokens after it: all
 // of that is done for every token at once, and only the state's update walks the tokens.
@@ -1562,8 +1626,15 @@ void hc_mean(const float* r, float* y, int n_embd, int rows, void* stream) {
 
 void kda_conv(const float* proj, float* state, const float* wq, const float* wk, const float* wv, float* out,
               int d_inner, int rows, void* stream, float* snap, size_t stride, int n_snap) {
+    if (rows <= 0) return;
+    if (rows >= CONV_ROWS && (!snap || n_snap <= 0)) {
+        kda_conv_rows_kernel<<<dim3(grid(3 * d_inner, 256), rows), 256, 0, cs(stream)>>>(proj, state, wq, wk, wv, out,
+                                                                                        d_inner, rows);
+        kda_conv_state_kernel<<<grid(3 * d_inner, 256), 256, 0, cs(stream)>>>(proj, state, d_inner, rows);
+        return;
+    }
     kda_conv_kernel<<<grid(3 * d_inner, 256), 256, 0, cs(stream)>>>(proj, state, wq, wk, wv, out, d_inner, rows,
-                                                                    snap, stride, snap ? n_snap : 0);
+                                                                    snap, stride, n_snap);
 }
 
 void kda_step(float* qkv, float* g1, const float* a, const float* beta, float* s, const float* g2,
@@ -1854,8 +1925,14 @@ void mul_sigmoid(float* acc, const float* g, int n, int rows, int g_stride, bool
 
 void conv4_silu(const float* x, float* state, const float* w, float* out, int channels, int rows, void* stream,
                 float* snap, size_t stride, unsigned snaps) {
+    if (rows <= 0) return;
+    if (rows >= CONV_ROWS && (!snap || !snaps)) {
+        conv4_silu_rows_kernel<<<dim3(grid(channels, 256), rows), 256, 0, cs(stream)>>>(x, state, w, out, channels);
+        conv4_state_kernel<<<grid(channels, 256), 256, 0, cs(stream)>>>(x, state, channels, rows);
+        return;
+    }
     conv4_silu_kernel<<<grid(channels, 256), 256, 0, cs(stream)>>>(x, state, w, out, channels, rows, snap, stride,
-                                                                  snap ? snaps : 0u);
+                                                                  snaps);
 }
 
 void gdn_step(float* qkv, float* alpha, float* beta, const float* dt, const float* a, float* s, const float* z,
