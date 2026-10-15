@@ -1330,25 +1330,47 @@ attn_split_kernel(const float* __restrict__ q, const half* __restrict__ kcache, 
     }
 }
 
-// The blocks of attn_split_kernel added up for a head of a token: each block's sums scaled to the largest score.
-__global__ void attn_join_kernel(const float* __restrict__ part, float* __restrict__ out, int n_head, long long pos,
-                                 int first, int tokens, int blocks, const long long* __restrict__ at) {
+// The blocks of attn_split_kernel added up for a head of a token: each block's sums scaled to the largest score.  A
+// warp takes every JOIN_WARPS-th block, a lane two values, and the warps' sums are added in their order; a block past
+// the token's own rows has none it attends and is skipped, so the sums are the same whatever tokens the call has.
+constexpr int JOIN_WARPS = 16;
+
+__global__ void __launch_bounds__(JOIN_WARPS * WARP)
+attn_join_kernel(const float* __restrict__ part, float* __restrict__ out, int n_head, long long pos, int first,
+                 int tokens, int blocks, const long long* __restrict__ at) {
     constexpr int DIM = 64;
-    const int h = blockIdx.x, t = blockIdx.y, d = threadIdx.x;
+    __shared__ float top[JOIN_WARPS], sl[JOIN_WARPS], so[JOIN_WARPS][DIM];
+    const int h = blockIdx.x, t = blockIdx.y, lane = threadIdx.x % WARP, w = threadIdx.x / WARP;
     const long long p = (at ? *at : pos) + first;
     const int used = int((p + tokens + SPLIT_KEYS - 1) / SPLIT_KEYS);   // the blocks the split kernel wrote
     const float* pb = part + (size_t(t) * n_head + h) * blocks * (DIM + 2);
     float mx = -INFINITY;
-    for (int b = 0; b < used; ++b) mx = fmaxf(mx, pb[size_t(b) * (DIM + 2) + DIM]);
-    float l = 0.0f, o = 0.0f;
-    for (int b = 0; b < used; ++b) {
+    for (int b = threadIdx.x; b < used; b += JOIN_WARPS * WARP) mx = fmaxf(mx, pb[size_t(b) * (DIM + 2) + DIM]);
+    mx = block_max(mx, top);
+    float l = 0.0f, o0 = 0.0f, o1 = 0.0f;
+#pragma unroll 4
+    for (int b = w; b < used; b += JOIN_WARPS) {
         const float* x = pb + size_t(b) * (DIM + 2);
         if (x[DIM] == -INFINITY) continue;
         const float f = expf(x[DIM] - mx);
         l += f * x[DIM + 1];
-        o += f * x[d];
+        o0 += f * x[2 * lane];
+        o1 += f * x[2 * lane + 1];
     }
-    out[((size_t(first) + t) * n_head + h) * DIM + d] = o / l;
+    so[w][2 * lane] = o0;
+    so[w][2 * lane + 1] = o1;
+    if (lane == 0) sl[w] = l;
+    __syncthreads();
+    if (w != 0) return;
+    float s0 = 0.0f, s1 = 0.0f, sum = 0.0f;
+    for (int k = 0; k < JOIN_WARPS; ++k) {
+        s0 += so[k][2 * lane];
+        s1 += so[k][2 * lane + 1];
+        sum += sl[k];
+    }
+    float* y = out + ((size_t(first) + t) * n_head + h) * DIM;
+    y[2 * lane] = s0 / sum;
+    y[2 * lane + 1] = s1 / sum;
 }
 
 // attn_value_kernel with the weights as attn_softmax_kernel leaves them with `wt`: a row's queries side by side,
@@ -2263,8 +2285,8 @@ void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int6
             attn_split_kernel<<<dim3(blocks, kv_heads, c), SPLIT_THREADS, 0, cs(stream)>>>(
                 q, (const half*) kcache, (const half*) vcache, score, n_head, kv_heads, (long long) pos, first, c,
                 scale, blocks, at);
-            attn_join_kernel<<<dim3(n_head, c), dim, 0, cs(stream)>>>(score, out, n_head, (long long) pos, first, c,
-                                                                     blocks, at);
+            attn_join_kernel<<<dim3(n_head, c), JOIN_WARPS * WARP, 0, cs(stream)>>>(score, out, n_head, (long long) pos,
+                                                                                first, c, blocks, at);
         }
         return;
     }
