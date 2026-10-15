@@ -83,6 +83,8 @@ HF_REVISIONS = {
     "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP": "bbe9e566f39e4fc9652ac66b71968289a03c520a",        # 2026-09-10
     "unsloth/Qwen3.6-35B-A3B-MTP-GGUF": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",                  # 2026-10-12
     "unsloth/DeepSeek-V4-Flash-0731-GGUF": "fbbb5b93fb787c21338159b0af3318bb3f4d9768",               # 2026-10-15
+    "unsloth/LFM2.5-24B-A2B-GGUF": "faa77113e93335b63423e9e8d33395f86eaf8946",                        # 2026-10-15
+    "LiquidAI/LFM2.5-24B-A2B-GGUF": "0912d33141f77e10705345a6732bfd83f0252fdc",                       # 2026-10-15
 }
 
 
@@ -512,6 +514,35 @@ FAMILIES = {
     # less, and the third is by name (poly_default()).  "windows": installed by setup and run there, on one PC.
     # "ran_on_gb": the smallest card it has run on, 32 GB without the key.  "tail_skip": the engine's --tail-skip,
     # for the family whose answers it moves no more than the Strata project's default moves its own (docs/BACKENDS.md).
+    # LFM2.5 (llama.cpp's lfm2moe): no draft block and no image encoder.  QAD-Q4_0 is Liquid AI's own file, trained
+    # for that quantization; the other sizes are Unsloth's.
+    "lfm25": {"title": "LFM2.5-24B-A2B", "by": "Liquid AI; quantized by Unsloth and Liquid AI",
+              "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a 15 GB file, ~20 GB of RAM "
+                       "beside an 8 GB card; four other sizes too, no images",
+              "hf": hf("unsloth/LFM2.5-24B-A2B-GGUF"), "file": "LFM2.5-24B-A2B-{q}.gguf", "shards": 1,
+              "tag": "lfm25-", "name": "lfm2.5-24b-a2b", "engine": "poly", "vision": False, "experimental": True,
+              "windows": True, "ran_on_gb": 8, "row_bytes": 20480,
+              "models": {"UD-Q4_K_XL": {"about": "4-bit experts (Unsloth Dynamic), 5- and 6-bit where they write",
+                                        "download_gb": 14.9, "ram_gb": 20, "arena_gb": 14.0, "vram_beside_gb": 4.1},
+                         "UD-Q3_K_XL": {"about": "3-bit i-quant experts, 4-bit where they write: the least RAM",
+                                        "download_gb": 10.9, "ram_gb": 16, "arena_gb": 10.2, "vram_beside_gb": 3.9},
+                         "QAD-Q4_0": {"about": "Liquid AI's 4-bit file, trained for that quantization",
+                                      "download_gb": 13.6, "ram_gb": 18, "arena_gb": 12.9, "vram_beside_gb": 3.8,
+                                      "hf": hf("LiquidAI/LFM2.5-24B-A2B-GGUF")},
+                         "UD-Q6_K_XL": {"about": "6-bit experts, 8-bit where they write",
+                                        "download_gb": 21.9, "ram_gb": 27, "arena_gb": 20.9, "vram_beside_gb": 4.4},
+                         "Q8_0": {"about": "8-bit throughout: the closest to the model as trained",
+                                  "download_gb": 25.5, "ram_gb": 31, "arena_gb": 24.4, "vram_beside_gb": 4.5}},
+              "sha256": {"LFM2.5-24B-A2B-UD-Q4_K_XL.gguf":
+                         (14876901632, "a235d23638cc5549cb1ff61da7522c8a7e97f056f27093462a1e56f35aba91d8"),
+                         "LFM2.5-24B-A2B-UD-Q3_K_XL.gguf":
+                         (10947100928, "d54834c785c7e265f1cb7375e47aa6f55a0b7cfab75816254c4d2e0c82fd5efc"),
+                         "LFM2.5-24B-A2B-QAD-Q4_0.gguf":
+                         (13578190880, "d1c03f73ecaf61017d70419eec9e5dc0b05d50ae26c23d522829b934fbabf8a5"),
+                         "LFM2.5-24B-A2B-UD-Q6_K_XL.gguf":
+                         (21861204224, "abcb7e21e006eb4c826a2b75fb91c0804db7b20f908a61beeebdbdd07c88f41d"),
+                         "LFM2.5-24B-A2B-Q8_0.gguf":
+                         (25493733344, "97cd912b01124793a69ddebc309abbbad7ebb38ac2fb9c2bc55dfc1ad9d1809e")}},
     "qwen36": {"title": "Qwen3.6-35B-A3B", "by": "Qwen; quantized by Unsloth",
                "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a 17 GB file, ~21 GB of RAM "
                         "beside an 8 GB card; a smaller and a larger size too",
@@ -6059,7 +6090,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     if hip and WIN:
         fail(f"{title} has no AMD engine for Windows: its HIP engine is compiled on Linux",
              "choose another model for this card, or run setup on Linux")
-    if hip and family in ("glm", "deepseek", "gemma4", "tiel"):   # the engine runs on the AMD card, these models not yet
+    if hip and family in ("glm", "deepseek", "lfm25", "gemma4", "tiel"):   # the engine runs on AMD, these models not yet
         warn(f"{title} on the AMD card has not been tried: the engine runs there, this model was not")
     if cuda_tk == 12:
         warn(f"{title}'s engine with CUDA 12 is compiled here (the ready-made one is CUDA 13)" +
@@ -6627,7 +6658,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--family", choices=list(FAMILIES) + list(PREVIEW_FAMILIES),
                     help="qwen = Qwen3.8-Flash-Next, swift = Swift 1.5, glm = GLM 5.3 Flash (docs/GLM.md), deepseek = "
-                         "DeepSeek V4 Flash, qwen36 = Qwen3.6-35B-A3B on strata-poly, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel "
+                         "DeepSeek V4 Flash, lfm25 = LFM2.5-24B-A2B, qwen36 = Qwen3.6-35B-A3B on strata-poly, ornith = "
+                         "Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel "
                          "Coder 35B-A3B (docs/BACKENDS.md), qwen36-strata = Qwen3.6-35B-A3B on the Strata project's "
                          "own engine (UD-Q4_K_XL and up, 32 GB of RAM or more)")
     ap.add_argument("--model", choices=list(dict.fromkeys(
