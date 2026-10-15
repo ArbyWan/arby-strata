@@ -225,9 +225,9 @@ Mesuré de la même façon, sur les deux mêmes PC.
 
 | Taille | Écrit les réponses | Lit votre prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_XL** | 337-345 tokens/s | 6,570-6,830 tokens/s |
-| **UD-IQ3_XXS** | 339-351 tokens/s | 6,090-6,520 tokens/s |
-| **UD-Q4_K_XL** | 316-322 tokens/s | 6,750-6,870 tokens/s |
+| **UD-Q3_K_XL** | 337-345 tokens/s | 8,080-8,110 tokens/s |
+| **UD-IQ3_XXS** | 352 tokens/s | 7,520 tokens/s |
+| **UD-Q4_K_XL** | 316-322 tokens/s | 7,750-7,970 tokens/s |
 
 </td></tr>
 </table>

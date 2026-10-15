@@ -527,6 +527,15 @@ from hand-written configs, as for the last table below.
 DeepSeek V4 Flash's row is of 2026-10-15, as setup installs the model, with the build that added it
 ([DEEPSEEK.md](DEEPSEEK.md)).
 
+Tiel Coder's three sizes ran again that day with the same build, whose prompt batches route on the card and skip
+cuBLAS for small products. The documents had grown to 32,165 tokens. UD-Q3_K_XL read them at 8,083 to 8,114
+tokens/s with the first token after 4.1 s, UD-IQ3_XXS at 7,517 to 7,521 (4.3 to 4.4 s) and UD-Q4_K_XL at 7,746
+to 7,967 (4.1 to 4.2 s). They wrote the short chat at 321 to 323, 352 and 285 to 298 tokens/s, and the answer after
+the prompt at 222 to 229, 216 to 218 and 216 to 220. The README has the higher numbers of both builds. The short
+chat's answer came out a few tokens different and its guesses were right less often with UD-Q3_K_XL and UD-Q4_K_XL;
+with guessing off a token took the same time in both builds, 243 to 244 tokens/s with UD-Q3_K_XL. The files of the
+other three models were no longer on the machine.
+
 The build before that change, three hours earlier:
 
 | Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
