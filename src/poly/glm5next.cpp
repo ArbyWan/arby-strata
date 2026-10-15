@@ -237,6 +237,7 @@ void Glm5Next::load_layer(int il) {
         if (b->type != kTypeF32 || (int64_t) b->elements() != n_expert_)
             throw std::runtime_error(b->name + " is " + shape_of(*b) + ", expected F32 [" +
                                      std::to_string(n_expert_) + "]");
+        B.probs_b_dev = upload(b, blk(il, "exp_probs_b.bias"), n_expert_, 1, kF32);
         home(*b).payload(*b);
         std::memcpy(B.probs_b.data(), home(*b).data(*b), (size_t) n_expert_ * sizeof(float));
     }
@@ -513,6 +514,12 @@ void Glm5Next::route(int il, const float* logits, int32_t, int* ids, float* w, f
         w[k] /= denom;
         if (w_scale_ != 0.f) w[k] *= w_scale_;
     }
+}
+
+bool Glm5Next::route_card(int il, int n, int32_t* ids, float* w) {
+    const Block& B = blocks_[(size_t) il];
+    route_rows(rl_, n_expert_, n_used_, n, 1, 1.f, fp(B.probs_b_dev), nullptr, w_norm_, w_scale_, ids, w, st_);
+    return true;
 }
 
 // The shared expert.  It runs on the GPU while the host routes.

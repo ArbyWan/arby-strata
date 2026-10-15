@@ -1561,6 +1561,9 @@ void Engine::alloc() {
         mq_ = dmalloc(Mmq::q8_bytes((int64_t) rr, n_embd_), "scratch");
         mq2_ = dmalloc(Mmq::q8_bytes((int64_t) rr, n_ff_exp_), "scratch");
         mqx_ = dmalloc(Mmq::q8_bytes(rows_, q_max), "scratch");
+        d_ids_ = (int32_t*) dmalloc(rr * sizeof(int32_t), "scratch");
+        d_wts_ = (float*) dmalloc(rr * sizeof(float), "scratch");
+        h_ids_ = (int32_t*) hmalloc(rr * sizeof(int32_t), "pinned memory");
         tab_ = (int32_t*) dmalloc(tab, "scratch");
         h_tab_ = (int32_t*) hmalloc(tab, "pinned memory");
         iota_ = (int32_t*) dmalloc(rr * sizeof(int32_t), "scratch");
@@ -1947,12 +1950,28 @@ void Engine::moe_rows(Layer& L, int il, int n) {
     const size_t cap = (size_t) rows_ * n_used_;
     const bool ahead = opt_.stage_ahead > 0 && (n >= opt_.stage_ahead || shared_ahead_);
     const bool spare = !ahead && opt_.cpu_share != 0 && !all_cached();   // the CPU may take some (below)
+    // The layer's tables.  tok and place: a row's token, and its place among that token's experts.  bounds: each
+    // expert's first row.  rel: the same for the experts of a staging round, counted from the round's first row.
+    // w: the weight of each place.
+    int32_t* tok = h_tab_;
+    int32_t* place = tok + cap;
+    int32_t* bounds = place + cap;
+    int32_t* rel = bounds + n_expert_ + 1;
+    float* w = (float*) (rel + 2 * n_expert_ + 2);
+    int32_t* cb = (int32_t*) (w + cap);   // per class: the cached experts' first rows, in the order of the slots
     router_scores(L, n);
-    if (spare)
+    // Routed on the card, a batch hands the host its picks: the host took longer to route a batch of 1,024 tokens
+    // than the card took for its experts.
+    const bool on_card = route_card(il, n, d_ids_, d_wts_);
+    if (on_card) {
+        copy2(d_ids_, h_ids_, rr, d_wts_, w, rr, st_);
+        if (spare) copy2(xn_, h_x_, n * n_embd_, nullptr, nullptr, 0, st_);
+    } else if (spare) {
         copy2(rl_, h_rl_, n * n_expert_, xn_, h_x_, n * n_embd_, st_);
-    else
+    } else {
         ck(cudaMemcpyAsync(h_rl_, rl_, (size_t) n * n_expert_ * sizeof(float), cudaMemcpyDeviceToHost, cs(st_)),
            "router");
+    }
     ck(cudaEventRecord((cudaEvent_t) ev_, cs(st_)), "router");
 
     moe_shared(L, il, n);
@@ -1986,15 +2005,6 @@ void Engine::moe_rows(Layer& L, int il, int n) {
     if (ahead && !early) route_ms_ = ms_since(t0);
     stats_.route_wait_ms += ms_since(t0);
 
-    // The layer's tables.  tok and place: a row's token, and its place among that token's experts.  bounds: each
-    // expert's first row.  rel: the same for the experts of a staging round, counted from the round's first row.
-    // w: the weight of each place.
-    int32_t* tok = h_tab_;
-    int32_t* place = tok + cap;
-    int32_t* bounds = place + cap;
-    int32_t* rel = bounds + n_expert_ + 1;
-    float* w = (float*) (rel + 2 * n_expert_ + 2);
-    int32_t* cb = (int32_t*) (w + cap);   // per class: the cached experts' first rows, in the order of the slots
     const size_t cb_row = (size_t) n_expert_ + 1;
     const int32_t* d_tok = tab_;
     const int32_t* d_place = d_tok + cap;
@@ -2006,8 +2016,9 @@ void Engine::moe_rows(Layer& L, int il, int n) {
     // A token's routing is a softmax over every expert and a search for the largest few.  On one thread it was
     // 0.9 s of the 2.4 s a 7,709-token prompt took with 40 layers of 256 experts, so the host's threads take a
     // stretch of tokens each.
-    const int parts = std::min(workers_->threads(), (n + kStageRows - 1) / kStageRows);
-    workers_->run(parts, [&](int p) {
+    const int parts = on_card ? 0 : std::min(workers_->threads(), (n + kStageRows - 1) / kStageRows);
+    if (on_card) std::copy(h_ids_, h_ids_ + rr, ids_.begin());
+    if (parts > 0) workers_->run(parts, [&](int p) {
         float* tmp = route_tmp_.data() + (size_t) p * 2 * n_expert_;
         const int end = (int) ((int64_t) n * (p + 1) / parts);
         for (int t = (int) ((int64_t) n * p / parts); t < end; ++t)

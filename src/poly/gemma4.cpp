@@ -225,6 +225,7 @@ void Gemma4::load_layer(int il) {
     load_moe(il, false);
     B.escale.assign((size_t) n_expert_, 1.f);
     if (const TensorInfo* s = tensor(il, "ffn_down_exps.scale")) {
+        B.escale_dev = upload(s, blk(il, "ffn_down_exps.scale"), n_expert_, 1, kF32);
         if (s->type != kTypeF32 || (int64_t) s->elements() != n_expert_ ||
             home(*s).payload(*s) != (size_t) n_expert_ * sizeof(float))
             throw std::runtime_error(s->name + " is " + shape_of(*s) + ", expected F32 [" +
@@ -572,6 +573,13 @@ void Gemma4::draft_step(int32_t token, int i) {
 }
 
 float Gemma4::embed_scale() const { return std::sqrt((float) n_embd_); }
+
+bool Gemma4::route_card(int il, int n, int32_t* ids, float* w) {
+    const Block& B = blocks_[(size_t) il];
+    route_rows(rl_, n_expert_, n_used_, n, 0, 1.f / std::sqrt((float) n_embd_), nullptr, fp(B.escale_dev), true, 0.f,
+               ids, w, st_);
+    return true;
+}
 
 // What ggml's MoE graph does for this model: the router's scores over the root of the width, a softmax over every
 // expert, the n_used most likely with their weights made to sum to one, and each expert's own scale on its output.

@@ -37,6 +37,7 @@ protected:
     void shift_rows(ptrdiff_t by) override;
     void output_rows(int first, int rows, float* h) override;
     void route(int il, const float* logits, int32_t token, int* ids, float* w, float* tmp) const override;
+    bool route_card(int il, int n, int32_t* ids, float* w) override;
     void moe_shared(const Layer& L, int il, int n) override;
     void router_scores(const Layer& L, int n) override;
     void finish_logits(float* logits, int rows) override;
@@ -62,6 +63,7 @@ private:
         Dev ffn_gate, ffn_up, ffn_down;   ///< the dense MLP
         Dev post_mlp, pre_moe, post_moe, post_ffn, rscale;
         std::vector<float> escale;   ///< what each expert's output is multiplied by
+        Dev escale_dev;              ///< the same on the card, when the file has it
         float out_scale = 1;
     };
 

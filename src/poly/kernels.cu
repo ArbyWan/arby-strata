@@ -811,6 +811,79 @@ __global__ void geglu_rows_kernel(const float* __restrict__ gate_up, float* __re
     out[size_t(blockIdx.y) * n + i] = gelu(row[i]) * row[n + i];
 }
 
+// A warp a token, a lane every 32nd expert.  The pick is the host's: the n_used largest of the probabilities plus
+// the bias, the lower expert first among equals, one after the other.
+constexpr int ROUTE_PER = 16;   // experts a lane: up to 512
+
+__global__ void route_kernel(const float* __restrict__ logits, int n_expert, int n_used, int rows, int gate,
+                             float in_scale, const float* __restrict__ bias, const float* __restrict__ escale,
+                             bool norm, float w_scale, int32_t* __restrict__ ids, float* __restrict__ w) {
+    const int row = (blockIdx.x * blockDim.x + threadIdx.x) / WARP, lane = threadIdx.x % WARP;
+    if (row >= rows) return;
+    const float* lg = logits + size_t(row) * n_expert;
+    float p[ROUTE_PER], pick[ROUTE_PER];
+    float mx = -INFINITY;
+#pragma unroll
+    for (int k = 0; k < ROUTE_PER; ++k) {
+        const int e = lane + k * WARP;
+        p[k] = e < n_expert ? lg[e] * in_scale : -INFINITY;
+        mx = fmaxf(mx, p[k]);
+    }
+    if (gate == 0) {   // softmax
+#pragma unroll
+        for (int o = WARP / 2; o > 0; o >>= 1) mx = fmaxf(mx, __shfl_xor_sync(0xffffffff, mx, o, WARP));
+        float sum = 0.0f;
+#pragma unroll
+        for (int k = 0; k < ROUTE_PER; ++k) {
+            p[k] = lane + k * WARP < n_expert ? expf(p[k] - mx) : 0.0f;
+            sum += p[k];
+        }
+        const float inv = 1.0f / warp_sum(sum);
+#pragma unroll
+        for (int k = 0; k < ROUTE_PER; ++k) p[k] *= inv;
+    } else {
+#pragma unroll
+        for (int k = 0; k < ROUTE_PER; ++k) {
+            const float x = p[k];
+            p[k] = gate == 1 ? 1.0f / (1.0f + expf(-x)) : sqrtf(x > 20.0f ? x : logf(1.0f + expf(x)));
+        }
+    }
+#pragma unroll
+    for (int k = 0; k < ROUTE_PER; ++k) {
+        const int e = lane + k * WARP;
+        pick[k] = e < n_expert ? p[k] + (bias ? bias[e] : 0.0f) : -INFINITY;
+    }
+    float sum = 0.0f, mine = 0.0f;
+    int my_id = 0;
+    for (int j = 0; j < n_used; ++j) {
+        float best = -INFINITY;
+        int at = n_expert;
+#pragma unroll
+        for (int k = 0; k < ROUTE_PER; ++k)
+            if (pick[k] > best) best = pick[k], at = lane + k * WARP;
+#pragma unroll
+        for (int o = WARP / 2; o > 0; o >>= 1) {
+            const float b = __shfl_xor_sync(0xffffffff, best, o, WARP);
+            const int a = __shfl_xor_sync(0xffffffff, at, o, WARP);
+            if (b > best || (b == best && a < at)) best = b, at = a;
+        }
+        float pw = 0.0f;
+#pragma unroll
+        for (int k = 0; k < ROUTE_PER; ++k)
+            if (lane + k * WARP == at) pw = p[k], pick[k] = -INFINITY;
+        pw = __shfl_sync(0xffffffff, pw, at % WARP, WARP);
+        sum += pw;
+        if (lane == j) mine = pw, my_id = at;
+    }
+    if (lane >= n_used) return;
+    float v = mine;
+    if (norm) v /= fmaxf(sum, 6.103515625e-5f);   // the floor ggml's MoE graph puts under the gate sum
+    if (escale) v *= escale[my_id];
+    if (w_scale != 0.0f) v *= w_scale;
+    ids[size_t(row) * n_used + lane] = my_id;
+    w[size_t(row) * n_used + lane] = v;
+}
+
 __global__ void moe_sum_kernel(const float* __restrict__ x, const float* __restrict__ w, float* __restrict__ acc,
                                int n, int n_used) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1774,6 +1847,15 @@ void geglu(const float* gate, const float* up, float* out, int n, void* stream) 
 
 void geglu_rows(const float* gate_up, float* out, int n, int rows, void* stream) {
     geglu_rows_kernel<<<dim3(grid(n, 256), rows), 256, 0, cs(stream)>>>(gate_up, out, n);
+}
+
+void route_rows(const float* logits, int n_expert, int n_used, int rows, int gate, float in_scale, const float* bias,
+                const float* escale, bool norm, float w_scale, int32_t* ids, float* w, void* stream) {
+    if (rows <= 0) return;
+    if (n_expert > ROUTE_PER * WARP || n_used > WARP)
+        throw std::invalid_argument("route_rows: more than 512 experts, or more than 32 a token");
+    route_kernel<<<grid(rows * WARP, 256), 256, 0, cs(stream)>>>(logits, n_expert, n_used, rows, gate, in_scale, bias,
+                                                                 escale, norm, w_scale, ids, w);
 }
 
 void moe_sum(const float* x, const float* w, float* acc, int n, int n_used, int rows, void* stream) {

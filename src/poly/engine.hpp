@@ -316,6 +316,12 @@ protected:
     /// for, or -1 where it has none (a picture's row, the draft block).  tmp: 2 * n_expert_ floats of scratch.  A
     /// prompt batch's tokens are routed by several threads at once: it changes nothing of the engine's.
     virtual void route(int il, const float* logits, int32_t token, int* ids, float* w, float* tmp) const = 0;
+    /// A prompt batch's routing on the card: n tokens' experts and weights from their scores in rl_, n_used_ a token
+    /// into ids and w (on the card), what route() gives them up to the last bits of a weight.  False: the host routes.
+    virtual bool route_card(int il, int n, int32_t* ids, float* w) {
+        (void) il, (void) n, (void) ids, (void) w;
+        return false;
+    }
     /// The shared expert, into fo_.  It runs on the GPU while the host routes.
     virtual void moe_shared(const Layer& L, int il, int n) = 0;
     /// The scores of a layer's router for n tokens, into rl_.  The engine's own: the router's matrix times the
@@ -571,6 +577,9 @@ protected:
     void* mqx_ = nullptr;                                   ///< lin()'s tokens quantized for a product
     int32_t *tab_ = nullptr, *h_tab_ = nullptr;   ///< a layer's row tables, in VRAM and pinned
     int32_t* iota_ = nullptr;                     ///< 0, 1, 2, ...
+    int32_t* d_ids_ = nullptr;                    ///< a batch's experts and weights when it routes on the card
+    float* d_wts_ = nullptr;
+    int32_t* h_ids_ = nullptr;                    ///< pinned: the experts, back from the card
     uint8_t* stage_ = nullptr;                    ///< experts that are not cached, on their way through VRAM
     uint8_t* h_stage_[2] = {};                    ///< pinned; filled in turn
     void* ev_stage_[2] = {};                      ///< marks the upload out of each
