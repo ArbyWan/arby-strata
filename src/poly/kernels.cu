@@ -837,6 +837,9 @@ __global__ void geglu_rows_kernel(const float* __restrict__ gate_up, float* __re
 // A warp a token, a lane every 32nd expert.  The pick is the host's: the n_used largest of the probabilities plus
 // the bias, the lower expert first among equals, one after the other.
 constexpr int ROUTE_PER = 16;   // experts a lane: up to 512
+// The kernel takes PER experts a lane, the fewest that hold the model's: a slot past them is a -inf that changes no
+// pick and no sum, and walking all sixteen made a token's routing 3.5 us on an RTX 5090.
+template<int PER>
 
 __global__ void route_kernel(const float* __restrict__ logits, int n_expert, int n_used, int rows, int gate,
                              float in_scale, const float* __restrict__ bias, const float* __restrict__ escale,
@@ -844,10 +847,10 @@ __global__ void route_kernel(const float* __restrict__ logits, int n_expert, int
     const int row = (blockIdx.x * blockDim.x + threadIdx.x) / WARP, lane = threadIdx.x % WARP;
     if (row >= rows) return;
     const float* lg = logits + size_t(row) * n_expert;
-    float p[ROUTE_PER], pick[ROUTE_PER];
+    float p[PER], pick[PER];
     float mx = -INFINITY;
 #pragma unroll
-    for (int k = 0; k < ROUTE_PER; ++k) {
+    for (int k = 0; k < PER; ++k) {
         const int e = lane + k * WARP;
         p[k] = e < n_expert ? lg[e] * in_scale : -INFINITY;
         mx = fmaxf(mx, p[k]);
@@ -857,22 +860,22 @@ __global__ void route_kernel(const float* __restrict__ logits, int n_expert, int
         for (int o = WARP / 2; o > 0; o >>= 1) mx = fmaxf(mx, __shfl_xor_sync(0xffffffff, mx, o, WARP));
         float sum = 0.0f;
 #pragma unroll
-        for (int k = 0; k < ROUTE_PER; ++k) {
+        for (int k = 0; k < PER; ++k) {
             p[k] = lane + k * WARP < n_expert ? expf(p[k] - mx) : 0.0f;
             sum += p[k];
         }
         const float inv = 1.0f / warp_sum(sum);
 #pragma unroll
-        for (int k = 0; k < ROUTE_PER; ++k) p[k] *= inv;
+        for (int k = 0; k < PER; ++k) p[k] *= inv;
     } else {
 #pragma unroll
-        for (int k = 0; k < ROUTE_PER; ++k) {
+        for (int k = 0; k < PER; ++k) {
             const float x = p[k];
             p[k] = gate == 1 ? 1.0f / (1.0f + expf(-x)) : sqrtf(x > 20.0f ? x : logf(1.0f + expf(x)));
         }
     }
 #pragma unroll
-    for (int k = 0; k < ROUTE_PER; ++k) {
+    for (int k = 0; k < PER; ++k) {
         const int e = lane + k * WARP;
         pick[k] = e < n_expert ? p[k] + (bias ? bias[e] : 0.0f) : -INFINITY;
     }
@@ -882,7 +885,7 @@ __global__ void route_kernel(const float* __restrict__ logits, int n_expert, int
         float best = -INFINITY;
         int at = n_expert;
 #pragma unroll
-        for (int k = 0; k < ROUTE_PER; ++k)
+        for (int k = 0; k < PER; ++k)
             if (pick[k] > best) best = pick[k], at = lane + k * WARP;
 #pragma unroll
         for (int o = WARP / 2; o > 0; o >>= 1) {
@@ -892,7 +895,7 @@ __global__ void route_kernel(const float* __restrict__ logits, int n_expert, int
         }
         float pw = 0.0f;
 #pragma unroll
-        for (int k = 0; k < ROUTE_PER; ++k)
+        for (int k = 0; k < PER; ++k)
             if (lane + k * WARP == at) pw = p[k], pick[k] = -INFINITY;
         pw = __shfl_sync(0xffffffff, pw, at % WARP, WARP);
         sum += pw;
@@ -1943,8 +1946,14 @@ void route_rows(const float* logits, int n_expert, int n_used, int rows, int gat
     if (rows <= 0) return;
     if (n_expert > ROUTE_PER * WARP || n_used > WARP)
         throw std::invalid_argument("route_rows: more than 512 experts, or more than 32 a token");
-    route_kernel<<<grid(rows * WARP, 256), 256, 0, cs(stream)>>>(logits, n_expert, n_used, rows, gate, in_scale, bias,
-                                                                 escale, norm, w_scale, ids, w);
+    const auto launch = [&](auto kernel) {
+        kernel<<<grid(rows * WARP, 256), 256, 0, cs(stream)>>>(logits, n_expert, n_used, rows, gate, in_scale, bias,
+                                                               escale, norm, w_scale, ids, w);
+    };
+    if (n_expert <= 2 * WARP) launch(route_kernel<2>);
+    else if (n_expert <= 4 * WARP) launch(route_kernel<4>);
+    else if (n_expert <= 8 * WARP) launch(route_kernel<8>);
+    else launch(route_kernel<ROUTE_PER>);
 }
 
 void moe_sum(const float* x, const float* w, float* acc, int n, int n_used, int rows, void* stream) {

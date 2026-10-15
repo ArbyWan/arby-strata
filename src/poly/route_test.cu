@@ -1,7 +1,7 @@
 // src/poly/route_test.cu - route_rows() against the hosts' routing: the same experts for every token, and the same
 // weights up to a few units in the last place.  The host side is the architectures' route() written out once more
-// (softmax: Qwen3.6, Gemma 4's with its scale and each expert's own; sigmoid with a bias: GLM 5.3 Flash; sqrt of
-// softplus with a bias: DeepSeek V4).  Random scores, and some tokens whose top scores tie.
+// (softmax: Qwen3.6, Gemma 4's with its scale and each expert's own; sigmoid with a bias: GLM 5.3 Flash and
+// LFM2.5; sqrt of softplus with a bias: DeepSeek V4).  Random scores, and some tokens whose top scores tie.
 //
 // usage: poly_route_test   (exit 0: every pick the same and every weight close)
 #include "strata/poly/kernels.hpp"
@@ -116,6 +116,7 @@ int main() {
     bad += check(0, 128, 8, 1.f / std::sqrt(2816.f), false, true, true, 0.f, rng);  // Gemma 4
     bad += check(1, 256, 8, 1.f, true, false, true, 2.5f, rng);                    // GLM 5.3 Flash
     bad += check(2, 256, 6, 1.f, true, false, true, 1.5f, rng);                    // DeepSeek V4
+    bad += check(1, 64, 4, 1.f, true, false, true, 0.f, rng);                      // LFM2.5-24B-A2B
     if (cudaGetLastError() != cudaSuccess) {
         std::printf("CUDA error\n");
         return 2;
