@@ -536,6 +536,24 @@ chat's answer came out a few tokens different and its guesses were right less of
 with guessing off a token took the same time in both builds, 243 to 244 tokens/s with UD-Q3_K_XL. The files of the
 other three models were no longer on the machine.
 
+They were downloaded again for the nine sizes of Qwen3.6, Ornith and Gemma 4, which ran on 2026-10-15 with that
+build (c566ff47), each size in turns with the engine of the release before (c8a07742), three runs of each and the
+last two below. The documents came to 31,986 tokens, 31,201 for Gemma 4. The engine before read them at 5,679 to
+6,432 tokens/s with Qwen3.6 and Ornith, the first token after 5.0 to 5.7 s, and at 7,224 to 7,823 with Gemma 4 (4.0
+to 4.4 s), and wrote at about the same speeds as this build. The README has the higher numbers of each cell.
+
+| Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.6-35B-A3B UD-Q3_K_M | whole model on it | 31,986 | 4.2 | 7,802 to 7,810 | 376 to 378 | 235 to 238 | 100% |
+| Qwen3.6-35B-A3B UD-Q2_K_XL | whole model on it | 31,986 | 4.2 | 7,724 to 7,737 | 436 to 442 | 261 to 262 | 100% |
+| Qwen3.6-35B-A3B UD-Q4_K_M | whole model on it | 31,986 | 4.0 | 8,069 to 8,079 | 395 to 396 | 248 | 100% |
+| Ornith 1.5 APEX-I-Compact | whole model on it | 31,986 | 4.0 | 8,038 to 8,106 | 315 to 316 | 204 to 205 | 100% |
+| Ornith 1.5 APEX-I-Mini | whole model on it | 31,986 | 4.2 | 7,712 to 7,737 | 286 to 302 | 204 to 205 | 100% |
+| Ornith 1.5 APEX-I-Quality | whole model on it | 31,986 | 4.1 | 7,858 to 7,879 | 297 to 302 | 197 to 203 | 100% |
+| Gemma 4 26B-A4B UD-Q3_K_M | whole model on it | 31,201 | 3.7 to 3.8 | 8,420 to 8,478 | 346 | 258 to 263 | 100% |
+| Gemma 4 26B-A4B UD-Q2_K_XL | whole model on it | 31,201 | 4.0 | 7,941 to 7,968 | 332 to 338 | 248 to 252 | 100% |
+| Gemma 4 26B-A4B UD-Q4_K_M | whole model on it | 31,201 | 3.8 | 8,321 to 8,392 | 338 to 342 | 231 to 237 | 100% |
+
 The build before that change, three hours earlier:
 
 | Model | Card | Prompt, tokens | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |

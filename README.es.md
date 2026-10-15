@@ -141,9 +141,9 @@ estación de trabajo cuya tarjeta tiene el modelo entero.
 
 | Tamaño | Escribe respuestas | Lee tu prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_M** | 394-395 tokens/s | 6,350-6,550 tokens/s |
-| **UD-Q2_K_XL** | 450 tokens/s | 6,400-6,590 tokens/s |
-| **UD-Q4_K_M** | 363-401 tokens/s | 6,030-6,690 tokens/s |
+| **UD-Q3_K_M** | 394-395 tokens/s | 7,800-7,810 tokens/s |
+| **UD-Q2_K_XL** | 450 tokens/s | 7,720-7,740 tokens/s |
+| **UD-Q4_K_M** | 395-396 tokens/s | 8,070-8,080 tokens/s |
 
 </td></tr>
 </table>
@@ -171,9 +171,9 @@ Medido de la misma manera, en los mismos dos PC.
 
 | Tamaño | Escribe respuestas | Lee tu prompt |
 | --- | ---: | ---: |
-| **APEX-I-COMPACT** | 316-319 tokens/s | 6,830-6,860 tokens/s |
-| **APEX-I-MINI** | 289-300 tokens/s | 6,300-6,380 tokens/s |
-| **APEX-I-QUALITY** | 289-298 tokens/s | 6,040-6,390 tokens/s |
+| **APEX-I-COMPACT** | 316-319 tokens/s | 8,040-8,110 tokens/s |
+| **APEX-I-MINI** | 289-300 tokens/s | 7,710-7,740 tokens/s |
+| **APEX-I-QUALITY** | 297-302 tokens/s | 7,860-7,880 tokens/s |
 
 </td></tr>
 </table>
@@ -198,9 +198,9 @@ Medido de la misma manera, en los mismos dos PC.
 
 | Tamaño | Escribe respuestas | Lee tu prompt |
 | --- | ---: | ---: |
-| **UD-Q3_K_M** | 353-356 tokens/s | 7,880-8,230 tokens/s |
-| **UD-Q2_K_XL** | 327-340 tokens/s | 7,380-8,000 tokens/s |
-| **UD-Q4_K_M** | 335-346 tokens/s | 7,040-8,050 tokens/s |
+| **UD-Q3_K_M** | 353-356 tokens/s | 8,420-8,480 tokens/s |
+| **UD-Q2_K_XL** | 332-338 tokens/s | 7,940-7,970 tokens/s |
+| **UD-Q4_K_M** | 335-346 tokens/s | 8,320-8,390 tokens/s |
 
 </td></tr>
 </table>
