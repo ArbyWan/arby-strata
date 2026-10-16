@@ -1259,6 +1259,24 @@ void Engine::held_is_budget() {
     for (const Kv& k : kv_) budget_ += k.mapped;
 }
 
+float* Engine::seq_state(int s, const float* p) const {
+    const float* base = s == bound_ ? state_ : seqs_[(size_t) s].state;
+    return const_cast<float*>(base) + (p - state_);
+}
+
+// The buffers of every sequence were asked for in the same order with the same sizes (kv_alloc(), seq_alloc()).
+void* Engine::seq_buf(int s, const void* p) const {
+    const std::vector<Buf>& to = s == bound_ ? bufs_ : seqs_[(size_t) s].bufs;
+    const auto* q = (const uint8_t*) p;
+    for (size_t i = 0; i < bufs_.size(); ++i) {
+        const Buf& b = bufs_[i];
+        const size_t all = b.per ? (size_t) ((opt_.max_context + b.per - 1) / b.per) * b.bytes : b.bytes;
+        const auto* at = (const uint8_t*) b.p;
+        if (q >= at && q < at + all) return (uint8_t*) to[i].p + (q - at);
+    }
+    throw std::logic_error("seq_buf: not in a buffer of the sequence");
+}
+
 // The VRAM the attention caches of the sequences that are not bound hold.
 size_t Engine::other_rows() const {
     size_t b = 0;
@@ -2747,17 +2765,47 @@ void Engine::step(const int* seqs, const int32_t* tokens, int n) {
         ck(cudaGraphLaunch((cudaGraphExec_t) made[key], cs(st_)), "layer graph");
     };
     const bool card = n < kStageRows && card_moe(n);
+    // an architecture that takes the rows in one head: their sequences and positions while it does
+    std::vector<Row> rows;
+    if (batch_heads())
+        for (int i = 0; i < n; ++i) rows.push_back({seqs[i], at[(size_t) i]});
+    struct Clear {
+        const Row*& p;
+        ~Clear() { p = nullptr; }
+    } clear{rows_of_};
+    std::vector<int> key;
     for (int il = lo_; il < hi_; ++il) {
         Layer& L = layers_[(size_t) il];
-        for (int i = 0; i < n; ++i) {
-            use(seqs[i]);
-            shift_rows(i);
-            pos_ = at[(size_t) i];
-            const size_t head = (size_t) head_key(il, 1) * recs + 3 * wn + (size_t) i;
-            if (replay && L.fixed) replayed(L.heads, head, [&] { layer_head(L, il, 1); });
-            else layer_head(L, il, 1);
-            shift_rows(-i);
-            pos_ = at[(size_t) i];
+        if (batch_heads()) {
+            const int64_t keep = pos_;
+            key.assign(1, n);
+            for (int i = 0; i < n; ++i) {
+                pos_ = at[(size_t) i];
+                key.push_back(seqs[i]);
+                key.push_back(head_key(il, 1));
+            }
+            pos_ = keep;
+            rows_of_ = rows.data();
+            n_rows_of_ = n;
+            if (replay && L.fixed) {
+                void*& made = L.rows_heads[key];
+                if (!made) made = record([&] { layer_head(L, il, n); });
+                ck(cudaGraphLaunch((cudaGraphExec_t) made, cs(st_)), "layer graph");
+            } else {
+                layer_head(L, il, n);
+            }
+            rows_of_ = nullptr;
+        } else {
+            for (int i = 0; i < n; ++i) {
+                use(seqs[i]);
+                shift_rows(i);
+                pos_ = at[(size_t) i];
+                const size_t head = (size_t) head_key(il, 1) * recs + 3 * wn + (size_t) i;
+                if (replay && L.fixed) replayed(L.heads, head, [&] { layer_head(L, il, 1); });
+                else layer_head(L, il, 1);
+                shift_rows(-i);
+                pos_ = at[(size_t) i];
+            }
         }
         if (!L.moe) continue;
         if (batched(L, n)) {

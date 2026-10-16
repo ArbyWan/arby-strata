@@ -126,6 +126,8 @@ struct Layer {
     std::vector<void*> shared;         ///< the shared expert
     std::vector<void*> tail;           ///< after the experts
     std::vector<void*> card_moe;       ///< the routed experts, routed on the card (moe_card())
+    /// the head of step()'s rows in one call (Engine::batch_heads()): by the rows, their sequences and head keys
+    std::map<std::vector<int>, void*> rows_heads;
 };
 
 /// A routed expert is run from the VRAM cache or on the CPU when tokens come a few at a time, as an answer's do
@@ -375,6 +377,21 @@ protected:
     /// Which recording of a layer's head fits n tokens from pos().  Launches that are sized by the rows they read
     /// are recorded once for each size (room()), and the architecture numbers the sizes from 0.
     virtual int head_key(int il, int n) const { (void) il, (void) n; return 0; }
+    /// layer_head() takes step()'s rows in one call: the products for every row at once, and each row's recurrent
+    /// state and attention rows from its own sequence (rows_of_, seq_state(), seq_buf()), its position from at_.
+    /// Otherwise step() runs the head a row at a time, with the row's sequence bound.
+    virtual bool batch_heads() const { return false; }
+    /// While step() runs a head in one call: each row's sequence and position, row after row; else null.
+    struct Row {
+        int seq;
+        int64_t pos;
+    };
+    const Row* rows_of_ = nullptr;
+    int n_rows_of_ = 0;
+    /// p, a place in the bound sequence's recurrent state, at the same place in sequence s's.
+    float* seq_state(int s, const float* p) const;
+    /// p, a place in one of the bound sequence's buffers (kv_alloc(), seq_alloc()), at the same place in s's.
+    void* seq_buf(int s, const void* p) const;
     /// The rotary position of a row of text: its place in the sequence, unless pictures before it took fewer
     /// positions than rows.
     virtual int64_t turn(int64_t row) const { return row; }
