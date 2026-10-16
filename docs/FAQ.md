@@ -17,7 +17,7 @@ architectures, I'd like this work to go there, and I'm glad to help with that.
 
 Yes. It is built on Strata's own code: its quantized matvec kernels, its GGUF reader, its draft policy and suffix
 drafter, its conversation memory and the llama.cpp MMQ kernels Strata compiles. You can see the list in
-`CMakeLists.txt` (the `strata-poly` target). What is new is the model code for the four architectures and the
+`CMakeLists.txt` (the `strata-poly` target). What is new is the model code for the five architectures and the
 part that decides which experts sit in VRAM and which run on the CPU.
 
 ### How do I know the output is right?
