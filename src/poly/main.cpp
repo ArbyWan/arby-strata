@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <random>
@@ -69,6 +70,11 @@ constexpr int kBlockWindow = 4;
 // A window longer than that is for a copy: a repeat of the conversation whose match is this many tokens or more.
 // A repeat of a few tokens is in any text, and what followed it there is seldom what follows here for long.
 constexpr int kCopyMatch = 8;
+
+// With batch slots a prompt is read in pieces: between two, a BYIELD can stop the read and the slots write for half
+// the time the piece took.  A piece is a call (max_rows()) while slots write, so that they are not held up long,
+// and this many calls while none does, as Strata's engine reads its chunks.
+constexpr int kPiece = 8;
 
 struct Sampling {
     float temperature = 0.f;   // 0: the most likely token
@@ -274,6 +280,20 @@ public:
         q_.pop_front();
         return true;
     }
+    /// The lines waiting that start with `head`, out of the queue, the others left in their order.
+    std::vector<std::string> take(const char* head) {
+        std::lock_guard<std::mutex> l(m_);
+        std::vector<std::string> out;
+        for (auto it = q_.begin(); it != q_.end();) {
+            if (it->rfind(head, 0) == 0) {
+                out.push_back(std::move(*it));
+                it = q_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        return out;
+    }
 
     std::atomic<bool> stop{false};
 
@@ -323,6 +343,7 @@ struct Session {
     strata::spec::SuffixDrafter repeats;
     strata::spec::DraftPolicy policy;
     Guesses guesses;                      // whether the block is asked in a round, and for how many (guesses.hpp)
+    int piece_calls = kPiece;             // generate()'s pieces when it is given `between`
 
     Session(Engine& e, std::vector<int32_t> eos_ids, const CacheFlags& f, int lookup)
         : engine(e), eos(std::move(eos_ids)), flags(f), kept(e, with_floor(f)),
@@ -343,6 +364,7 @@ struct Session {
 
     struct Result {
         int64_t produced = 0, resume = 0, read = 0;
+        int64_t gave_way = -1;   // where `between` stopped the read
         int64_t guessed = 0, guessed_right = 0;
         double prompt_ms = 0, decode_ms = 0;
         const char* finish = "length";
@@ -350,10 +372,12 @@ struct Session {
 
     // Reads the prompt and generates.  on_token gets every token, the end-of-sequence one included.  The rows of
     // the prompt's pictures have ids below zero (take_pictures()); `pad` is the token they stand in for.
+    // `between`, when given, reads the prompt in pieces of piece_calls calls and is asked after each but the last
+    // one, with where the read is: false stops it there, as a cancel does, and the conversation holds what was read.
     template<class OnToken, class OnProgress>
     Result generate(const std::vector<int32_t>& ids, const Pictures& pictures, int32_t pad, int64_t turn_at,
                     int64_t max_new, const Sampling& s, const std::atomic<bool>& stop, OnToken on_token,
-                    OnProgress on_progress) {
+                    OnProgress on_progress, const std::function<bool(int64_t)>* between = nullptr) {
         Result r;
         const int64_t n = (int64_t) ids.size();
         Clock::time_point t0 = Clock::now(), shown = t0;   // bringing a parked conversation back is prompt time
@@ -385,7 +409,8 @@ struct Session {
                 break;
             }
             const bool last = i == n - 1;
-            const int64_t room = std::min<int64_t>(n - 1 - i, text ? engine.max_read() : engine.max_rows());
+            const int64_t most = between ? (int64_t) piece_calls * engine.max_rows() : INT64_MAX;
+            const int64_t room = std::min<int64_t>({n - 1 - i, text ? engine.max_read() : engine.max_rows(), most});
             const int64_t m = last ? 1 : text ? room : engine.whole(i, kept.until_checkpoint(i, room));
             kept.before(i, last);
             if (text && !last) {
@@ -416,6 +441,11 @@ struct Session {
             if (ms_since(shown) >= 500.0 || last) {
                 on_progress(i, n, ms_since(t0), false);
                 shown = Clock::now();
+            }
+            if (between && i < n - 1 && !(*between)(i)) {
+                r.gave_way = i;
+                r.finish = "cancel";
+                break;
             }
         }
         kept.prompt_was(n);
@@ -644,6 +674,37 @@ int serve(Session& ss) {
         engine.copy_seq((int) best + 1, 0);
         ss.kept.adopt(slots[best].held);
     };
+    // Between two pieces of a prompt read (Session::generate()): BSTOPs that came meanwhile, a BYIELD <slot> that
+    // stops the read there to wait in that slot (YIELDED <slot> <tokens read>), and the slots' tokens for half the
+    // time the piece took.  A read gives way only to a slot that does not write, with text alone, and with more than
+    // a piece left: the rest is read the same way after it.
+    int admit = -1, gives_to = -1;
+    long long ids_n = 0;
+    bool text = true, failed = false;
+    Clock::time_point piece_t0;
+    const std::function<bool(int64_t)> between = [&](int64_t at) {
+        for (const std::string& l : lines.take("BSTOP ")) {
+            const int b = std::atoi(l.c_str() + 6);
+            if (b >= 0 && b < (int) slots.size()) slots[(size_t) b].stop = true;
+        }
+        int to = -1;
+        for (const std::string& l : lines.take("BYIELD")) to = l.size() > 7 ? std::atoi(l.c_str() + 7) : -1;
+        if (to >= 0 && to < (int) slots.size() && !slots[(size_t) to].active && (admit < 0 || to == admit) && text &&
+            ids_n - at > (long long) engine.max_rows()) {
+            gives_to = to;
+            return false;
+        }
+        const double piece_ms = ms_since(piece_t0);
+        const Clock::time_point t0 = Clock::now();
+        while (writing() && ms_since(t0) < 0.5 * piece_ms)
+            if (!step()) {
+                failed = true;
+                throw std::runtime_error("a batch step failed");
+            }
+        ss.piece_calls = writing() ? 1 : kPiece;
+        piece_t0 = Clock::now();
+        return true;
+    };
     for (;;) {
         std::string line;
         if (!writing()) {
@@ -665,7 +726,8 @@ int serve(Session& ss) {
         lines.stop.store(false);   // a STOP that came between requests is stale
         // BGEN <slot> <max_new> ... reads the prompt and picks its first token as GEN 1 does, then the request goes
         // on in that slot (BADM <slot> 1), or ends there (BADM <slot> 0)
-        int admit = -1;
+        admit = -1;
+        gives_to = -1;
         long long admit_max = 0;
         if (line.rfind("BGEN ", 0) == 0 || line.rfind("BGENI ", 0) == 0) {
             const bool img = line[4] == 'I';
@@ -763,6 +825,10 @@ int serve(Session& ss) {
         try {
             engine.bind(0);
             from_slot(ids);
+            ids_n = n;
+            text = pictures.at.empty();
+            ss.piece_calls = writing() ? 1 : kPiece;
+            piece_t0 = Clock::now();
             const int had = engine.cached_experts();
             if (engine.mind_vram())
                 std::fprintf(stderr, "strata-poly: the expert cache %d -> %d experts (%.2f GiB) for the VRAM free "
@@ -784,8 +850,16 @@ int serve(Session& ss) {
                                     ms > 0.0 ? 1000.0 * (double) (at - resume) / ms : 0.0);
                     }
                     std::fflush(stdout);
-                });
+                },
+                slots.empty() ? nullptr : &between);
+            if (r.gave_way >= 0) {
+                engine.copy_seq(0, gives_to + 1);
+                slots[(size_t) gives_to] = Slot{};
+                slots[(size_t) gives_to].held = ss.kept.seq();
+                std::printf("YIELDED %d %lld\n", gives_to, (long long) r.gave_way);
+            }
         } catch (const std::exception& e) {
+            if (failed) return 1;   // step() said ERR: the slots' sequences are in no known state
             // the engine's state is unknown now: the conversation it was reading is lost
             ss.kept.drop();
             try { engine.reset(); } catch (const std::exception&) {}
