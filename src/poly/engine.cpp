@@ -965,8 +965,11 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
         if (name == "lfm2moe") return std::make_unique<Lfm2Moe>();
         throw std::runtime_error(o.model + " is a '" + name + "' model, which this engine does not run");
     };
-    int cards = 1;
-    if (!o.layer_split.empty()) ck(cudaGetDeviceCount(&cards), "cudaGetDeviceCount");
+    int cards = 1, devices = 1;
+    if (!o.layer_split.empty()) ck(cudaGetDeviceCount(&devices), "cudaGetDeviceCount");
+    cards = devices;
+    // STRATA_POLY_CARDS=N: a split's N parts on the devices there are, in turn, so that a split is tried on one card
+    if (const char* v = std::getenv("STRATA_POLY_CARDS"); v && !o.layer_split.empty()) cards = std::max(1, std::atoi(v));
     std::vector<int> starts;
     if (cards > 1) {
         const MetaValue* blocks = file.get(name + ".block_count");
@@ -1001,7 +1004,7 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
         e->lo_ = starts[k];
         e->end_ = last ? -1 : starts[k + 1];
         e->split_ = true;
-        ck(cudaSetDevice((int) k), "cudaSetDevice");
+        ck(cudaSetDevice((int) k % devices), "cudaSetDevice");
         try {
             e->load(so);
         } catch (const std::runtime_error& err) {
@@ -2740,10 +2743,11 @@ void Engine::run(const int32_t* tokens, int n) {
 // bound, recorded and replayed by sequence and row (the sequence's Layer::heads).  The router's copy, the experts
 // and the layer's tail take the rows together, as a call of n tokens does: an expert two sequences route to is
 // read once for both.  The draft block is not run: a sequence that guesses again later finds its block's rows of
-// these tokens missing, which makes its guesses worse and its tokens no different.
+// these tokens missing, which makes its guesses worse and its tokens no different.  On several cards each takes the
+// rows from the one before it, a row a sequence in the same order (pass_ from its start), and the last one gives the
+// logits.
 void Engine::step(const int* seqs, const int32_t* tokens, int n) {
     if (n < 1 || n > std::min(rows_, sequences())) throw std::logic_error("step takes 1 to sequences() tokens");
-    if (next_) throw std::logic_error("step: a model on several cards writes one sequence at a time");
     OnCard here(device_, split_);
     const int home = bound_;
     const auto use = [&](int s) { hold(s); };
@@ -2765,12 +2769,15 @@ void Engine::step(const int* seqs, const int32_t* tokens, int n) {
     snap_bits_ = 0;
     const size_t e_row = (size_t) n_embd_, r_row = (size_t) streams() * e_row;
     const float scale = embed_scale();
+    if (pass_) std::memcpy(h_r_, pass_, (size_t) n * r_row * sizeof(float));   // a later card
     for (int i = 0; i < n; ++i) {
         use(seqs[i]);
         float* r = h_r_ + (size_t) i * r_row;
-        if (!input(tokens[i], at[(size_t) i], r) && scale != 1.f)
-            for (size_t k = 0; k < e_row; ++k) r[k] *= scale;
-        for (int h = 1; h < streams(); ++h) std::memcpy(r + (size_t) h * e_row, r, e_row * sizeof(float));
+        if (!pass_) {
+            if (!input(tokens[i], at[(size_t) i], r) && scale != 1.f)
+                for (size_t k = 0; k < e_row; ++k) r[k] *= scale;
+            for (int h = 1; h < streams(); ++h) std::memcpy(r + (size_t) h * e_row, r, e_row * sizeof(float));
+        }
         h_at_[2 * i] = at[(size_t) i];
         h_at_[2 * i + 1] = turn(at[(size_t) i]);
     }
@@ -2817,12 +2824,21 @@ void Engine::step(const int* seqs, const int32_t* tokens, int n) {
         else layer_tail(L, il, n);
     }
 
-    output_rows(0, n, xn_);
-    lin(output_, xn_, wlogits_, n);
-    finish_logits(wlogits_, n);
-    ck(cudaMemcpyAsync(h_wlogits_, wlogits_, (size_t) n * n_vocab_ * sizeof(float), cudaMemcpyDeviceToHost, cs(st_)),
-       "logits");
-    ck(cudaStreamSynchronize(cs(st_)), "step");
+    if (next_) {
+        float* h = pass_rows(n);
+        ck(cudaMemcpyAsync(h, r_, (size_t) n * r_row * sizeof(float), cudaMemcpyDeviceToHost, cs(st_)), "the next card");
+        ck(cudaStreamSynchronize(cs(st_)), "the next card");
+        next_->pass_ = h;
+        next_->step(seqs, tokens, n);
+    } else {
+        output_rows(0, n, xn_);
+        lin(output_, xn_, wlogits_, n);
+        finish_logits(wlogits_, n);
+        ck(cudaMemcpyAsync(h_wlogits_, wlogits_, (size_t) n * n_vocab_ * sizeof(float), cudaMemcpyDeviceToHost,
+                           cs(st_)),
+           "logits");
+        ck(cudaStreamSynchronize(cs(st_)), "step");
+    }
     for (int i = 0; i < n; ++i) {
         use(seqs[i]);
         pos_ = at[(size_t) i] + 1;
