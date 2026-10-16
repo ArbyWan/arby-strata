@@ -879,7 +879,6 @@ void Engine::load_moe(int il, bool shared) {
     L.d_type = td.type;
     L.d_bytes = home(td).payload(td) / (size_t) n_expert_;
     L.exp_down = home(td).data(td);
-    if (L.d_type == GGML_TYPE_MXFP4) mxfp4_to_q5_0(il);
     if (tensor(il, "ffn_gate_up_exps.weight")) {
         const TensorInfo& gu = exps("ffn_gate_up_exps.weight", n_embd_, 2 * n_ff_exp_);
         L.gu_type = gu.type;
@@ -904,50 +903,6 @@ void Engine::load_moe(int il, bool shared) {
         throw std::runtime_error(blk(il, "ffn_*_exps.weight: ") + err);
     L.slot.assign((size_t) n_expert_, nullptr);
     ++n_moe_;
-}
-
-constexpr size_t kMxfp4Block = 17, kQ5_0Block = 22;   // the bytes of a block of 32 values: block_mxfp4, block_q5_0
-
-// No kernel here multiplies MXFP4 on the card, by matvec or MMQ, so a layer whose down experts are MXFP4 ran them on
-// the CPU, a prompt batch's too: DeepSeek V4 Flash UD-IQ2_XXS has two such layers, and they took 10.7 s of a
-// 10,398-token read whose other 41 layers' experts took 4.9.  An MXFP4 value is 0, 1, 2, 3, 4, 6, 8 or 12, with a
-// sign, times the block's power of two halved, which Q5_0 holds exactly while that power fits a half.  So the experts
-// are converted once, into RAM of the engine's own, 22 bytes a block of 32 instead of 17.  On the CPU both types meet
-// the activations as Q8_0, and the dot products differ only in the order of their sums.  A layer with a power out of
-// range stays MXFP4.  The loader goes through the layers twice; a layer is converted, or left, once.
-void Engine::mxfp4_to_q5_0(int il) {
-    Layer& L = layers_[(size_t) il];
-    const size_t blocks = L.d_bytes * (size_t) n_expert_ / kMxfp4Block;
-    auto it = converted_.find(il);
-    if (it == converted_.end()) it = converted_.emplace(il, q5_0_copy(il, L.exp_down, blocks)).first;
-    if (!it->second) return;
-    L.exp_down = it->second.get();
-    L.d_type = GGML_TYPE_Q5_0;
-    L.d_bytes = blocks / (size_t) n_expert_ * kQ5_0Block;
-}
-
-// Layer il's `blocks` MXFP4 blocks at `src` as Q5_0, or null when they stay MXFP4.
-std::unique_ptr<uint8_t[]> Engine::q5_0_copy(int il, const uint8_t* src, size_t blocks) {
-    std::unique_ptr<uint8_t[]> out;
-    try {
-        out.reset(new uint8_t[blocks * kQ5_0Block]);
-    } catch (const std::bad_alloc&) {
-        return nullptr;
-    }
-    std::atomic<bool> bad{false};
-    auto convert = [&](size_t lo, size_t hi) {
-        for (size_t b = lo; b < hi && !bad.load(std::memory_order_relaxed); ++b)
-            if (!mxfp4_block_to_q5_0(src + b * kMxfp4Block, out.get() + b * kQ5_0Block)) bad.store(true);
-    };
-    const size_t n = (size_t) std::clamp(usable_cpus(), 1, 32), step = (blocks + n - 1) / n;
-    std::vector<std::thread> th;
-    for (size_t i = 1; i < n; ++i) th.emplace_back(convert, std::min(blocks, i * step), std::min(blocks, (i + 1) * step));
-    convert(0, std::min(blocks, step));
-    for (std::thread& t : th) t.join();
-    if (bad) return nullptr;
-    std::fprintf(stderr, "strata-poly: layer %d's down experts converted from MXFP4 to Q5_0, %.2f GiB of RAM\n", il,
-                 (double) (blocks * kQ5_0Block) / (1 << 30));
-    return out;
 }
 
 // The engine for a model file: its general.architecture says which.
