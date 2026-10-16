@@ -307,6 +307,9 @@ counters. A long prompt is so many characters of this repository's documents, fo
 tokens moves with the tokenizer and with those documents. One that the server refuses as longer than the
 context is sent again at 95%, 90% and 85% of its text.
 
+The first run after the PC starts reads the model file from the disk again. A user's GLM 5.3 Flash on Windows wrote
+at 14 to 24 tokens/s in that run and at 28 to 29 in the next one, so run the benchmark twice and keep the second.
+
 Tokens per second on the machine above, context 32768, every expert in VRAM for the three new models, as setup
 installs them. The first build of each backend read the longest prompt at 636, 632 and 213 tokens/s and wrote
 after it at 68, 54 and 55; [What was tuned](#what-was-tuned) has the steps between.

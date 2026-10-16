@@ -290,6 +290,8 @@ the default path).
   ([issue 10](https://github.com/VecSzn/PolyStrata/issues/10)): 1,483 experts in VRAM, 26 to 30 tokens/s after
   a short prompt, 10K tokens read at 375 to 395. The context set to 1,048,576 in the run config loaded and
   answered, and one request of 557K tokens was read at 286 tokens/s with the three facts planted in it found.
+  With 0.1.44.1-poly.5 a request of 1,002,452 tokens was read in 45.7 minutes (66.3 with poly.2), the three
+  facts found, and from the second request after it the engine wrote at 25 to 30 tokens/s again.
 - Intel cards, and AMD cards on Windows. On Linux setup compiles the engine for an AMD card
   ([AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta)), a beta tested with Qwen3.6 and Ornith on an RX 7600; GLM
   itself has not been tried on one, and setup says so. Two NVIDIA cards can share the model
