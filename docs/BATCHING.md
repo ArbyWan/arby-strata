@@ -32,7 +32,15 @@ Where it pays depends on the card. On the RTX 4070 laptop (8 GB) most experts of
 different requests route to different experts, so the CPU does each request's own: three requests of 150 tokens at
 once came at 64 tokens/s together, where one alone writes at about 70. There it means that nobody waits for another
 request's whole answer, which matters for several people on one server, and setup says so. A card that holds every
-expert of the model is where the total speed goes up.
+expert of the model is where the total speed goes up. On an RTX 5090 with Qwen3.6 UD-Q4_K_M, chats of 300 tokens
+through the server:
+
+| Chats at once | Tokens/s, all together |
+| ---: | ---: |
+| 1 (with guesses) | 312-333 |
+| 2 | 315-324 |
+| 3 | 381-389 |
+| 4 | 428-430 |
 
 Each slot's attention rows take VRAM from the expert cache as its conversation grows, as the first conversation's
 do. A model split across cards (`"layer_split"`) runs its slots card after card.
@@ -42,7 +50,8 @@ answers three prompts (the given one, and it without its first one and two token
 together, and says for each how many tokens came out the same. To compare token by token, keep the expert cache
 fixed: `--expert-swaps 0 --cpu-share 0 --window 1` (without that the engine's own runs differ from each other). On
 the laptop every token matched for Qwen3.6, Gemma 4 and LFM2.5 with 2 to 4 sequences and prompts of 19 to 3,000
-tokens, and through the server two chats at once gave the same text as each alone.
+tokens, and on the RTX 5090 for Qwen3.6, MiniCPM-V, LFM2.5, DeepSeek V4 Flash and GLM 5.3 Flash with 3 sequences
+after prompts of 64 and 3,000 tokens. Through the server two chats at once gave the same text as each alone.
 
 Not there yet: guesses inside a slot (`--batch-mtp` in the Strata project's engine), `--batch-groups`, and the other
 options of the table below, which are that engine's.
