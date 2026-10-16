@@ -294,7 +294,7 @@ void Glm5Next::alloc_caches() {
     const size_t conv_n = size_t(3) * d_inner_ * (kConv - 1), s_n = size_t(n_head_) * kda_dim_ * kda_dim_;
     ring_ = rows_ + kpool_;
     const size_t ring_n = (size_t) ring_ * 2 * idx_dim_;
-    float* ring = (float*) dmalloc(n_dsa_ * ring_n * sizeof(float), "the indexer cache");
+    float* ring = (float*) seq_alloc(n_dsa_ * ring_n * sizeof(float), "the indexer cache");
     float* st = state_;
     for (int il = 0; il < (int) blocks_.size(); ++il) {
         Block& B = blocks_[(size_t) il];
@@ -316,7 +316,7 @@ void Glm5Next::alloc_caches() {
     score_rows_ = (int) std::clamp<size_t>(kScoreBytes / (score_stride_ * sizeof(float)), 1, (size_t) rows_);
     sel_stride_ = idx_top_k_ + kpool_;
     const size_t n = (size_t) rows_;
-    sel_ = (int32_t*) dmalloc(n * sel_stride_ * sizeof(int32_t), "scratch");
+    if (!sel_) sel_ = (int32_t*) dmalloc(n * sel_stride_ * sizeof(int32_t), "scratch");
 }
 
 // A sparse layer's part of a state: its indexer rows of the pool the position is in, which the ring no longer

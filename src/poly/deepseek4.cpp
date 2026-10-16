@@ -219,22 +219,22 @@ void DeepSeek4::alloc_caches() {
     for (int il = 0; il < (int) blocks_.size(); ++il) {
         Block& B = blocks_[(size_t) il];
         if (!runs(il)) continue;
-        B.raw = (uint16_t*) dmalloc((size_t) raw_ring_ * head_dim_ * sizeof(uint16_t), "the attention cache");
+        B.raw = (uint16_t*) seq_alloc((size_t) raw_ring_ * head_dim_ * sizeof(uint16_t), "the attention cache");
         if (!B.ratio) continue;
         // a call's rows and the ones before it that its first block reads: the block's own, and with the overlap
         // the block before
         B.ring = rows_ + (B.ratio == 4 ? 2 : 1) * B.ratio;
         for (Squeeze* S : {&B.comp, &B.idx}) {
             if (!S->dim) continue;
-            S->kv = (float*) dmalloc((size_t) B.ring * S->width * sizeof(float), "the compressor's rows");
-            S->score = (float*) dmalloc((size_t) B.ring * S->width * sizeof(float), "the compressor's rows");
+            S->kv = (float*) seq_alloc((size_t) B.ring * S->width * sizeof(float), "the compressor's rows");
+            S->score = (float*) seq_alloc((size_t) B.ring * S->width * sizeof(float), "the compressor's rows");
         }
         B.rows = (uint16_t*) kv_alloc((size_t) head_dim_ * sizeof(uint16_t), B.ratio);
         if (B.ratio == 4) B.keys = (uint16_t*) kv_alloc((size_t) idx_dim_ * sizeof(uint16_t), 4);
     }
     score_stride_ = opt_.max_context / 4 + 1;
     score_rows_ = (int) std::clamp<size_t>(kScoreBytes / (score_stride_ * sizeof(float)), 1, (size_t) rows_);
-    sel_ = (int32_t*) dmalloc((size_t) rows_ * idx_top_k_ * sizeof(int32_t), "scratch");
+    if (!sel_) sel_ = (int32_t*) dmalloc((size_t) rows_ * idx_top_k_ * sizeof(int32_t), "scratch");
 }
 
 // Per-token buffers hold rows_ tokens, row after row.

@@ -126,7 +126,7 @@ int Qwen35::widest() const { return std::max(d_inner_, n_head_ * head_dim_); }
 
 // The attention layers' caches, and each recurrent layer's convolution and delta-rule state in state_.
 void Qwen35::alloc_caches() {
-    if (opt_.kv_format == KvFmt::kQ8_0) {
+    if (opt_.kv_format == KvFmt::kQ8_0 && !axes_) {
         const size_t row_bytes = (size_t) n_kv_ * head_dim_ + (size_t) n_kv_ * (head_dim_ / 32) * sizeof(uint16_t);
         std::fprintf(stderr, "strata-poly: q8_0 KV cache: %zu bytes a row\n", row_bytes);
     }
@@ -154,6 +154,7 @@ void Qwen35::alloc_caches() {
         }
     }
     chunk_ = (int) std::clamp<size_t>(kScoreFloats / ((size_t) n_head_ * opt_.max_context), 1, (size_t) rows_);
+    if (axes_) return;   // bind(): a call's scratch is every sequence's
     axes_ = (int32_t*) dmalloc((size_t) rows_ * 3 * sizeof(int32_t), "a call's rotary positions");
     h_axes_.resize((size_t) rows_ * 3);
 }

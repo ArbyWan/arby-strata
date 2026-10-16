@@ -248,7 +248,7 @@ void Gemma4::alloc_caches() {
     size_t rings = 0;   // a window layer's rows are a ring, whatever the sequence's length
     for (const Block& B : blocks_)
         if (B.swa) rings += 2 * (size_t) ring_ * B.n_kv * B.dim;
-    uint16_t* kv = rings ? (uint16_t*) dmalloc(rings * sizeof(uint16_t), "the attention cache") : nullptr;
+    uint16_t* kv = rings ? (uint16_t*) seq_alloc(rings * sizeof(uint16_t), "the attention cache") : nullptr;
     for (int il = 0; il < (int) blocks_.size(); ++il) {
         Block& B = blocks_[(size_t) il];
         if (!runs(il)) continue;

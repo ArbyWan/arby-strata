@@ -81,6 +81,8 @@ struct Options {
     std::string layer_split;      ///< the layers across the CUDA devices this process sees, in their order: "auto"
                                   ///< (by each card's free VRAM) or the first layer of each later card ("20,30");
                                   ///< empty, or one device: the current card alone
+    int batch = 0;                ///< sequences beside the first, each with a state and caches of its own (bind(),
+                                  ///< step()); 0: one sequence
 };
 
 /// A thing a model's file may call by other names than the engine does: converters differ.
@@ -282,6 +284,17 @@ public:
     size_t trim_kv(int64_t end);
     void save_profile() const;
 
+    /// Options::batch + 1 sequences, each with its own position, recurrent state, attention rows and pictures.  One
+    /// is bound at a time, and every call above but step() is the bound one's.  bind(s) leaves the bound one as it
+    /// is and goes on with sequence s where it was left.  Not between window() and keep().
+    int sequences() const { return (int) seqs_.size(); }
+    int bound() const { return bound_; }
+    void bind(int s);
+    /// One token for each of n sequences, together: tokens[i] fed to sequence seqs[i] at its position, as eval()
+    /// with logits would on its own.  logits_of(i) then holds the scores of what follows tokens[i].  The sequences
+    /// differ; none of them has pictures past its position.  The bound sequence stays bound.
+    void step(const int* seqs, const int32_t* tokens, int n);
+
 protected:
     // ---- what an architecture supplies ----
     /// The model's shape from its metadata: load_shape() for what every architecture has, then its own.
@@ -437,6 +450,8 @@ protected:
     /// An attention cache for alloc_caches(): `bytes` for every `per` rows, with addresses for the whole context
     /// and VRAM for the rows the sequence has reached (cover()).
     void* kv_alloc(size_t bytes, int per);
+    /// A buffer of the sequence's own that does not grow with it, such as a window layer's ring of rows.
+    void* seq_alloc(size_t bytes, const char* what);
     /// VRAM in every attention cache for the rows below `end`, before a call writes them.
     void cover(int64_t end);
 
@@ -545,6 +560,26 @@ protected:
     std::vector<Kv> kv_;         ///< the attention caches that grow with the sequence
     int64_t kv_rows_ = 0;        ///< the rows they have VRAM for
     int64_t kv_reach_ = 0;       ///< the furthest row cover() was asked for since the last trim_kv()
+    // The sequences (bind()).  The bound one's are the members above and below (pos_, kv_, state_ ...); the
+    // others wait in seqs_, with what alloc_caches() gave them and the launches recorded with their buffers.
+    struct Seq {
+        int64_t pos = 0, kv_rows = 0, kv_reach = 0, ahead_pos = -1;
+        int32_t ahead_tok = 0;
+        float* state = nullptr;
+        std::vector<Kv> kv;
+        std::vector<void*> bufs;
+        std::vector<Image> images;
+        std::vector<std::vector<void*>> heads;   ///< Layer::heads, by layer
+        std::map<std::vector<int>, void*> passes;
+        void* tail = nullptr;
+    };
+    std::vector<Seq> seqs_;      ///< the bound one's place holds nothing while it is bound
+    int bound_ = 0;
+    std::vector<void*> bufs_;    ///< the bound sequence's: what kv_alloc() and seq_alloc() gave it, in that order
+    size_t again_ = SIZE_MAX;    ///< while alloc_caches() points at the bound sequence's buffers again: the next one
+    void park_bound();
+    void take_bound(int s);
+    size_t other_rows() const;
     size_t budget_ = 0;          ///< their VRAM and the expert cache's together, as the cache was filled
     int asked_reserve_mib_ = -1; ///< Options::vram_reserve_mib as load() got it
     int reserve_mib_ = 0;        ///< what the cache was sized to leave free

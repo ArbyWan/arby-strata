@@ -733,6 +733,60 @@ int once(Session& ss, const std::vector<int32_t>& ids, const Pictures& pictures,
     return 0;
 }
 
+// --check-batch K: K prompts, the --tokens one without its first 0, 1, ... K-1 tokens, each answered greedily on
+// its own and then all of them together in their own sequences (Engine::step()).  Returns 1 when a token differs.
+int check_batch(Engine& engine, const std::vector<int32_t>& ids, int k, long long max_new) {
+    const auto read = [&](const std::vector<int32_t>& p) {
+        engine.reset();
+        for (size_t i = 0; i < p.size(); i += (size_t) engine.max_rows()) {
+            const int m = (int) std::min(p.size() - i, (size_t) engine.max_rows());
+            engine.eval(p.data() + i, m, i + (size_t) m == p.size());
+        }
+        return (int32_t) strata::poly::most_likely(engine.logits(), engine.n_vocab());
+    };
+    std::vector<std::vector<int32_t>> want((size_t) k), got((size_t) k);
+    std::vector<int> seqs((size_t) k);
+    std::vector<int32_t> next((size_t) k);
+    for (int j = 0; j < k; ++j) {
+        const std::vector<int32_t> p(ids.begin() + j, ids.end());
+        engine.bind(0);
+        int32_t t = read(p);
+        for (long long n = 0; n < max_new; ++n) {
+            want[(size_t) j].push_back(t);
+            engine.eval(&t, 1, true);
+            t = (int32_t) strata::poly::most_likely(engine.logits(), engine.n_vocab());
+        }
+    }
+    const Clock::time_point t0 = Clock::now();
+    for (int j = 0; j < k; ++j) {
+        seqs[(size_t) j] = j + 1;
+        engine.bind(j + 1);
+        next[(size_t) j] = read(std::vector<int32_t>(ids.begin() + j, ids.end()));
+    }
+    engine.bind(0);
+    const double read_ms = ms_since(t0);
+    const Clock::time_point t1 = Clock::now();
+    for (long long n = 0; n < max_new; ++n) {
+        for (int j = 0; j < k; ++j) got[(size_t) j].push_back(next[(size_t) j]);
+        engine.step(seqs.data(), next.data(), k);
+        for (int j = 0; j < k; ++j)
+            next[(size_t) j] = (int32_t) strata::poly::most_likely(engine.logits_of(j), engine.n_vocab());
+    }
+    const double step_ms = ms_since(t1);
+    int rc = 0;
+    for (int j = 0; j < k; ++j) {
+        size_t same = 0;
+        while (same < want[(size_t) j].size() && want[(size_t) j][same] == got[(size_t) j][same]) ++same;
+        std::fprintf(stderr, "check-batch: sequence %d: the first %zu of %lld tokens as on its own\n", j + 1, same,
+                     max_new);
+        if (same < want[(size_t) j].size()) rc = 1;
+    }
+    std::fprintf(stderr, "check-batch: %d prompts read in %.0f ms, %lld steps of %d tokens in %.0f ms (%.1f tok/s "
+                         "together)\n",
+                 k, read_ms, max_new, k, step_ms, step_ms > 0 ? 1000.0 * (double) (max_new * k) / step_ms : 0.0);
+    return rc;
+}
+
 void usage() {
     std::fprintf(stderr,
                  "usage: strata-poly --model FILE.gguf (--serve | --tokens ID,ID,... [--max-new N])\n"
@@ -788,6 +842,11 @@ void usage() {
                  "  --conversation-cache-min-tokens N   a conversation shorter than this is not parked (default 1024)\n"
                  "  --conversation-cache-min-free-mib N park only while this much physical RAM stays free (default\n"
                  "                         2560)\n"
+                 "  --batch N              N answers written together, each in a sequence of its own with its own\n"
+                 "                         state and attention rows (default 0 = one at a time; at most 8);\n"
+                 "                         --slots N is the same\n"
+                 "  --check-batch K        with --tokens and --batch K or more: K prompts answered on their own and\n"
+                 "                         then together, compared token by token\n"
                  "  --eos-ids ID,ID,...    tokens that end a reply (default: the GGUF's eos, eot and eom)\n"
                  "  --temperature F --top-k N --top-p F --min-p F --seed N   sampling for --tokens (default greedy)\n"
                  "  --images FILE          with --tokens: the prompt's pictures, as strata-vision writes them\n"
@@ -823,7 +882,7 @@ int main(int argc, char** argv) {
     Sampling s;
     bool want_serve = false;
     long long max_new = 32;
-    int top_probs = 0, lookup = 3, image_pad = -1;
+    int top_probs = 0, lookup = 3, image_pad = -1, check = 0;
     std::string images;
     std::vector<int32_t> ids, eos, follow;
     for (int i = 1; i < argc; ++i) {
@@ -868,6 +927,8 @@ int main(int argc, char** argv) {
         else if (a == "--expert-swaps") o.expert_swaps = std::atoi(val());
         else if (a == "--tail-skip") o.tail_skip = std::atoi(val());
         else if (a == "--layer-split") o.layer_split = val();
+        else if (a == "--batch" || a == "--slots") o.batch = std::atoi(val());
+        else if (a == "--check-batch") check = std::atoi(val());
         else if (a == "--draft-vocab") o.draft_vocab = std::atoi(val());
         else if (a == "--prompt-batch") o.prompt_batch = std::atoi(val());
         else if (a == "--stage-mib") o.stage_mib = std::atoi(val());
@@ -902,6 +963,11 @@ int main(int argc, char** argv) {
     }
     if (o.model.empty() || (!want_serve && ids.empty()) || max_new < 1) {
         usage();
+        return 2;
+    }
+    if (o.batch < 0 || o.batch > 8 || check < 0 || check > o.batch || (check > 0 && (int) ids.size() <= check)) {
+        std::fprintf(stderr, "strata-poly: --batch takes 0 to 8, and --check-batch at most --batch prompts, each "
+                             "with tokens left of --tokens\n");
         return 2;
     }
     // over --tail-skip, as Strata's engine reads it: =0 turns a model's default off
@@ -949,6 +1015,8 @@ int main(int argc, char** argv) {
             rc = serve(ss);
         } else if ((long long) ids.size() + max_new > engine.max_context()) {
             throw std::runtime_error("the prompt and --max-new together exceed --max-context");
+        } else if (check > 0) {
+            rc = check_batch(engine, ids, check, max_new);
         } else {
             Pictures pictures;
             if (!images.empty()) {

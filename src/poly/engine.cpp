@@ -377,6 +377,8 @@ Engine::~Engine() {
     mmq_.reset();
     for (void* p : dev_allocs_) cudaFree(p);
     for (Kv& k : kv_) vmm_free(k);
+    for (Seq& q : seqs_)
+        for (Kv& k : q.kv) vmm_free(k);
     vmm_free(arena_);
     for (void* p : host_allocs_) cudaFreeHost(p);
     for (void* e : {ev_stage_[0], ev_stage_[1], ev_ahead_, ev_free_, ev_in_[0], ev_in_[1], ev_out_[0], ev_out_[1], ev_hr_})
@@ -515,14 +517,80 @@ void Engine::vmm_free(Mapped& m) {
 }
 
 void* Engine::kv_alloc(size_t bytes, int per) {
+    if (again_ != SIZE_MAX) return bufs_.at(again_++);
     const size_t all = (size_t) ((opt_.max_context + per - 1) / per) * bytes;
-    if (!vmm_) return dmalloc(all, "the attention cache");
-    Kv k;
-    k.bytes = bytes;
-    k.per = per;
-    vmm_reserve(k, all);
-    kv_.push_back(std::move(k));
-    return (void*) kv_.back().base;
+    void* p = nullptr;
+    if (!vmm_) {
+        p = dmalloc(all, "the attention cache");
+    } else {
+        Kv k;
+        k.bytes = bytes;
+        k.per = per;
+        vmm_reserve(k, all);
+        kv_.push_back(std::move(k));
+        p = (void*) kv_.back().base;
+    }
+    bufs_.push_back(p);
+    return p;
+}
+
+void* Engine::seq_alloc(size_t bytes, const char* what) {
+    if (again_ != SIZE_MAX) return bufs_.at(again_++);
+    void* p = dmalloc(bytes, what);
+    bufs_.push_back(p);
+    return p;
+}
+
+// The bound sequence's members to its place in seqs_, and the layers' launches recorded with its buffers.
+void Engine::park_bound() {
+    Seq& q = seqs_[(size_t) bound_];
+    q.pos = pos_;
+    q.kv_rows = kv_rows_;
+    q.kv_reach = kv_reach_;
+    q.ahead_pos = ahead_pos_;
+    q.ahead_tok = ahead_tok_;
+    q.state = state_;
+    q.kv = std::exchange(kv_, {});
+    q.bufs = std::exchange(bufs_, {});
+    q.images = std::exchange(images_, {});
+    q.heads.resize(layers_.size());
+    for (size_t il = 0; il < layers_.size(); ++il) q.heads[il] = std::exchange(layers_[il].heads, {});
+    q.passes = std::exchange(passes_, {});
+    q.tail = std::exchange(tail_, nullptr);
+}
+
+// Sequence s's members in place of the ones park_bound() put away, and the architecture's pointers into its
+// buffers: alloc_caches() again, handed the buffers it was given for s in the order it asked for them.
+void Engine::take_bound(int s) {
+    Seq& q = seqs_[(size_t) s];
+    pos_ = q.pos;
+    kv_rows_ = q.kv_rows;
+    kv_reach_ = q.kv_reach;
+    ahead_pos_ = q.ahead_pos;
+    ahead_tok_ = q.ahead_tok;
+    state_ = q.state;
+    if (draft_) hn_ = state_ + rec_n_;
+    kv_ = std::exchange(q.kv, {});
+    bufs_ = std::exchange(q.bufs, {});
+    images_ = std::exchange(q.images, {});
+    ++images_set_;
+    for (size_t il = 0; il < layers_.size() && il < q.heads.size(); ++il) layers_[il].heads = std::exchange(q.heads[il], {});
+    passes_ = std::exchange(q.passes, {});
+    tail_ = std::exchange(q.tail, nullptr);
+    bound_ = s;
+    again_ = 0;
+    alloc_caches();
+    again_ = SIZE_MAX;
+}
+
+void Engine::bind(int s) {
+    if (s < 0 || s >= (int) seqs_.size()) throw std::logic_error("bind: no such sequence");
+    if (win_ > 0) throw std::logic_error("bind: a window's tokens are not kept yet");
+    if (s != bound_) {
+        park_bound();
+        take_bound(s);
+    }
+    if (next_) next_->bind(s);
 }
 
 // The attention caches' VRAM for the rows below `end`: rows kKvGrow at a time, kKvAhead more for the answer to go
@@ -534,7 +602,7 @@ void Engine::cover(int64_t end) {
     if (kv_.empty() || end <= kv_rows_) return;
     const int64_t rows = kv_rows_for(end);
     const auto size = [rows](const Kv& k) { return (size_t) ((rows + k.per - 1) / k.per) * k.bytes; };
-    size_t more = 0, held = arena_.mapped;
+    size_t more = 0, held = arena_.mapped + other_rows();
     for (const Kv& k : kv_) {
         const size_t want = std::min(up_to(size(k), grain_), k.reserved);
         if (want > k.mapped) more += want - k.mapped;   // trim_card_kv() leaves a piece it cuts through
@@ -1070,7 +1138,7 @@ void Engine::fill_expert_cache() {
             if (arena == 0) return;
         }
         exp_ = (uint8_t*) arena_.base;
-        budget_ = free_b - reserve;   // when it holds every expert, what is left over goes to the rows first
+        budget_ = free_b - reserve + other_rows();   // when it holds every expert, the rest goes to the rows first
         for (const Kv& k : kv_) budget_ += k.mapped;
     } else {
         exp_ = (uint8_t*) dmalloc(arena + 256, "the expert cache");
@@ -1195,8 +1263,16 @@ bool Engine::mind_card_vram() {
 
 // The cache's VRAM and the attention caches' as they are now become the budget cover() keeps them to.
 void Engine::held_is_budget() {
-    budget_ = arena_.mapped;
+    budget_ = arena_.mapped + other_rows();
     for (const Kv& k : kv_) budget_ += k.mapped;
+}
+
+// The VRAM the attention caches of the sequences that are not bound hold.
+size_t Engine::other_rows() const {
+    size_t b = 0;
+    for (const Seq& q : seqs_)
+        for (const Kv& k : q.kv) b += k.mapped;
+    return b;
 }
 
 // `bytes` more VRAM at the cache's end, for the experts it lacks that are used most (use per byte, as
@@ -1523,7 +1599,17 @@ void Engine::load(const Options& o) {
     if (!kv_.empty() && all_cached()) {
         size_t more = 0;
         for (const Kv& k : kv_) more += k.reserved - k.mapped;
-        if ((int64_t) ((more + kArenaPiece) >> 20) + reserve_mib_ <= vram_free_mib()) cover(opt_.max_context);
+        for (const Seq& q : seqs_)
+            for (const Kv& k : q.kv) more += k.reserved - k.mapped;
+        if ((int64_t) ((more + kArenaPiece) >> 20) + reserve_mib_ <= vram_free_mib()) {
+            for (int s = sequences() - 1; s >= 0; --s) {   // ends with the first one bound
+                if (s != bound_) {
+                    park_bound();
+                    take_bound(s);
+                }
+                cover(opt_.max_context);
+            }
+        }
     }
     const int threads = opt_.threads > 0 ? opt_.threads : usable_cpus();
     mind_memory();
@@ -1597,8 +1683,8 @@ void Engine::alloc() {
     read_rows_ = rows_ < kStageRows ? rows_ : std::max(rows_, (int) most / rows_ * rows_);
     rec_n_ = recurrent_floats();
     state_n_ = rec_n_ + (draft_ ? (size_t) n_embd_ : 0);
-    state_ = (float*) dmalloc((state_n_ + (draft_ ? (size_t) rows_ * n_embd_ : 0)) * sizeof(float),
-                              "the recurrent state");
+    const size_t state_floats = state_n_ + (draft_ ? (size_t) rows_ * n_embd_ : 0);
+    state_ = (float*) dmalloc(state_floats * sizeof(float), "the recurrent state");
     if (draft_) {
         hn_ = state_ + rec_n_;
         h_guess_ = (Likeliest*) hmalloc(sizeof(Likeliest), "pinned memory");   // likeliest() writes it
@@ -1607,10 +1693,28 @@ void Engine::alloc() {
     snap_places_ = snaps_spread() ? std::min(opt_.window - 1, kSnapPlaces) : opt_.window - 1;
     if (snap_places_ > 0)
         snap_ = (float*) dmalloc(size_t(snap_places_) * rec_n_ * sizeof(float), "the recurrent state");
-    wlogits_ = (float*) dmalloc(size_t(opt_.window) * n_vocab_ * sizeof(float), "scratch");
-    h_wlogits_ = (float*) hmalloc(size_t(opt_.window) * n_vocab_ * sizeof(float), "pinned memory");
+    const size_t logit_rows = (size_t) std::max(opt_.window, opt_.batch + 1);   // window()'s, step()'s
+    wlogits_ = (float*) dmalloc(logit_rows * n_vocab_ * sizeof(float), "scratch");
+    h_wlogits_ = (float*) hmalloc(logit_rows * n_vocab_ * sizeof(float), "pinned memory");
     alloc_caches();
     cover(1);   // a short conversation's rows, before the expert cache is sized
+    // --batch: the other sequences, each with a state and caches of its own (bind())
+    seqs_.resize((size_t) opt_.batch + 1);
+    for (int s = 1; s <= opt_.batch; ++s) {
+        park_bound();
+        bound_ = s;
+        pos_ = kv_rows_ = kv_reach_ = 0;
+        ahead_pos_ = -1;
+        state_ = (float*) dmalloc(state_floats * sizeof(float), "the recurrent state");
+        ck(cudaMemset(state_, 0, state_n_ * sizeof(float)), "the recurrent state");
+        if (draft_) hn_ = state_ + rec_n_;
+        alloc_caches();
+        cover(1);
+    }
+    if (bound_ != 0) {
+        park_bound();
+        take_bound(0);
+    }
 
     // A prompt batch runs a layer's routed experts through MMQ when the card has a tile for each of their types
     // (batched()).  The model's layers: the draft block's experts never run a batch at a time.
@@ -1639,8 +1743,9 @@ void Engine::alloc() {
     q8_ = dmalloc(n * kernels::native_q8_1_bytes((q_max + 255) / 256 * 256), "scratch");
 
     h_r_ = (float*) hmalloc(n * streams() * n_embd_ * sizeof(float), "pinned memory");
-    at_ = (long long*) dmalloc((size_t) opt_.window * 2 * sizeof(long long), "scratch");
-    h_at_ = (long long*) hmalloc((size_t) opt_.window * 2 * sizeof(long long), "pinned memory");
+    const size_t at_rows = (size_t) std::max(opt_.window, opt_.batch + 1);   // window()'s tokens, step()'s
+    at_ = (long long*) dmalloc(at_rows * 2 * sizeof(long long), "scratch");
+    h_at_ = (long long*) hmalloc(at_rows * 2 * sizeof(long long), "pinned memory");
     h_rl_ = (float*) hmalloc(n * n_expert_ * sizeof(float), "pinned memory");
     h_x_ = (float*) hmalloc(n * n_embd_ * sizeof(float), "pinned memory");
     h_cpu_ = (float*) hmalloc(n * n_embd_ * sizeof(float), "pinned memory");
@@ -2449,7 +2554,7 @@ void Engine::run(const int32_t* tokens, int n) {
     // tail(): what the layer does with the experts' sum.  `rec` numbers the recording of m tokens' launches: a
     // call's tokens together are [0, window) by their number, and a half of a window comes after those, by the
     // window's tokens and which half it is.  Which tokens leave their state is the window's, so its halves' too.
-    const size_t wn = (size_t) opt_.window, recs = 3 * wn;
+    const size_t wn = (size_t) opt_.window, recs = 3 * wn + (size_t) opt_.batch + 1;   // step()'s rows after
     const auto up = [&](int il, int m, size_t rec) {
         Layer& L = layers_[(size_t) il];
         const size_t head = (size_t) head_key(il, m) * recs + rec;
@@ -2595,6 +2700,106 @@ void Engine::run(const int32_t* tokens, int n) {
         else if (!on_card(il, n, (size_t) n - 1) && moe(L, il, n)) moe_add(n);
         tail(il, n, (size_t) n - 1);
     }
+}
+
+// A row a sequence.  A layer's head is the sequence's own: its row of the buffers (shift_rows()) with the sequence
+// bound, recorded and replayed by sequence and row (the sequence's Layer::heads).  The router's copy, the experts
+// and the layer's tail take the rows together, as a call of n tokens does: an expert two sequences route to is
+// read once for both.  The draft block is not run: a sequence that guesses again later finds its block's rows of
+// these tokens missing, which makes its guesses worse and its tokens no different.
+void Engine::step(const int* seqs, const int32_t* tokens, int n) {
+    if (n < 1 || n > std::min(rows_, sequences())) throw std::logic_error("step takes 1 to sequences() tokens");
+    if (next_) throw std::logic_error("step: a model on several cards writes one sequence at a time");
+    OnCard here(device_, split_);
+    const int home = bound_;
+    const auto use = [&](int s) {
+        if (s == bound_) return;
+        park_bound();
+        take_bound(s);
+    };
+    std::vector<int64_t> at((size_t) n);
+    for (int i = 0; i < n; ++i) {
+        if (seqs[i] < 0 || seqs[i] >= sequences() || std::count(seqs, seqs + i, seqs[i]))
+            throw std::logic_error("step: no such sequence, or one twice");
+        use(seqs[i]);
+        if (pos_ + 1 > opt_.max_context)
+            throw std::runtime_error("the context is full (" + std::to_string(opt_.max_context) + " tokens)");
+        cover(pos_ + 1);
+        at[(size_t) i] = pos_;
+    }
+
+    ck(cudaStreamSynchronize(cs(st_)), "step");
+    if (n_swap_ > 0) follow(n);
+    tok_ = tokens;
+    windowed_ = false;
+    snap_bits_ = 0;
+    const size_t e_row = (size_t) n_embd_, r_row = (size_t) streams() * e_row;
+    const float scale = embed_scale();
+    for (int i = 0; i < n; ++i) {
+        use(seqs[i]);
+        float* r = h_r_ + (size_t) i * r_row;
+        if (!input(tokens[i], at[(size_t) i], r) && scale != 1.f)
+            for (size_t k = 0; k < e_row; ++k) r[k] *= scale;
+        for (int h = 1; h < streams(); ++h) std::memcpy(r + (size_t) h * e_row, r, e_row * sizeof(float));
+        h_at_[2 * i] = at[(size_t) i];
+        h_at_[2 * i + 1] = turn(at[(size_t) i]);
+    }
+    copy2(h_r_, r_, n * (int) r_row, nullptr, nullptr, 0, st_);
+    copy2(h_at_, at_, n * 2 * (int) (sizeof(long long) / 4), nullptr, nullptr, 0, st_);
+
+    const size_t wn = (size_t) opt_.window, recs = 3 * wn + (size_t) opt_.batch + 1, rec = (size_t) n - 1;
+    const bool replay = opt_.graphs && !opt_.dump;
+    const auto replayed = [&](std::vector<void*>& made, size_t key, auto&& work) {
+        if (made.size() <= key) made.resize(key + 1, nullptr);
+        if (!made[key]) made[key] = record(work);
+        ck(cudaGraphLaunch((cudaGraphExec_t) made[key], cs(st_)), "layer graph");
+    };
+    const bool card = n < kStageRows && card_moe(n);
+    for (int il = lo_; il < hi_; ++il) {
+        Layer& L = layers_[(size_t) il];
+        for (int i = 0; i < n; ++i) {
+            use(seqs[i]);
+            shift_rows(i);
+            pos_ = at[(size_t) i];
+            const size_t head = (size_t) head_key(il, 1) * recs + 3 * wn + (size_t) i;
+            if (replay && L.fixed) replayed(L.heads, head, [&] { layer_head(L, il, 1); });
+            else layer_head(L, il, 1);
+            shift_rows(-i);
+            pos_ = at[(size_t) i];
+        }
+        if (!L.moe) continue;
+        if (batched(L, n)) {
+            moe_rows(L, il, n);
+        } else {
+            ck(cudaEventRecord((cudaEvent_t) ev_, cs(st_)), "router");
+            if (replay) replayed(L.shared, rec, [&] { moe_shared(L, il, n); });
+            else moe_shared(L, il, n);
+            if (card && L.card == 1 && replay) {
+                replayed(L.card_moe, rec, [&] { moe_card(L, il, n); });
+                stats_.gpu_experts += n * n_used_;
+            } else if (card && moe_card(L, il, n)) {
+                stats_.gpu_experts += n * n_used_;
+            } else if (moe(L, il, n)) {
+                moe_add(n);
+            }
+        }
+        if (replay && L.fixed) replayed(L.tail, rec, [&] { layer_tail(L, il, n); });
+        else layer_tail(L, il, n);
+    }
+
+    output_rows(0, n, xn_);
+    lin(output_, xn_, wlogits_, n);
+    finish_logits(wlogits_, n);
+    ck(cudaMemcpyAsync(h_wlogits_, wlogits_, (size_t) n * n_vocab_ * sizeof(float), cudaMemcpyDeviceToHost, cs(st_)),
+       "logits");
+    ck(cudaStreamSynchronize(cs(st_)), "step");
+    for (int i = 0; i < n; ++i) {
+        use(seqs[i]);
+        pos_ = at[(size_t) i] + 1;
+        ahead_pos_ = -1;
+    }
+    use(home);
+    stats_.tokens += n;
 }
 
 void Engine::shift_rows(ptrdiff_t by) {
