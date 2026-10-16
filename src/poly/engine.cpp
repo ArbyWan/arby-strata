@@ -517,7 +517,7 @@ void Engine::vmm_free(Mapped& m) {
 }
 
 void* Engine::kv_alloc(size_t bytes, int per) {
-    if (again_ != SIZE_MAX) return bufs_.at(again_++);
+    if (again_ != SIZE_MAX) return bufs_.at(again_++).p;
     const size_t all = (size_t) ((opt_.max_context + per - 1) / per) * bytes;
     void* p = nullptr;
     if (!vmm_) {
@@ -530,14 +530,14 @@ void* Engine::kv_alloc(size_t bytes, int per) {
         kv_.push_back(std::move(k));
         p = (void*) kv_.back().base;
     }
-    bufs_.push_back(p);
+    bufs_.push_back({p, bytes, per});
     return p;
 }
 
 void* Engine::seq_alloc(size_t bytes, const char* what) {
-    if (again_ != SIZE_MAX) return bufs_.at(again_++);
+    if (again_ != SIZE_MAX) return bufs_.at(again_++).p;
     void* p = dmalloc(bytes, what);
-    bufs_.push_back(p);
+    bufs_.push_back({p, bytes, 0});
     return p;
 }
 
@@ -583,14 +583,48 @@ void Engine::take_bound(int s) {
     again_ = SIZE_MAX;
 }
 
+void Engine::hold(int s) {
+    if (s == bound_) return;
+    park_bound();
+    take_bound(s);
+}
+
 void Engine::bind(int s) {
     if (s < 0 || s >= (int) seqs_.size()) throw std::logic_error("bind: no such sequence");
     if (win_ > 0) throw std::logic_error("bind: a window's tokens are not kept yet");
-    if (s != bound_) {
-        park_bound();
-        take_bound(s);
-    }
+    hold(s);
     if (next_) next_->bind(s);
+}
+
+// The buffers of the two sequences were asked for in the same order with the same sizes.  Of a growing one the rows
+// before the position are copied, of another one all of it.
+void Engine::copy_seq(int from, int to) {
+    if (from < 0 || from >= sequences() || to < 0 || to >= sequences()) throw std::logic_error("copy_seq: no such sequence");
+    if (win_ > 0) throw std::logic_error("copy_seq: a window's tokens are not kept yet");
+    if (from != to) {
+        OnCard here(device_, split_);
+        const int home = bound_;
+        hold(from);
+        const int64_t pos = pos_;
+        const std::vector<Buf> src = bufs_;
+        const float* state = state_;
+        const std::vector<Image> images = images_;
+        hold(to);
+        if (pos > 0) cover(pos);
+        for (size_t i = 0; i < bufs_.size(); ++i) {
+            const Buf& b = src[i];
+            const size_t bytes = b.per ? (size_t) ((pos + b.per - 1) / b.per) * b.bytes : b.bytes;
+            if (bytes) ck(cudaMemcpyAsync(bufs_[i].p, b.p, bytes, cudaMemcpyDeviceToDevice, cs(st_)), "copy_seq");
+        }
+        ck(cudaMemcpyAsync(state_, state, state_n_ * sizeof(float), cudaMemcpyDeviceToDevice, cs(st_)), "copy_seq");
+        ck(cudaStreamSynchronize(cs(st_)), "copy_seq");
+        pos_ = pos;
+        images_ = images;
+        ++images_set_;
+        ahead_pos_ = -1;
+        hold(home);
+    }
+    if (next_) next_->copy_seq(from, to);
 }
 
 // The attention caches' VRAM for the rows below `end`: rows kKvGrow at a time, kKvAhead more for the answer to go
@@ -2712,11 +2746,7 @@ void Engine::step(const int* seqs, const int32_t* tokens, int n) {
     if (next_) throw std::logic_error("step: a model on several cards writes one sequence at a time");
     OnCard here(device_, split_);
     const int home = bound_;
-    const auto use = [&](int s) {
-        if (s == bound_) return;
-        park_bound();
-        take_bound(s);
-    };
+    const auto use = [&](int s) { hold(s); };
     std::vector<int64_t> at((size_t) n);
     for (int i = 0; i < n; ++i) {
         if (seqs[i] < 0 || seqs[i] >= sequences() || std::count(seqs, seqs + i, seqs[i]))

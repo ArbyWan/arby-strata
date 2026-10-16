@@ -294,6 +294,8 @@ public:
     /// with logits would on its own.  logits_of(i) then holds the scores of what follows tokens[i].  The sequences
     /// differ; none of them has pictures past its position.  The bound sequence stays bound.
     void step(const int* seqs, const int32_t* tokens, int n);
+    /// Sequence `to` becomes what sequence `from` is: its position, state, rows and pictures, copied on the card.
+    void copy_seq(int from, int to);
 
 protected:
     // ---- what an architecture supplies ----
@@ -562,12 +564,17 @@ protected:
     int64_t kv_reach_ = 0;       ///< the furthest row cover() was asked for since the last trim_kv()
     // The sequences (bind()).  The bound one's are the members above and below (pos_, kv_, state_ ...); the
     // others wait in seqs_, with what alloc_caches() gave them and the launches recorded with their buffers.
+    struct Buf {
+        void* p = nullptr;
+        size_t bytes = 0;   ///< a kv_alloc() buffer's for every `per` rows; a seq_alloc() one's, all of it
+        int per = 0;        ///< 0: seq_alloc()'s
+    };
     struct Seq {
         int64_t pos = 0, kv_rows = 0, kv_reach = 0, ahead_pos = -1;
         int32_t ahead_tok = 0;
         float* state = nullptr;
         std::vector<Kv> kv;
-        std::vector<void*> bufs;
+        std::vector<Buf> bufs;
         std::vector<Image> images;
         std::vector<std::vector<void*>> heads;   ///< Layer::heads, by layer
         std::map<std::vector<int>, void*> passes;
@@ -575,10 +582,11 @@ protected:
     };
     std::vector<Seq> seqs_;      ///< the bound one's place holds nothing while it is bound
     int bound_ = 0;
-    std::vector<void*> bufs_;    ///< the bound sequence's: what kv_alloc() and seq_alloc() gave it, in that order
+    std::vector<Buf> bufs_;      ///< the bound sequence's: what kv_alloc() and seq_alloc() gave it, in that order
     size_t again_ = SIZE_MAX;    ///< while alloc_caches() points at the bound sequence's buffers again: the next one
     void park_bound();
     void take_bound(int s);
+    void hold(int s);   ///< bind() on this card alone
     size_t other_rows() const;
     size_t budget_ = 0;          ///< their VRAM and the expert cache's together, as the cache was filled
     int asked_reserve_mib_ = -1; ///< Options::vram_reserve_mib as load() got it
