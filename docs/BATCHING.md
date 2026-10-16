@@ -9,6 +9,44 @@ conversations at the same time instead of waiting for each other.
 
 It is opt-in and changes nothing when the options are absent (#465; the engine part is PR #559).
 
+Most of this page is about the Strata project's engine, which runs Qwen3.8-Flash-Next. The other eight models run on
+strata-poly, which does the same since 0.1.44.1-poly.6 with fewer options: see
+[The strata-poly models](#the-strata-poly-models).
+
+## The strata-poly models
+
+`"parallel": N` in the model's config (`strata-<model>.json`), or `--parallel N` when you run setup, works for
+GLM 5.3 Flash, DeepSeek V4 Flash, LFM2.5, Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder and MiniCPM-V too, up to 8. The
+server drives it the way it drives the Strata project's engine (below), with the same lines:
+
+- A request alone writes on its own and guesses ahead as always, so one user sees no change.
+- When a second one comes, the first goes on in a batch slot from where it was, nothing read again, and the two
+  write together, a token each at a time, without guesses. Each slot has its own position, recurrent state and
+  attention rows; the dense weights and every routed expert two requests both use are read once for both.
+- A request's prompt is read the usual way, with the conversation cache, and copied into its slot on the card.
+  While a prompt is read the slots go on writing, for half the time each piece of the prompt took, and a long read
+  gives way to a much shorter request at its next piece (`BYIELD`).
+- Left alone again, a request goes back to writing on its own with guesses, also without reading anything again.
+
+Where it pays depends on the card. On the RTX 4070 laptop (8 GB) most experts of Qwen3.6 run on the CPU, and
+different requests route to different experts, so the CPU does each request's own: three requests of 150 tokens at
+once came at 64 tokens/s together, where one alone writes at about 70. There it means that nobody waits for another
+request's whole answer, which matters for several people on one server, and setup says so. A card that holds every
+expert of the model is where the total speed goes up.
+
+Each slot's attention rows take VRAM from the expert cache as its conversation grows, as the first conversation's
+do. A model split across cards (`"layer_split"`) runs its slots card after card.
+
+Check it on your PC with the engine alone: `strata-poly --model M.gguf --batch 3 --check-batch 3 --tokens ID,ID,...`
+answers three prompts (the given one, and it without its first one and two tokens) one after the other and then
+together, and says for each how many tokens came out the same. To compare token by token, keep the expert cache
+fixed: `--expert-swaps 0 --cpu-share 0 --window 1` (without that the engine's own runs differ from each other). On
+the laptop every token matched for Qwen3.6, Gemma 4 and LFM2.5 with 2 to 4 sequences and prompts of 19 to 3,000
+tokens, and through the server two chats at once gave the same text as each alone.
+
+Not there yet: guesses inside a slot (`--batch-mtp` in the Strata project's engine), `--batch-groups`, and the other
+options of the table below, which are that engine's.
+
 ## Turning it on
 
 One GPU: add `"parallel": 2` to the model's config (`strata-<model>.json`) and restart, or run setup with
