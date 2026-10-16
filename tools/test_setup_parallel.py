@@ -50,9 +50,9 @@ class Parallel(unittest.TestCase):
 
     def test_poly_notes(self):
         d = S.family_models("qwen36")["UD-Q3_K_M"]
-        # 8 GB: most experts on the CPU, so requests at once take turns
-        self.assertIn("take turns", S.poly_parallel_note(None, d, 8.0)[0])
-        self.assertTrue(any("take turns" in x for x in S.poly_parallel_note(3, d, 8.0)))
+        # 8 GB: most experts on the CPU, so requests at once gain less
+        self.assertIn("gain less", S.poly_parallel_note(None, d, 8.0)[0])
+        self.assertTrue(any("gain less" in x for x in S.poly_parallel_note(3, d, 8.0)))
         # 32 GB holds every expert: worth it, and asked for, nothing to warn of
         self.assertIn("--parallel 2 to 4", S.poly_parallel_note(None, d, 31.8)[0])
         self.assertEqual(len(S.poly_parallel_note(3, d, 31.8)), 1)

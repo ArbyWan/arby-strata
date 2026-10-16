@@ -5821,11 +5821,11 @@ def poly_held_gb(d, vram_gb) -> float:
 def poly_parallel_note(asked: int | None, d, vram_gb) -> list[str]:
     """What setup says of "parallel" for a strata-poly size: answers written together pay where the card holds every
     expert of the size.  Where most of them run on the CPU, different requests route to different experts and the
-    CPU does each one's: on the 8 GB laptop Qwen3.6 UD-Q3_K_M wrote 64 tokens/s for three requests at once and 70
-    for one alone, so there "parallel" only means nobody waits for a whole answer."""
+    CPU does each one's: on the 8 GB laptop three Qwen3.6 UD-Q3_K_M chats at once wrote 105 tokens/s together and
+    79 one after the other, so there "parallel" gains less than it does on a large card."""
     whole = poly_held_gb(d, vram_gb) >= d["arena_gb"]
-    turns = ("on this card most experts run on the CPU, so requests at once take turns: none waits for another's whole "
-             "answer, and together they write about as fast as one alone (docs/BATCHING.md)")
+    turns = ("on this card most experts run on the CPU and do each request's own, so requests at once gain less: on "
+             "an 8 GB laptop three chats at once wrote about a third faster than one after the other (docs/BATCHING.md)")
     if asked is None or asked <= 1:
         if whole:
             return ["Several requests at once (opt-in): --parallel 2 to 4 writes their answers together, each in a "

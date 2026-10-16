@@ -29,11 +29,9 @@ server drives it the way it drives the Strata project's engine (below), with the
 - Left alone again, a request goes back to writing on its own with guesses, also without reading anything again.
 
 Where it pays depends on the card. On the RTX 4070 laptop (8 GB) most experts of Qwen3.6 run on the CPU, and
-different requests route to different experts, so the CPU does each request's own: three requests of 150 tokens at
-once came at 64 tokens/s together, where one alone writes at about 70. There it means that nobody waits for another
-request's whole answer, which matters for several people on one server, and setup says so. A card that holds every
-expert of the model is where the total speed goes up. On an RTX 5090 with Qwen3.6 UD-Q4_K_M, chats of 300 tokens
-through the server:
+different requests route to different experts, so the CPU does each request's own: three chats of 150 tokens with
+UD-Q3_K_M came at 105 tokens/s together, and at 79 one after the other. A card that holds every expert of the model
+gains more. On an RTX 5090 with Qwen3.6 UD-Q4_K_M, chats of 300 tokens through the server:
 
 | Chats at once | Tokens/s, all together |
 | ---: | ---: |
@@ -48,10 +46,17 @@ do. A model split across cards (`"layer_split"`) runs its slots card after card.
 Check it on your PC with the engine alone: `strata-poly --model M.gguf --batch 3 --check-batch 3 --tokens ID,ID,...`
 answers three prompts (the given one, and it without its first one and two tokens) one after the other and then
 together, and says for each how many tokens came out the same. To compare token by token, keep the expert cache
-fixed: `--expert-swaps 0 --cpu-share 0 --window 1` (without that the engine's own runs differ from each other). On
-the laptop every token matched for Qwen3.6, Gemma 4 and LFM2.5 with 2 to 4 sequences and prompts of 19 to 3,000
-tokens, and on the RTX 5090 for Qwen3.6, MiniCPM-V, LFM2.5, DeepSeek V4 Flash and GLM 5.3 Flash with 3 sequences
-after prompts of 64 and 3,000 tokens. Through the server two chats at once gave the same text as each alone.
+fixed and leave guesses and the tail skip out: `--expert-swaps 0 --cpu-share 0 --window 1 --tail-skip 0`. On the
+laptop every token matched for Qwen3.6, Gemma 4 and LFM2.5 with 2 to 4 sequences and prompts of 19 to 3,000 tokens,
+and on the RTX 5090 for Qwen3.6, MiniCPM-V, LFM2.5, DeepSeek V4 Flash and GLM 5.3 Flash with 3 sequences after
+prompts of 64 and 3,000 tokens. Through the server on the laptop, with the same four options in the run config,
+three chats at once gave the text each gave alone, to the character.
+
+Without those options the text of a chat answered together can part from the one it gets alone after a few dozen
+words, and so can two runs of the same chat alone. On the laptop that happened with the run config as setup writes
+it, and with the expert cache fixed but guesses on. The tail skip (Qwen3.6's default 6) leaves out an expert outside
+VRAM only where no token of the call ranks it high, so with it a request's text also depends on the others written
+with it.
 
 Not there yet: guesses inside a slot (`--batch-mtp` in the Strata project's engine), `--batch-groups`, and the other
 options of the table below, which are that engine's.

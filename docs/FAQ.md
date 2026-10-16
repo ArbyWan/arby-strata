@@ -166,9 +166,9 @@ Yes. By default the server answers one request at a time and the others wait the
 `strata-<model>.json` (or `--parallel N` when you run setup) it answers up to N together, with every model.
 On a card that holds most of the model's experts that writes more tokens a second in all: on an RTX 5090 four
 Qwen3.6 chats at once came at 428 tokens/s together, one alone at 312 to 333. On a small card, where
-most experts run on the CPU, the total stays about the same, and what changes is that nobody waits for someone
-else's whole answer: on the 8 GB laptop three Qwen3.6 chats at once came at 64 tokens/s together, one alone at
-about 70. How it works, and how to check it on your PC: [BATCHING.md](BATCHING.md#the-strata-poly-models).
+most experts run on the CPU, it gains less: on the 8 GB laptop three Qwen3.6 chats at once came at 105 tokens/s
+together, one after the other at 79. How it works, and how to check it on your PC:
+[BATCHING.md](BATCHING.md#the-strata-poly-models).
 
 ### Who maintains it?
 
