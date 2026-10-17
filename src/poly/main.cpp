@@ -769,7 +769,11 @@ int serve(Session& ss) {
             try {
                 const Clock::time_point t0 = Clock::now();
                 const int before = engine.cached_experts();
+                // The operator's resize is the one thing a freeze gives way to (STRATA_FREEZE_EXPERTS):
+                // the cache it leaves is what every request after reads, and stays frozen again.
+                engine.unfreeze_experts();
                 engine.resize_cache((int) reserve);
+                engine.refreeze_experts();
                 const long long free_mib = (long long) engine.vram_free_mib();
                 std::fprintf(stderr, "strata-poly: VRAM %d MiB kept free: the expert cache %d -> %d of %d experts "
                                      "(%.2f of %.2f GiB), %lld MiB free now, in %.0f ms\n",
