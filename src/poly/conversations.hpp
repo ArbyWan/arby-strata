@@ -57,9 +57,6 @@ public:
             if (r > at || (r == at && i == cur_)) best = i, at = r, same = c;
         }
         ++clock_;
-        // The freeze is for the engine's whole run (STRATA_FREEZE_EXPERTS): requests read one cache.
-        // resume() is where the callers' state changes land, so a request that comes in while a
-        // resize is wanted still sees the cache the resize left (the engine unfreezes for it).
         if (at == 0) {
             // nothing kept starts like this
             if (!cur().seq.empty() && park(slots_.size())) cur_ = take(cur_);
