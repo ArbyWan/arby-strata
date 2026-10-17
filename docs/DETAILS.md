@@ -1047,8 +1047,9 @@ print(r.choices[0].message.content)
   `port`, `api_key`, `allowed_hosts`, `cors_origins`, `trusted_origins`, `api_monitor`, `mcp_servers`,
   `slot_save_path`, `prevent_sleep`, `env_to_user`, `open_browser`, `images` and `lazy_load`. Options given to
   `serve/server.py` (`--gpu`, `--idle-unload`, `--min-free-vram-mib`, `--before-load`, `--fit-max-tokens`) apply to
-  every model. A config with a bad value is refused before the loaded model stops; a model that does not start
-  leaves the earlier one loaded again, with its settings.
+  every model. The file is read as at the start (an option written as one entry of `args` is split, #2267; a JSON
+  mistake is named with its line and column), and a config with a bad value is refused before the loaded model stops;
+  a model that does not start leaves the earlier one loaded again, with its settings.
 - **From other devices on your network.** The server listens on your PC only (`127.0.0.1`) unless you say otherwise:
   run setup with `START-HERE.bat --setup --host 0.0.0.0 --api-key some-long-secret` (or add `"host": "0.0.0.0"` and
   `"api_key": "..."` to `strata-<model>.json`). The server window then prints this PC's addresses

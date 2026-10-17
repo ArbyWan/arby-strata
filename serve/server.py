@@ -3432,9 +3432,10 @@ class Service:
     def model_config(self, target: dict) -> tuple[dict, dict, object, ChatTemplate]:
         """A registry model's run config as main() reads it (with the command line's --gpu / --replicas), its settings
         (model_settings()), tokenizer and chat template.  ValueError: it cannot be used."""
-        cfg = json.loads(Path(target["config"]).read_text(encoding="utf-8-sig"))
-        cfg.update(self.cfg_overrides)
-        lift_reasoning_effort_arg(cfg)
+        try:
+            cfg = run_config(target["config"], self.cfg_overrides)
+        except SystemExit as e:                           # read_config()'s word for a JSON mistake, with its place
+            raise ValueError(f"{target['id']} cannot be loaded: {str(e).removeprefix('[strata] ')}") from None
         try:
             settings = model_settings(cfg, self.overrides)
         except ValueError as e:
@@ -7199,6 +7200,17 @@ def lift_reasoning_effort_arg(cfg: dict) -> None:
           f"{cfg['reasoning_effort']!r}", flush=True)
 
 
+def run_config(path, overrides: dict | None = None) -> dict:
+    """A run config as the server uses it, at the start and at every switch to it (#37): read_config(), an option
+    written as one entry of "args" split (#2267), "--reasoning-effort" lifted out of them (#1641), and the command
+    line's --gpu / --replicas (`overrides`) written in.  SystemExit for JSON that cannot be read."""
+    cfg = read_config(path)
+    split_joined_args(cfg)
+    lift_reasoning_effort_arg(cfg)
+    cfg.update(overrides or {})
+    return cfg
+
+
 # #1819: llama.cpp clients call the repetition penalty and its window repeat_penalty / repeat_last_n; they are the
 # same settings as repetition_penalty / penalty_last_n (the /props answer already reports them under those names)
 SAMPLING_ALIASES = {"repeat_penalty": "repetition_penalty", "repeat_last_n": "penalty_last_n"}
@@ -7599,15 +7611,12 @@ def main() -> int:
                          "load the one a request names, the loaded one stopped first (also \"switch_on_request\": "
                          "true in the config; default: every request is answered by the loaded model)")
     a = ap.parse_args()
-    cfg = read_config(a.config) if a.config else {}
-    split_joined_args(cfg)
-    lift_reasoning_effort_arg(cfg)
     cfg_overrides = {}                                  # #37: written into every model's config, this one's and a switch's
     if a.replicas is not None:
         cfg_overrides["replicas"] = a.replicas
     if a.gpu is not None:
         cfg_overrides["gpu"] = int(a.gpu) if a.gpu.strip().isdigit() else a.gpu
-    cfg.update(cfg_overrides)
+    cfg = run_config(a.config, cfg_overrides) if a.config else dict(cfg_overrides)
     a.host = a.host or cfg.get("host") or "127.0.0.1"   # issue #26: the run scripts pass no --host, the config can
     try:                                                # before the minutes of loading: is the port free?
         Server((a.host, a.port), BaseHTTPRequestHandler).server_close()

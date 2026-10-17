@@ -245,6 +245,24 @@ class Switch(unittest.TestCase):
                 self.assertEqual((self.old.stops, self.svc.model), (0, "alpha"))
                 self.configure(self.b, **{key: None})
 
+    def test_a_switch_reads_the_config_as_the_start_does(self):
+        """0.1.45's start splits an option written as one entry of "args" (#2267) and lifts "--reasoning-effort" out of
+        them (#1641); a switch read the file with json.loads only, so the engine got "--max-context 8192" as one
+        argument and did not start."""
+        started = self.fresh_engines()
+        cfg = json.loads(self.b.read_text())
+        self.configure(self.b, args=[cfg["args"][0], cfg["args"][1], "--max-context 8192", "--reasoning-effort=low"])
+        self.svc.switch_model("beta")
+        self.assertEqual(started[-1]["args"][2:], ["--max-context", "8192"])
+        self.assertEqual(self.svc.config_effort, "low")
+
+    def test_a_config_that_is_not_json_is_refused_with_its_place(self):
+        target = registry.find(self.svc.models(), "beta")
+        self.b.write_text(self.b.read_text().replace('"args"', '"args",'))      # a stray comma, as a hand edit leaves
+        with self.assertRaisesRegex(ValueError, r"^beta cannot be loaded: .*strata-beta\.json is not valid JSON: .* line 1"):
+            self.svc.model_config(target)
+        self.assertEqual((self.old.stops, self.svc.model), (0, "alpha"))
+
     def test_a_model_that_does_not_start_keeps_the_old_settings(self):
         self.svc.drop_oldest, self.svc.config_effort = True, "high"
         self.configure(self.b, drop_oldest=False, reasoning_effort="none")
