@@ -46,6 +46,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import urllib.request
 import uuid
 from http.client import HTTPException
@@ -63,6 +64,7 @@ from serve.frontend import (THINK_END, ChatTemplate, Event, OutputParser, anthro
 from serve.mcp import McpCancelled, hub_from_config  # noqa: E402
 from serve import runconfig  # noqa: E402
 from serve import models as registry  # noqa: E402
+from serve.model_gate import Cancelled, ModelGate  # noqa: E402
 from serve import logit_bias as bias_api  # noqa: E402
 from serve.winjob import contain  # noqa: E402
 from serve.structured import StructuredOutputError, prepare_format, validated_json  # noqa: E402
@@ -3143,6 +3145,11 @@ def slot_save_dir(value, base: str | None = None) -> str:
     return path
 
 
+def config_key(path) -> str:
+    """#38: a run config's file as the gate (serve/model_gate.py) knows a model: one name for each file."""
+    return str(Path(path).resolve())
+
+
 def alias_list(aliases) -> list[str]:
     """#297: the config's `aliases` - a list of names (or one comma-separated string), like llama-server's --alias -
     as a list of names.  ValueError for anything else."""
@@ -3264,6 +3271,11 @@ class Service:
         self.overrides: dict = {}
         self.cfg_overrides: dict = {}
         self.idle_thread = None                           # start_idle_unload()'s, once one is running
+        # #38: every request holds the model it runs on (use_model()); a switch waits until none does.  With
+        # "switch_on_request" (opt-in) a request that names another installed model loads that one first.
+        self.gate = ModelGate(lambda: config_key(self.config_path) if self.config_path else None)
+        self.switch_on_request = False
+        self.counter = None                               # counter_for(): ((config, mtime), its counting Service)
         self._read_tokenizer(tokenizer)
 
     def _read_tokenizer(self, tokenizer) -> None:
@@ -3390,17 +3402,16 @@ class Service:
             e["current"] = mine is not None and Path(e["config"]).resolve() == mine
             if e["current"]:
                 e["status"] = "loaded" if self.loaded() else "unloaded"
+            elif self.gate.switching == config_key(e["config"]):
+                e["status"] = "loading"                   # #38: a switch to it runs now
         return out
 
     switch_wait_s = 120.0                                # how long a switch waits for a request that is running
 
     def switch_model(self, name: str) -> dict:
-        """POST /api/models/load: answer with the model `name` from now on.  One model is in memory at a time: the
-        one that is loaded is stopped first (its process ends, which gives back its VRAM, its pinned memory and its
-        file mappings), then the new one is started.  A model that does not start leaves the earlier one loaded
-        again (SwitchFailed says so).  KeyError: no such model; ValueError: it cannot be used; ModelBusy: a
-        request is running.  #37: the new model runs with its own run config's settings (model_settings()); a config
-        with a bad value is refused (ValueError) before anything is stopped."""
+        """POST /api/models/load (and #38's POST /v1/load): answer with the model `name` from now on, once the requests
+        that run have finished (up to switch_wait_s; see _switch_to).  KeyError: no such model; ValueError: it cannot
+        be used; ModelBusy: requests still ran after switch_wait_s."""
         models = self.models()
         target = registry.find(models, name)
         if target is None:
@@ -3410,8 +3421,19 @@ class Service:
             return {**target, "status": "loaded"}
         if target["status"] == "unavailable":
             raise ValueError(f"{target['id']} cannot be loaded: {target['problem']}")
+        try:
+            with self.gate.use(config_key(target["config"]), lambda: self._switch_to(target),
+                               timeout=self.switch_wait_s):
+                pass
+        except TimeoutError:
+            raise ModelBusy("a request is still running; switch when it has finished") from None
+        return next((e for e in self.models() if e["current"]), {**target, "status": "loaded", "current": True})
+
+    def model_config(self, target: dict) -> tuple[dict, dict, object, ChatTemplate]:
+        """A registry model's run config as main() reads it (with the command line's --gpu / --replicas), its settings
+        (model_settings()), tokenizer and chat template.  ValueError: it cannot be used."""
         cfg = json.loads(Path(target["config"]).read_text(encoding="utf-8-sig"))
-        cfg.update(self.cfg_overrides)                    # --gpu / --replicas, as main() writes them for the first one
+        cfg.update(self.cfg_overrides)
         lift_reasoning_effort_arg(cfg)
         try:
             settings = model_settings(cfg, self.overrides)
@@ -3422,7 +3444,15 @@ class Service:
         if tok is None:
             raise ValueError(f"{target['id']} cannot be loaded: its tokenizer is missing ({tpath})")
         tpl = tpath / "chat_template.jinja"
-        template = ChatTemplate(tpl if tpl.exists() else ROOT / "serve/chat_template.jinja")
+        return cfg, settings, tok, ChatTemplate(tpl if tpl.exists() else ROOT / "serve/chat_template.jinja")
+
+    def _switch_to(self, target: dict) -> None:
+        """The switch, run by the gate (serve/model_gate.py) while no request runs.  One model is in memory at a time:
+        the one that is loaded is stopped first (its process ends, which gives back its VRAM, its pinned memory and its
+        file mappings), then the new one is started.  A model that does not start leaves the earlier one loaded
+        again (SwitchFailed says so).  #37: the new model runs with its own run config's settings (model_settings());
+        a config with a bad value is refused (ValueError) before anything is stopped."""
+        cfg, settings, tok, template = self.model_config(target)
         if not self.fifo.acquire(timeout=self.switch_wait_s):
             raise ModelBusy("a request is still running; switch when it has finished")
         try:
@@ -3485,9 +3515,99 @@ class Service:
             print(f"[strata] the model is now {self.model} (context {engine.max_context} tokens)", flush=True)
         finally:
             self.fifo.release()
+        self.counter = None                               # counter_for()'s other model may be this one now
         self.start_warm()                                 # the new model's own warm start and idle unload (both take
         self.start_idle_unload()                          # the fifo themselves)
-        return next((e for e in self.models() if e["current"]), {**target, "status": "loaded", "current": True})
+
+    def requested_model(self, name) -> dict | None:
+        """#38 (opt-in, "switch_on_request": true): the installed model a request's `model` names (serve/models.py's
+        resolve(): a name, an alias or a config file's name, exactly; the loaded model also by the name it answers
+        with), else None.  ValueError for a model that cannot run.  A strict mode (404 model_not_found for a name no
+        installed model has) could be a later value of the key; today any other name is answered by the loaded
+        model, as before."""
+        if not self.switch_on_request or not isinstance(name, str):
+            return None
+        models = self.models()
+        if name in self.model_names():
+            return next((e for e in models if e["current"]), None)
+        target = registry.resolve(models, name)
+        if target is not None and target["status"] == "unavailable" and not target["current"]:
+            raise ValueError(f"{target['id']} cannot be loaded: {target['problem']}")
+        return target
+
+    @contextlib.contextmanager
+    def use_model(self, name, cancel: threading.Event | None = None):
+        """#38: hold the model a request runs on for the whole request (the handler's `with`): from before its prompt
+        is read with the model's tokenizer to the end of its answer, so no switch comes in between.  With
+        switch_on_request, a request naming another installed model (requested_model()) first waits until no request
+        runs and loads it.  ClientGone when the client leaves while waiting; the switch's own errors (SwitchFailed,
+        GpuBusy, ValueError for a bad config, ...)."""
+        target = self.requested_model(name)
+        # a named model, the loaded one too: a switch away from it that comes first is followed by one back; any other
+        # name, or none: the model loaded at the request's turn
+        key = config_key(target["config"]) if target is not None else ModelGate.ANY
+        try:
+            with self.gate.use(key, lambda: self._switch_to(target), cancel):
+                yield
+        except Cancelled:
+            raise ClientGone() from None
+
+    def counter_for(self, name) -> "Service":
+        """#38: the Service that counts a request's tokens (/v1/messages/count_tokens): this one, or - with
+        switch_on_request, for a request naming another installed model - one with that model's tokenizer, chat
+        template and settings, whose engine is not started.  The last one is kept (a tokenizer holds 70-240 MB) until
+        the next switch."""
+        target = self.requested_model(name)
+        if target is None or target["current"]:
+            return self
+        key = (target["config"], Path(target["config"]).stat().st_mtime_ns)
+        counter = self.counter
+        if counter is not None and counter[0] == key:
+            return counter[1]
+        cfg, settings, tok, template = self.model_config(target)
+        other = Service(types.SimpleNamespace(max_context=0), tok, template,
+                        model_name=cfg.get("model_name", target["id"]))
+        other.apply_settings(settings)
+        other.read_shared(target["config"])
+        try:
+            other.effort_end = bool(effort_end_args(cfg, engine_exe(cfg), tok))
+        except ValueError as e:
+            raise ValueError(f"{target['id']} cannot be loaded: its config: {e}") from None
+        self.counter = (key, other)
+        return other
+
+    def v1_models(self) -> list[dict]:
+        """GET /v1/models: the loaded model under its name and each alias (#297), listed while unloaded when it loads on
+        use (like llama-server's router), and the image model.  #38: with switch_on_request every installed model that
+        can run, the loaded one first."""
+        loaded = self.loaded()
+        model = {"id": self.model, "object": "model", "status": {"value": "loaded"},
+                 "meta": {"n_ctx": self.reported_ctx()},
+                 "architecture": {"input_modalities": ["text", "image"] if self.vision is not None else ["text"],
+                                  "output_modalities": ["text"]}}
+        if not loaded and (self.switch_on_request or self.idle_unload_s or getattr(self.engine, "unloaded", False)):
+            model["status"] = {"value": "unloaded"}       # like llama-server's router: listed, loads on use
+            loaded = True
+        if self.aliases:                                  # #297: the aliases, and each one listed under its own id
+            model["aliases"] = list(self.aliases)
+        data = [model, *({**model, "id": x, "alias_of": self.model} for x in self.aliases)] if loaded else []
+        if self.switch_on_request:
+            for e in self.models():
+                if e["current"] or e["status"] == "unavailable":
+                    continue
+                other = {"id": e["id"], "object": "model",
+                         "status": {"value": "loading" if e["status"] == "loading" else "unloaded"},
+                         **({"meta": {"n_ctx": e["context"]}} if e["context"] else {}),
+                         "architecture": {"input_modalities": ["text", "image"] if e["multimodal"] else ["text"],
+                                          "output_modalities": ["text"]}}
+                names = [a for a in e["aliases"] if a != e["id"]]
+                if names:
+                    other["aliases"] = names
+                data += [other, *({**other, "id": x, "alias_of": e["id"]} for x in names)]
+        if self.images is not None:                       # the image model: POST /v1/images/generations
+            data.append({"id": self.images.model, "object": "model", "status": {"value": "loaded"},
+                         "architecture": {"input_modalities": ["text"], "output_modalities": ["image"]}})
+        return data
 
     def slot_action(self, slot: str, action: str, filename) -> tuple[int, dict]:
         """llama-server's POST /slots/{id}?action=save|restore {"filename": ...}: the conversation the engine holds,
@@ -5513,6 +5633,8 @@ def make_handler(svc: Service):
 
         record = None                                       # #332: this request's monitor record, if kept
         watch_done = None                                   # #430 #431: stops this request's disconnect watcher
+        cancel = None                                       # set when this request's client hangs up (_watch_client)
+        held = None                                         # #38: what the request holds until it ends (its model)
         body_read = False                                   # whether a handler took this request's body
         DRAIN_SECONDS = 5                                   # the longest an unread body is read and dropped
 
@@ -5521,6 +5643,7 @@ def make_handler(svc: Service):
 
         def handle_one_request(self):
             self.answer_started = False
+            self.held = contextlib.ExitStack()
             super().handle_one_request()
             self._drain_body()
 
@@ -5885,22 +6008,7 @@ def make_handler(svc: Service):
                 self._json(200, s)
             elif path in ("/v1/models", "/models"):
                 if self._authorized():
-                    loaded = svc.loaded()
-                    model = {"id": svc.model, "object": "model", "status": {"value": "loaded"},
-                             "meta": {"n_ctx": svc.reported_ctx()},
-                             "architecture": {"input_modalities": ["text", "image"] if svc.vision is not None else ["text"],
-                                              "output_modalities": ["text"]}}
-                    if not loaded and (svc.idle_unload_s or getattr(svc.engine, "unloaded", False)):
-                        model["status"] = {"value": "unloaded"}   # like llama-server's router: listed, loads on use
-                        loaded = True
-                    if svc.aliases:                       # #297: the aliases, and each one listed under its own id
-                        model["aliases"] = list(svc.aliases)
-                    data = [model, *({**model, "id": x, "alias_of": svc.model} for x in svc.aliases)]
-                    data = data if loaded else []
-                    if svc.images is not None:            # the image model: POST /v1/images/generations
-                        data.append({"id": svc.images.model, "object": "model", "status": {"value": "loaded"},
-                                     "architecture": {"input_modalities": ["text"], "output_modalities": ["image"]}})
-                    self._json(200, {"object": "list", "data": data})
+                    self._json(200, {"object": "list", "data": svc.v1_models()})
             elif path == "/props":
                 if self._authorized():
                     self._props()
@@ -5997,8 +6105,18 @@ def make_handler(svc: Service):
                     if not self._own_page("the model can be loaded or unloaded"):
                         return
                     if req.get("model") not in (None, svc.model):
-                        self._json(404, {"error": {"message": "model not found"}})
-                        return
+                        # #38: with switch_on_request another installed model's name loads it (and is not loaded to
+                        # unload); any other name is not found, as before
+                        other = svc.requested_model(req.get("model"))
+                        if other is None:
+                            self._json(404, {"error": {"message": "model not found"}})
+                            return
+                        if not other["current"]:
+                            if path == "/v1/load":
+                                svc.switch_model(other["id"])
+                            self._json(200, {"status": "loaded" if path == "/v1/load" else "not loaded",
+                                             **svc.v1_status()})
+                            return
                     if path == "/v1/unload":
                         wait_s = unload_wait(parse_qs(urlsplit(self.path).query).get("wait", [None])[0],
                                              svc.UNLOAD_WAIT_S)
@@ -6032,6 +6150,12 @@ def make_handler(svc: Service):
                     return
                 if path in ("/v1/chat/completions", "/v1/messages", "/v1/responses"):
                     self.record = svc.begin_request(path, req)
+                    # #38: the request holds its model to its end (no switch comes between its prompt and its answer);
+                    # with switch_on_request a request naming another installed model loads it first.  Its client is
+                    # watched from here (#430 #431, #1999), so a client that leaves while it waits gives up its place.
+                    self.cancel = threading.Event()
+                    self._watch_client(self.cancel)
+                    self.held.enter_context(svc.use_model(req.get("model"), self.cancel))
                 if path == "/v1/responses":
                     self._responses(req)
                 elif path.startswith("/slots/"):
@@ -6068,6 +6192,9 @@ def make_handler(svc: Service):
             except StructuredOutputError as e:
                 self._json(502, {"error": {"type": "structured_output_failed", "code": "structured_output_failed",
                                           "message": str(e)}})
+            except SwitchFailed as e:                        # #38: the model the request named did not start
+                self._json(503, responses_error_body(str(e), "server_error") if path == "/v1/responses"
+                           else {"error": {"type": "server_error", "message": str(e)}})
             except (GpuBusy, EngineStarting) as e:
                 ra = getattr(e, "retry_after", None)       # #1997 / #1994: a refusal that is worth retrying
                 self._json(503, {"error": {"type": "server_error", "message": str(e)}},
@@ -6094,6 +6221,8 @@ def make_handler(svc: Service):
                 self._note(outcome="disconnected")
                 raise                                        # as before #332: the server's own handling
             finally:
+                if self.held is not None:
+                    self.held.close()                        # #38: the model is free to switch
                 svc.drop_embeddings()                        # the images' file of a request that never got to run()
                 if self.watch_done is not None:
                     self.watch_done.set()
@@ -6404,8 +6533,7 @@ def make_handler(svc: Service):
             svc.reasoning_budget(req)                         # a bad value is a 400 before anything is sent
             stop_strings(req)                                 # ... and so is a bad stop / stop_sequences
             check_request_sampling(req)                       # ... and a sampling field of the wrong type
-            cancel = threading.Event()
-            self._watch_client(cancel)                       # #430 #431 (#1999: before prepare, which can take long)
+            cancel = self.cancel                             # watched since _post() (#430 #431 #1999)
             ids, thinking, max_new = svc.prepare(messages, tools, kw, max_new, force=force, req=req, cancel=cancel)
             _debug_req("openai", req, messages, tools, max_new, thinking, len(ids))
             run = run_with_mcp(svc, svc.mcp, messages, tools, kw, ids, thinking, max_new, max_req, req, cancel,
@@ -6465,8 +6593,7 @@ def make_handler(svc: Service):
                 return self._json(e.status, e.body())
             if title is not None:
                 return self._responses_ready(req, title)
-            cancel = threading.Event()
-            self._watch_client(cancel)                       # #430 #431 (#1999: before prepare, which can take long)
+            cancel = self.cancel                             # watched since _post() (#430 #431 #1999)
             try:
                 ids, thinking, tools, max_new, asm, validator, req = self._responses_prepare(req, cancel)
             except ClientGone:
@@ -6615,11 +6742,12 @@ def make_handler(svc: Service):
         def _count_tokens(self, req):
             """Anthropic's token count, which Claude Code asks for its context figures: the prompt this server would
             read for the same request, rendered and tokenized - the model does not run."""
-            req = svc.with_shared(req, "anthropic")
-            messages, tools, kw = anthropic_to_messages(req, svc.anthropic_think_unasked)
+            counter = svc.counter_for(req.get("model"))     # #38: another installed model's, its engine not started
+            req = counter.with_shared(req, "anthropic")
+            messages, tools, kw = anthropic_to_messages(req, counter.anthropic_think_unasked)
             stop_strings(req)                                 # the same 400 as the request itself would get
             check_request_sampling(req)                       # ... likewise a sampling field of the wrong type
-            self._json(200, {"input_tokens": len(svc.encode_prompt(messages, tools, kw, store=False))})
+            self._json(200, {"input_tokens": len(counter.encode_prompt(messages, tools, kw, store=False))})
 
         def _anthropic(self, req):
             svc.load()
@@ -6633,8 +6761,7 @@ def make_handler(svc: Service):
             svc.reasoning_budget(req)                         # a bad value is a 400 before anything is sent
             stop_strings(req)                                 # ... and so is a bad stop / stop_sequences
             check_request_sampling(req)                       # ... and a sampling field of the wrong type
-            cancel = threading.Event()
-            self._watch_client(cancel)                       # #430 #431 (#1999: before prepare, which can take long)
+            cancel = self.cancel                             # watched since _post() (#430 #431 #1999)
             ids, thinking, max_new = svc.prepare(messages, tools, kw, max_new, force=force, req=req, cancel=cancel)
             _debug_req("anthropic", req, messages, tools, max_new, thinking, len(ids))
             events = anthropic_events(svc, req, ids, thinking, tools, max_new, cancel, force=force, note=self._note)
@@ -7225,6 +7352,12 @@ def load_tokenizer(tpath: Path):
     return ST.Tokenizer.from_dir(tpath)
 
 
+def engine_exe(cfg: dict) -> str:
+    """The config's engine as an absolute path.  A relative "exe" is the config's cwd's: Windows' CreateProcess resolves
+    "engine/strata.exe" against nothing it is told about (WinError 2)."""
+    return cfg["exe"] if os.path.isabs(cfg["exe"]) else os.path.abspath(os.path.join(cfg.get("cwd") or ".", cfg["exe"]))
+
+
 def start_model(cfg: dict, tok, lazy: bool = False):
     """A run config's engine, started (with `lazy`: left for the first request to start), and its vision encoder:
     (engine, vision, sampling defaults, the engine's arguments for an effort at the end or None, and the replica
@@ -7263,9 +7396,7 @@ def start_model(cfg: dict, tok, lazy: bool = False):
     elif len(gpu_list(cfg)) > 1:
         print(f"[strata] GPUs {gpu_list(cfg)}: the later card(s) serve as the peer expert tier (--peer-device)",
               flush=True)
-    # a relative "exe" is the config's cwd's: Windows' CreateProcess resolves "engine/strata.exe" against nothing
-    # it is told about (WinError 2), so it is made absolute here
-    exe = cfg["exe"] if os.path.isabs(cfg["exe"]) else os.path.abspath(os.path.join(cfg.get("cwd") or ".", cfg["exe"]))
+    exe = engine_exe(cfg)
     try:
         silence = engine_silence_s(cfg)             # #481: checked before the (minutes-long) start
     except ValueError as e:
@@ -7463,6 +7594,10 @@ def main() -> int:
                     help="data-parallel replicas (opt-in): cut the \"gpu\" list into N equal groups and run one engine on "
                          "each, requests spread over them (also \"replicas\" in the config: a number, or "
                          "[{\"gpus\": [0, 1]}, {\"gpus\": [2, 3]}])")
+    ap.add_argument("--switch-on-request", action="store_true",
+                    help="list every installed model (each strata-<model>.json beside the config) in /v1/models, and "
+                         "load the one a request names, the loaded one stopped first (also \"switch_on_request\": "
+                         "true in the config; default: every request is answered by the loaded model)")
     a = ap.parse_args()
     cfg = read_config(a.config) if a.config else {}
     split_joined_args(cfg)
@@ -7595,6 +7730,14 @@ def main() -> int:
         svc.models_root = Path(a.config).resolve().parent   # the other models' configs are beside this one
     if a.config:                                        # the Chat settings shared with other apps, from last time
         svc.read_shared(a.config)
+    switch = cfg.get("switch_on_request", False)        # #38: opt-in, read from the config the server starts with
+    if not isinstance(switch, bool):
+        raise SystemExit(f"[strata] config \"switch_on_request\" must be true or false, not {switch!r}")
+    svc.switch_on_request = a.switch_on_request or switch
+    if svc.switch_on_request:
+        names = [e["id"] for e in svc.models() if e["status"] != "unavailable"]
+        print(f"[strata] switch_on_request: a request naming another installed model loads it ({len(names)} in "
+              f"/v1/models: {', '.join(names)})", flush=True)
     if hub is not None:
         import atexit
         svc.mcp = hub
