@@ -174,6 +174,121 @@ class Switch(unittest.TestCase):
             self.svc.switch_model("gamma")
         self.assertEqual(self.old.stops, 0)
 
+    def configure(self, cfg_path, **keys):
+        """Keys added to a model's run config, as a user writes them (None: the key taken out again)."""
+        cfg = json.loads(cfg_path.read_text())
+        cfg.update(keys)
+        cfg_path.write_text(json.dumps({k: v for k, v in cfg.items() if v is not None}))
+
+    def fresh_engines(self):
+        """start_model() gives a new engine at every start, and the configs it was given are kept."""
+        started = []
+
+        def start(cfg, tok, lazy=False):
+            started.append(cfg)
+            return Stopped(tok, "Hi."), None, S.sampling_defaults_from_config(cfg), None, []
+        p = mock.patch.object(S, "start_model", start)
+        p.start()
+        self.addCleanup(p.stop)
+        return started
+
+    def test_the_new_model_brings_its_own_settings(self):
+        """#37: a switch used to keep the first model's settings except sampling, aliases and effort_position."""
+        self.fresh_engines()
+        self.configure(self.b, drop_oldest=True, preserve_thinking=True, reasoning_effort="low",
+                       reasoning_budget_tokens=512, anthropic_thinking="on_request", tool_call_recovery=True,
+                       repeat_stop_tokens=9, reasoning_loop_recovery="stop", min_free_vram_mib=1000,
+                       before_load=["true"], aliases=["b2"], sampling={"temperature": 0.3})
+        self.svc.switch_model("beta")
+        s = self.svc
+        self.assertEqual((s.drop_oldest, s.preserve_thinking, s.config_effort, s.reasoning_budget_tokens,
+                          s.anthropic_think_unasked, s.tool_call_recovery, s.repeat_stop_tokens,
+                          s.reasoning_loop_recovery, s.min_free_vram_mib, s.before_load, s.aliases,
+                          s.sampling_defaults),
+                         (True, True, "low", 512, False, True, 9, "stop", 1000, ["true"], ["b2"], {"temperature": 0.3}))
+        self.svc.switch_model("alpha")                    # alpha's config sets none of them: each one's default again
+        self.assertEqual((s.drop_oldest, s.preserve_thinking, s.config_effort, s.reasoning_budget_tokens,
+                          s.anthropic_think_unasked, s.tool_call_recovery, s.repeat_stop_tokens,
+                          s.reasoning_loop_recovery, s.min_free_vram_mib, s.before_load, s.aliases,
+                          s.sampling_defaults),
+                         (False, False, None, 0, True, False, S.REPEAT_STOP_TOKENS, False, 0, None, [], {}))
+        self.assertEqual(s.reasoning_budget({}), None)
+
+    def test_command_line_options_stay_for_every_model(self):
+        started = self.fresh_engines()
+        self.svc.overrides = {"fit_max_tokens": True, "idle_unload_s": None, "min_free_vram_mib": 77, "before_load": None}
+        self.svc.cfg_overrides = {"gpu": 1}
+        self.configure(self.b, min_free_vram_mib=5000, fit_max_tokens=False, before_load="true")
+        self.svc.switch_model("beta")
+        self.assertEqual((self.svc.min_free_vram_mib, self.svc.fit_max_tokens, self.svc.before_load), (77, True, "true"))
+        self.assertEqual((started[-1]["gpu"], self.svc.gpu_indices, self.svc.gpu_index), (1, [1], 1))
+
+    def test_a_bad_setting_is_refused_before_the_old_model_stops(self):
+        for key, value, words in (("repeat_stop_tokens", -1, "repeat_stop_tokens"),
+                                  ("reasoning_effort", "extreme", "reasoning_effort"),
+                                  ("aliases", 5, "aliases"), ("idle_unload_s", "soon", "idle_unload_s")):
+            with self.subTest(key=key):
+                self.configure(self.b, **{key: value})
+                with self.assertRaisesRegex(ValueError, f"beta cannot be loaded: its config: .*{words}"):
+                    self.svc.switch_model("beta")
+                self.assertEqual((self.old.stops, self.svc.model), (0, "alpha"))
+                self.configure(self.b, **{key: None})
+
+    def test_a_model_that_does_not_start_keeps_the_old_settings(self):
+        self.svc.drop_oldest, self.svc.config_effort = True, "high"
+        self.configure(self.b, drop_oldest=False, reasoning_effort="none")
+
+        def fails(cfg, tok, lazy=False):
+            raise RuntimeError("no VRAM")
+        with mock.patch.object(S, "start_model", fails):
+            with self.assertRaises(SwitchFailed):
+                self.svc.switch_model("beta")
+        self.assertEqual((self.svc.model, self.svc.drop_oldest, self.svc.config_effort), ("alpha", True, "high"))
+
+    def test_the_shared_chat_settings_follow_the_model(self):
+        self.fresh_engines()
+        Path(str(self.b.with_suffix("")) + ".shared-settings.json").write_text(json.dumps({"top_k": 9}))
+        self.svc.read_shared(self.a)
+        self.assertEqual(self.svc.shared, {})
+        self.svc.switch_model("beta")
+        self.assertEqual((self.svc.shared, Path(self.svc.shared_path).name), ({"top_k": 9}, "strata-beta.shared-settings.json"))
+        self.svc.set_shared({"top_k": 3})                 # POST /settings saves it for the model in use
+        self.svc.switch_model("alpha")
+        self.assertEqual(self.svc.shared, {})
+        self.svc.switch_model("beta")
+        self.assertEqual(self.svc.shared, {"top_k": 3})
+
+    def test_what_belonged_to_the_old_model_is_left_behind(self):
+        self.fresh_engines()
+        saved = self.root / "image-job.session"
+        saved.write_bytes(b"alpha's conversation")
+        self.svc.restore_after_load, self.svc.vision_held, self.svc.warm_ids = str(saved), True, [1, 2, 3]
+        self.svc.switch_model("beta")
+        self.assertEqual((self.svc.restore_after_load, self.svc.vision_held, self.svc.warm_ids), (None, False, None))
+        self.assertFalse(saved.exists())
+
+    def test_idle_unload_starts_with_the_first_model_that_has_it(self):
+        self.fresh_engines()
+        self.svc.start_idle_unload()                     # alpha has none: no thread
+        self.assertIsNone(self.svc.idle_thread)
+        self.configure(self.b, idle_unload_s=600)
+        self.svc.switch_model("beta")
+        thread = self.svc.idle_thread
+        self.assertTrue(thread is not None and thread.is_alive())
+        self.assertEqual(self.svc.idle_unload_s, 600)
+        self.svc.switch_model("alpha")                    # alpha stays loaded: 0 again, the one thread waits
+        self.assertEqual((self.svc.idle_unload_s, self.svc.idle_thread), (0, thread))
+
+    def test_shutdown_ends_the_engine_that_runs_now(self):
+        """#37: Ctrl+C after a switch closed the engine the server started with, which had already stopped."""
+        self.fresh_engines()
+        self.svc.switch_model("beta")
+        now, httpd = self.svc.engine, mock.Mock()
+        self.assertIsNot(now, self.old)
+        S.shutdown(self.svc, httpd)
+        httpd.shutdown.assert_called_once_with()
+        self.assertFalse(now.running)
+
     def test_the_routes(self):
         httpd = serve(self.svc, port=0)
         self.addCleanup(httpd.shutdown)
@@ -203,24 +318,83 @@ class Start(unittest.TestCase):
     """main() with --engine strata as far as "ready": 0.1.42's line for the replicas' cards read `groups`, a name of
     start_model()'s, and every start of a real engine ended in a NameError."""
 
-    def test_main_reaches_ready(self):
+    def start(self, keys=None, argv=()):
+        """main() for a run config with `keys`, stopped at once (Ctrl+C): (its output, the Service it served)."""
         real_sleep = time.sleep
 
         def sleep(s):                       # Ctrl+C in main()'s wait, real sleeps in the server's threads
             if threading.current_thread() is threading.main_thread():
                 raise KeyboardInterrupt
             real_sleep(s)
+        served = []
+        real_serve = S.serve
+
+        def serve_it(svc, host="127.0.0.1", port=0):
+            served.append(svc)
+            return real_serve(svc, host=host, port=port)
         with tempfile.TemporaryDirectory() as d:
             cfg = install(Path(d), "alpha", "qwen35moe", "a.gguf")
+            cfg.write_text(json.dumps({**json.loads(cfg.read_text()), **(keys or {})}))
             tok = ByteTokenizer()
             out = io.StringIO()
-            with mock.patch.object(sys, "argv", ["server.py", "--engine", "strata", "--config", str(cfg), "--port", "0"]), \
+            with mock.patch.object(sys, "argv", ["server.py", "--engine", "strata", "--config", str(cfg), "--port", "0",
+                                                 *argv]), \
                     mock.patch.object(S, "load_tokenizer", lambda p: tok), \
-                    mock.patch.object(S, "start_model", lambda cfg, tok, lazy=False: (Stopped(tok), None, {}, None, None)), \
+                    mock.patch.object(S, "start_model", lambda cfg, tok, lazy=False:
+                                      (Stopped(tok), None, S.sampling_defaults_from_config(cfg), None, None)), \
+                    mock.patch.object(S, "serve", serve_it), \
                     mock.patch.object(S.time, "sleep", sleep), mock.patch.object(S.signal, "signal"), \
                     contextlib.redirect_stdout(out):
                 self.assertEqual(S.main(), 0)
-        self.assertIn("ready: http://127.0.0.1:0/v1", out.getvalue())
+        return out.getvalue(), served[0]
+
+    def test_main_reaches_ready(self):
+        out, _ = self.start()
+        self.assertIn("ready: http://127.0.0.1:0/v1", out)
+
+    def test_the_config_settings_are_as_before(self):
+        """#37 moved the model's settings into model_settings(): main() sets what it set before (0.1.44.1-poly.6)."""
+        keys = {"drop_oldest": True, "preserve_thinking": True, "reasoning_close_retry": True, "fit_max_tokens": True,
+                "reasoning_effort": "low", "codex_thread_titles": True, "codex_compaction_cache": True,
+                "aliases": ["a1", "a2"], "anthropic_thinking": "on_request", "tool_call_recovery": True,
+                "warm_start": True, "repeat_stop_tokens": 7, "reasoning_budget_tokens": 512,
+                "reasoning_loop_recovery": True, "idle_unload_s": 60, "min_free_vram_mib": 1000, "before_load": "true",
+                "before_load_timeout_s": 5, "before_load_ignore_failure": True, "before_load_strict": True,
+                "memory_debug": True, "gpu": 0, "backend": "cuda", "sampling": {"temperature": 0.7}}
+        out, svc = self.start(keys)
+        got = {k: getattr(svc, k) for k in (
+            "aliases", "anthropic_think_unasked", "backend", "before_load", "before_load_ignore_failure",
+            "before_load_strict", "before_load_timeout_s", "codex_compaction_cache", "codex_thread_titles",
+            "config_effort", "drop_oldest", "fit_max_tokens", "gpu_index", "gpu_indices", "idle_unload_s",
+            "memory_debug", "min_free_vram_mib", "preserve_thinking", "reasoning_budget_tokens", "reasoning_close_retry",
+            "reasoning_loop_recovery", "repeat_stop_tokens", "sampling_defaults", "tool_call_recovery", "warm_start")}
+        self.assertEqual(got, {
+            "aliases": ["a1", "a2"], "anthropic_think_unasked": False, "backend": "cuda", "before_load": "true",
+            "before_load_ignore_failure": True, "before_load_strict": True, "before_load_timeout_s": 5.0,
+            "codex_compaction_cache": True, "codex_thread_titles": True, "config_effort": "low", "drop_oldest": True,
+            "fit_max_tokens": True, "gpu_index": 0, "gpu_indices": [0], "idle_unload_s": 60.0, "memory_debug": True,
+            "min_free_vram_mib": 1000, "preserve_thinking": True, "reasoning_budget_tokens": 512,
+            "reasoning_close_retry": True, "reasoning_loop_recovery": "recover", "repeat_stop_tokens": 7,
+            "sampling_defaults": {"temperature": 0.7}, "tool_call_recovery": True, "warm_start": True})
+        for line in ("[strata] thinking level: low", "[strata] model aliases: a1, a2",
+                     "[strata] thinking budget: 512 tokens", "[strata] the model unloads after 60.0 s"):
+            self.assertIn(line, out)
+
+    def test_the_command_line_wins_and_is_kept_for_a_switch(self):
+        out, svc = self.start({"idle_unload_s": 60, "min_free_vram_mib": 5},
+                              ["--idle-unload", "5", "--fit-max-tokens", "--min-free-vram-mib", "77",
+                               "--before-load", "echo hi", "--gpu", "1"])
+        self.assertEqual((svc.idle_unload_s, svc.fit_max_tokens, svc.min_free_vram_mib, svc.before_load),
+                         (5.0, True, 77, "echo hi"))
+        self.assertEqual(svc.overrides, {"fit_max_tokens": True, "idle_unload_s": 5.0, "min_free_vram_mib": 77,
+                                         "before_load": "echo hi"})
+        self.assertEqual(svc.cfg_overrides, {"gpu": 1})
+
+    def test_a_bad_value_still_stops_the_start(self):
+        for keys, words in (({"repeat_stop_tokens": -1}, '"repeat_stop_tokens" must be a whole number'),
+                            ({"idle_unload_s": "abc"}, '"idle_unload_s" must be a number of seconds')):
+            with self.subTest(keys=keys), self.assertRaisesRegex(SystemExit, r"^\[strata\] config " + words):
+                self.start(keys)
 
 
 if __name__ == "__main__":

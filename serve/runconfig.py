@@ -4,8 +4,8 @@ A short list of documented keys can be read and changed from PolyStrata's own pa
 else in the file - the keys setup writes, the network and security keys (host, api_key, cors_origins,
 trusted_origins, allowed_hosts), the MCP servers and before_load (which run programs), sampling keys not listed
 here - is kept as it is: a change touches only the keys it names (as setup run again keeps the user's keys, #629).
-The earlier file is kept as strata-<model>.json.bak.  The server reads the config when it starts, so a change is
-used from the next start on.
+The earlier file is kept as strata-<model>.json.bak.  The server reads the config when it starts and when it switches
+to the model (#37), so a change is used from the next start of, or switch to, the model.
 """
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def view(cfg: dict, path: str | Path) -> dict:
                     "kind": "number" if k in ("sampling", "arg", "int>=0", "num>=0") else k,
                     **({"choices": kind[1]} if k == "enum" else {})})
     return {"file": Path(path).name, "keys": out,
-            "note": "Saved to the run config; used from the next start of the model."}
+            "note": "Saved to the run config; used from the next start of, or switch to, the model."}
 
 
 def _number(key, v, whole=False, lo=0.0, hi=None, lo_open=False):
