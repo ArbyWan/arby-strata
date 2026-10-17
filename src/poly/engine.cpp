@@ -496,6 +496,7 @@ void Engine::vmm_map(Mapped& m, size_t bytes, size_t piece, const char* what) {
 
 // Gives back the pieces of m that lie past its first `bytes`.  The card must be done with them.
 void Engine::vmm_unmap(Mapped& m, size_t bytes) {
+    const size_t had = m.mapped;
     while (!m.pieces.empty() && m.mapped - m.pieces.back().second >= bytes) {
         const auto [h, n] = m.pieces.back();
         m.mapped -= n;
@@ -503,6 +504,36 @@ void Engine::vmm_unmap(Mapped& m, size_t bytes) {
         cu_ck(cuMemUnmap(m.base + m.mapped, n), "unmapping VRAM");
         cu_ck(cuMemRelease(h), "unmapping VRAM");
     }
+#ifdef STRATA_VMM_RELEASE_WITH_ADDRESSES
+    // On ROCm the released pieces stay the process's while their addresses are reserved (an RX 9070 XT: 320 MiB
+    // unmapped and released, 32 MiB more free; the addresses freed, all of it).  The kept pieces leave their
+    // addresses, which are freed and reserved again where they were, and come back with their bytes.
+    if (m.mapped == had || !m.base) return;
+    for (size_t at = m.mapped, i = m.pieces.size(); i > 0; --i) {
+        at -= m.pieces[i - 1].second;
+        cu_ck(cuMemUnmap(m.base + at, m.pieces[i - 1].second), "unmapping VRAM");
+    }
+    const CUdeviceptr was = m.base;
+    cu_ck(cuMemAddressFree(m.base, m.reserved), "unmapping VRAM");
+    CUdeviceptr p = 0;
+    cu_ck(cuMemAddressReserve(&p, m.reserved, 0, was, 0), "reserving addresses for VRAM");
+    if (p != was) {   // the slots and the recorded launches point into the old addresses
+        (void) cuMemAddressFree(p, m.reserved);
+        throw std::runtime_error("unmapping VRAM: the addresses could not be reserved again where they were");
+    }
+    CUmemAccessDesc access = {};
+    access.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access.location.id = device_;
+    access.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    size_t at = 0;
+    for (const auto& [h, n] : m.pieces) {
+        cu_ck(cuMemMap(m.base + at, n, 0, h, 0), "mapping VRAM");
+        cu_ck(cuMemSetAccess(m.base + at, n, &access, 1), "mapping VRAM");
+        at += n;
+    }
+#else
+    (void) had;
+#endif
 }
 
 // For the destructor: what is left of m, and its addresses, without throwing.
@@ -520,7 +551,7 @@ void* Engine::kv_alloc(size_t bytes, int per) {
     if (again_ != SIZE_MAX) return bufs_.at(again_++).p;
     const size_t all = (size_t) ((opt_.max_context + per - 1) / per) * bytes;
     void* p = nullptr;
-    if (!vmm_) {
+    if (!vmm_ || !opt_.kv_grow) {
         p = dmalloc(all, "the attention cache");
     } else {
         Kv k;
@@ -1525,11 +1556,13 @@ void Engine::load(const Options& o) {
     ev_ = ev_row_[0];
     blas_ = blas_create(st_);
     // The card maps VRAM onto reserved addresses a piece at a time: the attention caches grow with the sequence,
-    // and the expert cache has what a short one leaves (cover()).
+    // and the expert cache has what a short one leaves (cover()).  With --kv-whole the attention caches are one
+    // allocation each (kv_alloc()) and the expert cache still gives VRAM to other programs and takes it back
+    // (mind_vram()): refilled in one allocation instead, it only ever got smaller.
     ck(cudaGetDevice(&device_), "cudaGetDevice");
     CUdevice dev = 0;
     int vmm = 0;
-    if (opt_.kv_grow && cuDeviceGet(&dev, device_) == CUDA_SUCCESS &&
+    if (cuDeviceGet(&dev, device_) == CUDA_SUCCESS &&
         cuDeviceGetAttribute(&vmm, CU_DEVICE_ATTRIBUTE_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED, dev) == CUDA_SUCCESS && vmm) {
         CUmemAllocationProp prop = {};
         prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;

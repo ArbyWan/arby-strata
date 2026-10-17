@@ -4,6 +4,10 @@
 // (cuMemCreate, cuMemMap, ...) onto HIP's memory management API, which the HIP runtime provides.
 #include <hip/hip_runtime.h>
 
+// ROCm gives the VRAM of a released handle back only when the addresses it was mapped at are freed, and frees only
+// a whole reservation (#13): Engine::vmm_unmap() reserves the addresses again for the pieces it keeps.
+#define STRATA_VMM_RELEASE_WITH_ADDRESSES 1
+
 typedef hipError_t CUresult;
 typedef int CUdevice;
 // HIP's own CUdeviceptr/handle equivalents are pointer-typed; CUDA's are integers, and strata-poly's Mapped
