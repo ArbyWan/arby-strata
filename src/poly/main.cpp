@@ -1135,14 +1135,7 @@ int main(int argc, char** argv) {
         else if (a == "--kv") {
             const std::string fmt = val();
             if (fmt == "fp16") o.kv_format = KvFmt::kFp16;
-            else if (fmt == "q8_0") {
-#ifdef STRATA_USE_HIP
-                std::fprintf(stderr, "strata-poly: --kv q8_0 is not supported on this backend (CUDA only)\n");
-                std::exit(2);
-#else
-                o.kv_format = KvFmt::kQ8_0;
-#endif
-            }
+            else if (fmt == "q8_0") o.kv_format = KvFmt::kQ8_0;
             else {
                 std::fprintf(stderr, "strata-poly: --kv %s: unknown format (use fp16 or q8_0)\n", fmt.c_str());
                 std::exit(2);
