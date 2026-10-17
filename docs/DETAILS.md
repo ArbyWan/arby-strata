@@ -767,7 +767,7 @@ The server listens on `http://127.0.0.1:8080` (change with `--port` in setup, or
 | OpenAI Chat Completions (stream and non-stream, tools) | `POST /v1/chat/completions` |
 | Anthropic Messages (stream and non-stream, tools) | `POST /v1/messages` |
 | OpenAI Responses (stream and non-stream, tools; stateless, [below](#the-responses-api-and-codex-cli)) | `POST /v1/responses` |
-| Model list / health | `GET /v1/models`, `GET /models`, `GET /health` |
+| Model list / health (every installed model with `switch_on_request`, [below](#using-it)) | `GET /v1/models`, `GET /models`, `GET /health` |
 | Model properties | `GET /props` (also accepts `?model=<loaded-model-id>`) |
 | What the model is doing right now | `GET /status`, `GET /slots` (busy or idle, with `n_prompt_tokens`; one entry per slot with `--batch`) |
 | Save / restore the conversation to a file (session files, below) | `POST /slots/0?action=save\|restore` |
@@ -800,7 +800,7 @@ token, time between tokens and request duration (p50 / p95), the prompt cache an
 own panels (state, batch slots, rates, expert cache hit rate, GPU and RAM). Its first row uses only vLLM's names, so
 it also reads a vLLM server.
 
-`/models` and `/v1/models` list only the loaded model, with its context limit and input modalities. `/props` exposes the original chat template, context limit, configured generation defaults (shared settings take precedence), model path and engine version when available. Context means the full engine context, not the resident KV window. `n_predict: -1` means no fixed output cap. Unconfigured sampling fields are omitted. `/slots` uses llama.cpp's names: `n_ctx` and `n_prompt_tokens` (the running request's prompt size, kept after it ends: what a front-end's context meter divides by `n_ctx`). `total_slots` in `/props` is the number of `--batch` slots (1 without). `autoload` has no effect; an unknown `model` returns 404. These metadata endpoints and `/slots` require the API key when one is configured. They do not load, unload or restart models.
+`/models` and `/v1/models` list only the loaded model, with its context limit and input modalities (with `switch_on_request`, every installed model that can run, the loaded one first; see Switching models on request below). `/props` exposes the original chat template, context limit, configured generation defaults (shared settings take precedence), model path and engine version when available. Context means the full engine context, not the resident KV window. `n_predict: -1` means no fixed output cap. Unconfigured sampling fields are omitted. `/slots` uses llama.cpp's names: `n_ctx` and `n_prompt_tokens` (the running request's prompt size, kept after it ends: what a front-end's context meter divides by `n_ctx`). `total_slots` in `/props` is the number of `--batch` slots (1 without). `autoload` has no effect; an unknown `model` returns 404. These metadata endpoints and `/slots` require the API key when one is configured. They do not load, unload or restart models.
 
 `chat_template_caps` uses llama.cpp's field names. PolyStrata checks them when loading the active template by rendering
 small requests; a rejected or omitted feature is `false`, and a template that fails a probe in any way only turns that
@@ -1013,10 +1013,27 @@ print(r.choices[0].message.content)
 - **Model aliases** (0.1.32). `"aliases": ["qwen", "local-model"]` in `strata-<model>.json` lists the model under
   those names too in `/v1/models` (each with its own `id`, and in the model's `aliases`), like llama-server's
   `--alias`; a request naming one is answered under that name. Any other name is still served, as before.
+- **Switching models on request (#38, opt-in).** `"switch_on_request": true` in the `strata-<model>.json` the server
+  starts with (or `--switch-on-request`) makes the API work like llama-server's router: `/v1/models` lists every
+  installed model that can run (each `strata-<model>.json` beside that config, with its aliases; status `loaded`,
+  `unloaded` or `loading`), and a request that names another one loads it: the loaded model is stopped first (one
+  model is in memory at a time), then the named one starts with its own settings (Switching models in the web page,
+  below). The name must be a model's name, one of its aliases or its config file's name, whole
+  (`tiel-coder-35b-a3b-ud-q4_k_xl` or `strata-tiel-ud-q4_k_xl`, not `tiel`), so a client never starts a switch by
+  accident; any other name, or none, is answered by the loaded model, as without the key. Requests already running
+  finish first; requests are served in the order they came, and when a switch is done every request waiting for that
+  model goes together.
+  `/v1/messages/count_tokens` counts with the named model's tokenizer and template without loading it.
+  `POST /v1/load {"model": "<name>"}` switches the same way. A model that cannot run answers 400 with the reason,
+  one that does not start 503 (the earlier one is loaded again). Measured on an RTX 4060 Laptop (8 GB, Linux, 46 GB
+  RAM) with five installed models (Gemma 4 26B-A4B in two quantizations, Tiel Coder 35B-A3B, LFM2.5-24B-A2B,
+  MiniCPM-V 4.7), driven with the OpenAI Python SDK: over two runs a switch took 32-86 s from the request to its
+  short answer (the earlier model stopped, the named one loaded, the reply written), and one engine ran at a time
+  throughout.
 - **Model settings in the web page (0.1.39, #564).** The About tab's Model settings card shows and changes a few of
   the keys above in `strata-<model>.json`: the `sampling` defaults (temperature, top_p, top_k, min_p),
   `reasoning_budget_tokens`, `fit_max_tokens`, `anthropic_thinking`, `effort_position`, `aliases`, `idle_unload_s`,
-  `lazy_load`, `engine_silence_s`, `api_monitor`, `open_browser` and `--vram-reserve-mib`. An empty field removes the
+  `lazy_load`, `engine_silence_s`, `api_monitor`, `switch_on_request`, `open_browser` and `--vram-reserve-mib`. An empty field removes the
   key (its default). Every other key of the file stays as it is, the earlier file is kept as
   `strata-<model>.json.bak`, and the model uses the change from its next start, or the next switch to it. Only
   PolyStrata's own page can save (JSON, the API key when one is set, as for the Chat settings); the network, key, MCP
@@ -1030,8 +1047,9 @@ print(r.choices[0].message.content)
   `port`, `api_key`, `allowed_hosts`, `cors_origins`, `trusted_origins`, `api_monitor`, `mcp_servers`,
   `slot_save_path`, `prevent_sleep`, `env_to_user`, `open_browser`, `images` and `lazy_load`. Options given to
   `serve/server.py` (`--gpu`, `--idle-unload`, `--min-free-vram-mib`, `--before-load`, `--fit-max-tokens`) apply to
-  every model. A config with a bad value is refused before the loaded model stops; a model that does not start
-  leaves the earlier one loaded again, with its settings.
+  every model. The file is read as at the start (an option written as one entry of `args` is split, #2267; a JSON
+  mistake is named with its line and column), and a config with a bad value is refused before the loaded model stops;
+  a model that does not start leaves the earlier one loaded again, with its settings.
 - **From other devices on your network.** The server listens on your PC only (`127.0.0.1`) unless you say otherwise:
   run setup with `START-HERE.bat --setup --host 0.0.0.0 --api-key some-long-secret` (or add `"host": "0.0.0.0"` and
   `"api_key": "..."` to `strata-<model>.json`). The server window then prints this PC's addresses
@@ -2182,7 +2200,8 @@ default.
 `POST /v1/load` and `/v1/unload` are JSON control aliases for integrations, accepting `{}` or
 `{"model":"<configured model>"}` and returning model status. They require the configured API key,
 `application/json`, and no foreign browser Origin. They return **409** while a request is active or queued,
-and **404** for an unknown model. Existing `/load` and `/unload` behavior is preserved. `/api/health` aliases
+and **404** for an unknown model. With `switch_on_request`, `/v1/load` with another installed model's name switches
+to it (after the running requests, up to 120 s, else 409), and `/v1/unload` with it answers `"not loaded"`. Existing `/load` and `/unload` behavior is preserved. `/api/health` aliases
 `/health`; `/v1/status` exposes `loaded` and `auto_load`. The unloaded model remains discoverable.
 
 Unloading and shutdown close the native engine's stdin after sending `QUIT`, allowing Windows' detached

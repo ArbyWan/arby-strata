@@ -120,6 +120,17 @@ class Registry(unittest.TestCase):
         self.assertIsNone(registry.find(models, "e"))       # in neither name alone
         self.assertIsNone(registry.find(models, "glm"))
 
+    def test_resolve_takes_a_whole_name_only(self):
+        """#38: the name a request sends: the model's, an alias or a config file's, exactly - never a part of one."""
+        cfg = self.root / "strata-gemma.json"
+        cfg.write_text(json.dumps({**json.loads(cfg.read_text()), "aliases": "g4, local-gemma"}))
+        models = registry.discover(self.root)
+        self.assertEqual(registry.find(models, "gemma")["aliases"], ["g4", "local-gemma"])
+        for name in ("gemma", "GEMMA", "g4", "Local-Gemma", "strata-gemma.json", "strata-gemma"):
+            self.assertEqual(registry.resolve(models, name)["id"], "gemma", name)
+        for name in ("QWEN", "gem", "g", "", None, 5):
+            self.assertIsNone(registry.resolve(models, name), name)
+
 
 class Switch(unittest.TestCase):
     def setUp(self):
@@ -234,6 +245,24 @@ class Switch(unittest.TestCase):
                 self.assertEqual((self.old.stops, self.svc.model), (0, "alpha"))
                 self.configure(self.b, **{key: None})
 
+    def test_a_switch_reads_the_config_as_the_start_does(self):
+        """0.1.45's start splits an option written as one entry of "args" (#2267) and lifts "--reasoning-effort" out of
+        them (#1641); a switch read the file with json.loads only, so the engine got "--max-context 8192" as one
+        argument and did not start."""
+        started = self.fresh_engines()
+        cfg = json.loads(self.b.read_text())
+        self.configure(self.b, args=[cfg["args"][0], cfg["args"][1], "--max-context 8192", "--reasoning-effort=low"])
+        self.svc.switch_model("beta")
+        self.assertEqual(started[-1]["args"][2:], ["--max-context", "8192"])
+        self.assertEqual(self.svc.config_effort, "low")
+
+    def test_a_config_that_is_not_json_is_refused_with_its_place(self):
+        target = registry.find(self.svc.models(), "beta")
+        self.b.write_text(self.b.read_text().replace('"args"', '"args",'))      # a stray comma, as a hand edit leaves
+        with self.assertRaisesRegex(ValueError, r"^beta cannot be loaded: .*strata-beta\.json is not valid JSON: .* line 1"):
+            self.svc.model_config(target)
+        self.assertEqual((self.old.stops, self.svc.model), (0, "alpha"))
+
     def test_a_model_that_does_not_start_keeps_the_old_settings(self):
         self.svc.drop_oldest, self.svc.config_effort = True, "high"
         self.configure(self.b, drop_oldest=False, reasoning_effort="none")
@@ -314,6 +343,233 @@ class Switch(unittest.TestCase):
         self.assertEqual(call("/api/models/current")[1]["loaded"], False)
 
 
+class Wide(ByteTokenizer):
+    """Another model's tokenizer: two ids for every byte of text (encode() and the prompt encoder's encode_marked())."""
+    def encode_marked(self, text, parse_special=False, plain=()):
+        ids, marks = super().encode_marked(text, parse_special, plain)
+        length = [0]                                    # the wide length after each of the narrow ids
+        for x in ids:
+            length.append(length[-1] + (2 if x < 256 else 1))
+        return [t for x in ids for t in ((x, x) if x < 256 else (x,))], [(i, length[n]) for i, n in marks]
+
+
+class OnRequest(unittest.TestCase):
+    """#38: "switch_on_request" - every installed model in /v1/models, and a request naming one loads it."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = Path(self.dir.name)
+        self.a = install(self.root, "alpha", "qwen35moe", "alpha.gguf")
+        self.b = install(self.root, "beta", "gemma4", "beta.gguf")
+        self.b.write_text(json.dumps({**json.loads(self.b.read_text()), "aliases": ["b2"]}))
+        install(self.root, "gone", "gemma4", "gone.gguf")
+        (self.root / "gone.gguf").unlink()
+        registry._seen.clear()
+        self.tok = ByteTokenizer()
+        self.first = Stopped(self.tok, "x</think>\n\nI am alpha.")
+        self.svc = Service(self.first, self.tok, ChatTemplate(S.ROOT / "serve/chat_template.jinja"), model_name="alpha")
+        self.svc.config_path, self.svc.models_root = str(self.a), self.root
+        self.svc.set_aliases(["a1"])
+        self.started = []                          # (model, when) for every engine start_model() gave
+        self.fails = set()
+
+        def start(cfg, tok, lazy=False):
+            if cfg["model_name"] in self.fails:
+                raise RuntimeError("no VRAM")
+            self.started.append((cfg["model_name"], time.time()))
+            return Stopped(tok, f"x</think>\n\nI am {cfg['model_name']}."), None, {}, None, []
+        for p in (mock.patch.object(S, "load_tokenizer", lambda p: self.tok), mock.patch.object(S, "start_model", start)):
+            p.start()
+            self.addCleanup(p.stop)
+        httpd = serve(self.svc, port=0)
+        self.addCleanup(httpd.server_close)              # after shutdown: its hardware sampler ends too
+        self.addCleanup(httpd.shutdown)
+        self.base = f"http://127.0.0.1:{httpd.server_address[1]}"
+
+    def call(self, path, body=None):
+        req = urllib.request.Request(self.base + path, None if body is None else json.dumps(body).encode(),
+                                     {"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            with e:
+                return e.code, json.load(e)
+
+    def chat(self, model, **more):
+        code, body = self.call("/v1/chat/completions", {"model": model, "messages": [{"role": "user", "content": "hi"}],
+                                                         **more})
+        return code, (body["model"], body["choices"][0]["message"]["content"]) if code == 200 else body
+
+    def test_off_everything_is_as_before(self):
+        """Without the key: the same /v1/models bytes as 0.1.44.1-poly.6, any name answered by the loaded model."""
+        loaded = {"object": "list", "data": [
+            {"id": "alpha", "object": "model", "status": {"value": "loaded"}, "meta": {"n_ctx": 4096},
+             "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]}, "aliases": ["a1"]},
+            {"id": "a1", "object": "model", "status": {"value": "loaded"}, "meta": {"n_ctx": 4096},
+             "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]}, "aliases": ["a1"],
+             "alias_of": "alpha"}]}
+        self.assertEqual(self.call("/v1/models"), (200, loaded))
+        self.assertEqual(self.chat("beta"), (200, ("alpha", "I am alpha.")))
+        self.assertEqual(self.call("/v1/load", {"model": "beta"})[0], 404)
+        self.assertEqual(self.started, [])
+        self.first.unload()                             # an engine that stopped: listed only when it loads on use
+        self.assertEqual(self.call("/v1/models"), (200, {"object": "list", "data": []}))
+        self.svc.idle_unload_s = 60
+        unloaded = json.loads(json.dumps(loaded).replace('"loaded"', '"unloaded"'))
+        self.assertEqual(self.call("/v1/models"), (200, unloaded))
+
+    def test_every_installed_model_is_listed(self):
+        self.svc.switch_on_request = True
+        code, body = self.call("/v1/models")
+        self.assertEqual([(m["id"], m["status"]["value"], m.get("alias_of")) for m in body["data"]],
+                         [("alpha", "loaded", None), ("a1", "loaded", "alpha"),
+                          ("beta", "unloaded", None), ("b2", "unloaded", "beta")])   # "gone" cannot run: left out
+        beta = body["data"][2]
+        self.assertEqual((beta["meta"], beta["aliases"]), ({"n_ctx": 8192}, ["b2"]))
+
+    def test_a_request_naming_another_model_loads_it(self):
+        self.svc.switch_on_request = True
+        self.assertEqual(self.chat("beta"), (200, ("beta", "I am beta.")))
+        self.assertEqual((self.first.running, [m for m, _ in self.started]), (False, ["beta"]))
+        self.assertEqual(self.call("/api/models")[1]["current"], "beta")
+        self.assertEqual(self.chat("beta"), (200, ("beta", "I am beta.")))     # loaded: no second start
+        self.assertEqual(self.chat("alpha"), (200, ("alpha", "I am alpha.")))
+        self.assertEqual([m for m, _ in self.started], ["beta", "alpha"])
+
+    def test_aliases_and_file_names_switch_and_other_names_do_not(self):
+        self.svc.switch_on_request = True
+        self.assertEqual(self.chat("b2"), (200, ("b2", "I am beta.")))         # answered under the alias (#297)
+        self.assertEqual(self.chat("strata-alpha.json")[1][1], "I am alpha.")
+        for name in ("bet", "gpt-4o", "", None):                                # a part of a name, another, none
+            self.assertEqual(self.chat(name)[1][1], "I am alpha.", name)
+        self.assertEqual([m for m, _ in self.started], ["beta", "alpha"])
+
+    def test_a_model_that_cannot_run_is_a_400_and_one_that_does_not_start_a_503(self):
+        self.svc.switch_on_request = True
+        code, body = self.chat("gone")
+        self.assertEqual(code, 400)
+        self.assertIn("gone cannot be loaded: the model file is missing", body["error"]["message"])
+        self.fails.add("beta")
+        code, body = self.chat("beta")
+        self.assertEqual(code, 503)
+        self.assertIn("alpha is loaded again", body["error"]["message"])
+        self.assertEqual(self.chat("alpha"), (200, ("alpha", "I am alpha.")))
+        code, body = self.call("/v1/responses", {"model": "beta", "input": "hi"})
+        self.assertEqual((code, body["error"]["type"]), (503, "server_error"))   # in the Responses API's form
+
+    def test_a_request_for_another_model_waits_for_the_one_running(self):
+        self.svc.switch_on_request = True
+        self.first.delay = 0.02                       # alpha writes for about a second
+        self.first.scripts = [self.tok.encode("x</think>\n\n" + "a" * 50, parse_special=True)
+                              + self.tok.encode(S.IM_END, parse_special=True)]
+        self.first.script = self.first.scripts[0]
+        done = {}
+
+        def alpha():
+            done["alpha"] = self.chat("alpha", max_tokens=200)
+            done["alpha at"] = time.time()
+        t = threading.Thread(target=alpha)
+        t.start()
+        self.assertTrue(until(lambda: self.svc.status.get("busy")))
+        self.assertEqual(self.chat("beta"), (200, ("beta", "I am beta.")))
+        t.join(30)
+        self.assertEqual(done["alpha"], (200, ("alpha", "a" * 50)))            # whole, on alpha
+        self.assertGreaterEqual(self.started[0][1], done["alpha at"] - 0.5)   # beta started after alpha's answer
+
+    def test_a_request_for_the_loaded_model_behind_a_switch_gets_it_back(self):
+        """alpha runs; a request for beta waits; then one naming alpha, the loaded model when it came: it waits behind
+        beta's and is answered by alpha, switched back (found on hardware: it had no model to switch back to)."""
+        self.svc.switch_on_request = True
+        self.first.delay = 0.02
+        self.first.scripts = [self.tok.encode("x</think>\n\n" + "a" * 50, parse_special=True)
+                              + self.tok.encode(S.IM_END, parse_special=True)]
+        self.first.script = self.first.scripts[0]
+        got = {}
+
+        def ask(key, model):
+            got[key] = self.chat(model, max_tokens=200)
+        threads = [threading.Thread(target=ask, args=("a1", "alpha"))]
+        threads[0].start()
+        self.assertTrue(until(lambda: self.svc.gate.users == 1))
+        for key, model in (("b", "beta"), ("a2", "alpha")):
+            threads.append(threading.Thread(target=ask, args=(key, model)))
+            threads[-1].start()
+            self.assertTrue(until(lambda n=len(threads) - 1: len(self.svc.gate._queue) == n))
+        for t in threads:
+            t.join(30)
+        self.assertEqual((got["a1"][1][0], got["b"], got["a2"][0], got["a2"][1][0]),
+                         ("alpha", (200, ("beta", "I am beta.")), 200, "alpha"))
+        self.assertEqual([m for m, _ in self.started], ["beta", "alpha"])
+
+    def test_a_switch_from_the_web_page_waits_for_the_answer_being_written(self):
+        """#38 with the key off too: a request holds its model from its prompt to its answer, so the web page's switch
+        (POST /api/models/load) waits for it instead of coming in between."""
+        self.first.delay = 0.02
+        self.first.scripts = [self.tok.encode("x</think>\n\n" + "a" * 50, parse_special=True)
+                              + self.tok.encode(S.IM_END, parse_special=True)]
+        self.first.script = self.first.scripts[0]
+        done = {}
+
+        def alpha():
+            done["alpha"] = self.chat("alpha", max_tokens=200)
+            done["alpha at"] = time.time()
+        t = threading.Thread(target=alpha)
+        t.start()
+        self.assertTrue(until(lambda: self.svc.gate.users == 1))
+        code, body = self.call("/api/models/load", {"model": "beta"})
+        t.join(30)
+        self.assertEqual((code, body["model"]["id"]), (200, "beta"))
+        self.assertEqual(done["alpha"], (200, ("alpha", "a" * 50)))
+        self.assertGreaterEqual(self.started[0][1], done["alpha at"] - 0.5)
+
+    def test_messages_and_responses_go_through_the_same_switch(self):
+        self.svc.switch_on_request = True
+        code, body = self.call("/v1/messages", {"model": "beta", "max_tokens": 64,
+                                                "messages": [{"role": "user", "content": "hi"}]})
+        self.assertEqual((code, body["content"][-1]["text"]), (200, "I am beta."))
+        code, body = self.call("/v1/responses", {"model": "alpha", "input": "hi"})
+        self.assertEqual((code, body["output"][-1]["content"][0]["text"]), (200, "I am alpha."))
+        self.assertEqual([m for m, _ in self.started], ["beta", "alpha"])
+
+    def test_count_tokens_uses_the_named_models_tokenizer_without_loading_it(self):
+        self.svc.switch_on_request = True
+        body = {"messages": [{"role": "user", "content": "how many tokens is this?"}]}
+        mine = self.call("/v1/messages/count_tokens", {**body, "model": "alpha"})[1]["input_tokens"]
+        with mock.patch.object(S, "load_tokenizer", lambda p: Wide() if "beta" in str(p) else self.tok):
+            other = self.call("/v1/messages/count_tokens", {**body, "model": "beta"})[1]["input_tokens"]
+            kept = self.svc.counter
+            self.call("/v1/messages/count_tokens", {**body, "model": "b2"})
+            self.assertIs(self.svc.counter, kept)                              # the same one, not read again
+        self.assertGreater(other, mine)
+        self.assertEqual((self.started, self.svc.model), ([], "alpha"))        # beta's engine never started
+        self.assertEqual((self.svc.prompts.entries, kept[1].prompts.entries), ([], []))   # a count keeps no prompt
+        self.chat("beta")
+        self.assertIsNone(self.svc.counter)                                    # dropped at the switch
+
+    def test_v1_load_and_unload_take_another_installed_model(self):
+        self.svc.switch_on_request = True
+        code, body = self.call("/v1/unload", {"model": "beta"})
+        self.assertEqual((code, body["status"]), (200, "not loaded"))
+        code, body = self.call("/v1/load", {"model": "beta"})
+        self.assertEqual((code, body["status"], body["model"]), (200, "loaded", "beta"))
+        self.assertEqual(self.call("/v1/load", {"model": "nothing"})[0], 404)
+
+    def test_the_settings_view_lists_the_key(self):
+        from serve import runconfig
+        self.assertIn("switch_on_request", [k["key"] for k in runconfig.view({}, self.a)["keys"]])
+
+
+def until(cond, t=10.0):
+    end = time.time() + t
+    while time.time() < end:
+        if cond():
+            return True
+        time.sleep(0.01)
+    return cond()
+
+
 class Start(unittest.TestCase):
     """main() with --engine strata as far as "ready": 0.1.42's line for the replicas' cards read `groups`, a name of
     start_model()'s, and every start of a real engine ended in a NameError."""
@@ -389,6 +645,19 @@ class Start(unittest.TestCase):
         self.assertEqual(svc.overrides, {"fit_max_tokens": True, "idle_unload_s": 5.0, "min_free_vram_mib": 77,
                                          "before_load": "echo hi"})
         self.assertEqual(svc.cfg_overrides, {"gpu": 1})
+
+    def test_switch_on_request_from_the_config_or_the_command_line(self):
+        """#38: off by default; the config's key or --switch-on-request turns it on, and the start says so."""
+        out, svc = self.start()
+        self.assertFalse(svc.switch_on_request)
+        self.assertNotIn("switch_on_request", out)
+        for keys, argv in (({"switch_on_request": True}, ()), ({}, ("--switch-on-request",))):
+            out, svc = self.start(keys, argv)
+            self.assertTrue(svc.switch_on_request)
+            self.assertIn("[strata] switch_on_request: a request naming another installed model loads it (1 in "
+                          "/v1/models: alpha)", out)
+        with self.assertRaisesRegex(SystemExit, '"switch_on_request" must be true or false'):
+            self.start({"switch_on_request": "yes"})
 
     def test_a_bad_value_still_stops_the_start(self):
         for keys, words in (({"repeat_stop_tokens": -1}, '"repeat_stop_tokens" must be a whole number'),
