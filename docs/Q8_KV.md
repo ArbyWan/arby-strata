@@ -133,7 +133,7 @@ Full transcript in the T8.5 report.
 ## Files touched
 
 - `src/poly/engine.hpp` — `KvFmt` and `Options::kv_format` (default `kFp16`).
-- `src/poly/main.cpp` — `--kv fp16|q8_0` parsing, help text, the HIP rejection.
+- `src/poly/main.cpp` — `--kv fp16|q8_0` parsing and help text.
 - `src/poly/engine.cpp` — the `qwen35moe`-only check and the clean rejection for other architectures.
 - `src/poly/qwen35.hpp`, `src/poly/qwen35.cpp` — the Q8_0 cache pointers, allocation, save/load, the row-size
   print, and the attention path that reads codes+scales.
