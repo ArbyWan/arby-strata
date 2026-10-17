@@ -97,6 +97,8 @@ hipError_t mem_get_info(size_t* free_bytes, size_t* total_bytes);
 // engine succeeded.  The expert cache, sized and grown by that figure, left more than a GiB of the card unused and
 // did not grow back after another program freed VRAM.  The free figure is amdgpu's (mem_info_vram_total less
 // mem_info_vram_used, for the card's PCI address) when the files are there (STRATA_KERNEL_VRAM_FREE=0: as it is).
+// Not on an integrated GPU: its files count only the BIOS carve-out (a Ryzen 7 9800X3D's Radeon: 512 MiB), while HIP
+// gives it system RAM (15,536 MiB free by hipMemGetInfo).
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -115,9 +117,10 @@ inline hipError_t mem_get_info(size_t* free_bytes, size_t* total_bytes) {
         const char* v = std::getenv("STRATA_KERNEL_VRAM_FREE");
         return v && std::strcmp(v, "0") == 0;
     }();
-    int dev = 0;
+    int dev = 0, integrated = 1;
     char bus[64] = {};
     if (e != hipSuccess || off || hipGetDevice(&dev) != hipSuccess ||
+        hipDeviceGetAttribute(&integrated, hipDeviceAttributeIntegrated, dev) != hipSuccess || integrated ||
         hipDeviceGetPCIBusId(bus, (int) sizeof(bus), dev) != hipSuccess)
         return e;
     for (char* c = bus; *c; ++c) *c = (char) std::tolower((unsigned char) *c);

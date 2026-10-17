@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -507,19 +508,32 @@ void Engine::vmm_unmap(Mapped& m, size_t bytes) {
 #ifdef STRATA_VMM_RELEASE_WITH_ADDRESSES
     // On ROCm the released pieces stay the process's while their addresses are reserved (an RX 9070 XT: 320 MiB
     // unmapped and released, 32 MiB more free; the addresses freed, all of it).  The kept pieces leave their
-    // addresses, which are freed and reserved again where they were, and come back with their bytes.
+    // addresses, which are freed and reserved again where they were, and come back with their bytes.  Once the first
+    // has left, the slots, the recorded launches and m point at VRAM that is not there: a step that fails from
+    // there on ends the engine (the server starts it again for the next request) rather than reading that VRAM.
     if (m.mapped == had || !m.base) return;
+    const auto must = [](CUresult r, const char* what) {
+        if (r == CUDA_SUCCESS) return;
+        const char* s = nullptr;
+        (void) cuGetErrorString(r, &s);
+        std::fprintf(stderr, "strata-poly: %s while giving VRAM back: %s; the caches are no longer mapped, so the "
+                             "engine stops\n", what, s ? s : "unknown error");
+        std::abort();
+    };
     for (size_t at = m.mapped, i = m.pieces.size(); i > 0; --i) {
         at -= m.pieces[i - 1].second;
-        cu_ck(cuMemUnmap(m.base + at, m.pieces[i - 1].second), "unmapping VRAM");
+        must(cuMemUnmap(m.base + at, m.pieces[i - 1].second), "unmapping the kept VRAM");
     }
+    size_t free_b = 0, total_b = 0;
+    (void) cudaMemGetInfo(&free_b, &total_b);
     const CUdeviceptr was = m.base;
-    cu_ck(cuMemAddressFree(m.base, m.reserved), "unmapping VRAM");
+    must(cuMemAddressFree(m.base, m.reserved), "freeing the addresses");
     CUdeviceptr p = 0;
-    cu_ck(cuMemAddressReserve(&p, m.reserved, 0, was, 0), "reserving addresses for VRAM");
+    must(cuMemAddressReserve(&p, m.reserved, 0, was, 0), "reserving the addresses again");
     if (p != was) {   // the slots and the recorded launches point into the old addresses
-        (void) cuMemAddressFree(p, m.reserved);
-        throw std::runtime_error("unmapping VRAM: the addresses could not be reserved again where they were");
+        std::fprintf(stderr, "strata-poly: the VRAM addresses could not be reserved again where they were, so the "
+                             "engine stops\n");
+        std::abort();
     }
     CUmemAccessDesc access = {};
     access.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
@@ -527,9 +541,16 @@ void Engine::vmm_unmap(Mapped& m, size_t bytes) {
     access.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
     size_t at = 0;
     for (const auto& [h, n] : m.pieces) {
-        cu_ck(cuMemMap(m.base + at, n, 0, h, 0), "mapping VRAM");
-        cu_ck(cuMemSetAccess(m.base + at, n, &access, 1), "mapping VRAM");
+        must(cuMemMap(m.base + at, n, 0, h, 0), "mapping VRAM again");
+        must(cuMemSetAccess(m.base + at, n, &access, 1), "mapping VRAM again");
         at += n;
+    }
+    // amdgpu counts the VRAM as free 2 to 5 ms later: a reading before that (mind_vram()'s log line, cover()) is
+    // short by what was given back.  At most 100 ms, as another program may take VRAM meanwhile.
+    const size_t back = (had - m.mapped) / 8 * 7, want = free_b + back;
+    for (int i = 0; i < 100 && free_b < want; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        (void) cudaMemGetInfo(&free_b, &total_b);
     }
 #else
     (void) had;
