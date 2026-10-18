@@ -95,6 +95,7 @@ private:
     float* q8w_ = nullptr;             ///< a q8 prompt batch's K and V blocks, dequantized to fp16 (kwork | vwork)
     size_t work_halves_ = 0;           ///< the halves of each of q8w_'s two halves (kQ8WorkRows rows at most)
     bool fattn_ = false;               ///< a prompt batch through fattn_q8() / fattn_f16() (STRATA_FATTN=1)
+    bool fdec_ = false;                ///< a few tokens through fdec_q8() / fdec_f16() (STRATA_FDEC=1)
 
 };
 

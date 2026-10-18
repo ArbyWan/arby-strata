@@ -2112,6 +2112,28 @@ the arithmetic in doubles (up to 7.7e-3 on results up to 2.9) than the old path'
 both caches. Greedy answers part from the old path's after a few dozen characters, at near-ties where the old path
 also parts from itself between runs.
 
+## strata-poly: tensor-core decode attention (`STRATA_FDEC=1`, off by default)
+
+The decode side of the same layers: the few tokens of an answer's step (one, or a window of guesses). With
+`STRATA_FDEC=1` they go through a kernel of this project's own (`fdec_q8()` / `fdec_f16()` in `src/poly/fattn.cu`)
+instead of `attend()`'s score, softmax and value kernels, which write every score to memory and read it back twice.
+One CUDA block takes 1,024 keys of a KV head's group for up to 4 tokens as flash attention on the tensor cores, so
+the cache is read once per 4 tokens, and the blocks are merged by their softmax max and sum. q8_0 and fp16 caches,
+heads of 256 values, 8 heads a group, Ampere or later NVIDIA. A token gets the same bits alone or in a window, as
+with `attend()`. No VRAM is added. The server logs `STRATA_FDEC: decode attention through the tensor-core decode
+kernel`, or why not; Turing, HIP and other models keep the old path, and without the variable nothing changes.
+
+**Measured** on the RTX 3070 setup above (q8_0 cache, 256K, with `STRATA_FATTN=1`), the same conversation, two runs
+each: decode 53.8 -> 63.9 tokens/s at 32K of context, 35.1 -> 53.0 at 103K, 29.3 -> 48.7 at 143K, 26.6 -> 45.6 at
+174K; short prompts the same (62-78 tokens/s either way). With an fp16 cache at 128K (one run): 53.0 -> 62.6 at
+32K, 32.5 -> 43.2 at 103K. One layer's attention at 140K of context (`poly_fattn_test dec`): 0.45 ms against 1.94
+for one token with q8_0, 0.72 against 1.82 with fp16; below about 4K of context it is the slower one (0.05 against
+0.02 ms a layer). The scores and values go through the tensor cores as halves, so results are within 1.8e-3 of the
+arithmetic in doubles where `attend()` is within 1e-6. A long-context question set (39K to 196K tokens of this
+repository's source, temperature 0) got the same 11 of 12 checkable answers right with and without it, and its
+answers part from the old path's about as early as two runs of the old path part from each other. The 107K and a
+247K recall test passed.
+
 ---
 
 ## Troubleshooting
