@@ -7,6 +7,10 @@
 //     that blocks of keys attended apart can be merged by log-sum-exp.
 //  3. The kernel passes dst_meta to such a tile at the tile's first head and query 0 (as dst is passed).
 // The launcher always gives each tile one CUDA block, so the fixup paths are never taken.
+// Kept in step with llama.cpp by tools/test_fattn_sync.py: the upstream file's sha256 is
+// 39f766ffc260595f1483adbf4c5b3741c43a84691edba703d2cac6fa80a97a32, and src/poly/fattn_mma.patch turns it into this
+// file.  When the pin moves and the test fails: copy the new upstream file, apply the patch (git apply, fixing what
+// no longer fits), run poly_fattn_test, then write the patch and the sha256 again (the test says how).
 #include "common.cuh"
 #include "cp-async.cuh"
 #include "mma.cuh"
