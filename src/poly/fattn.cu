@@ -8,6 +8,7 @@
 #endif
 
 #include <algorithm>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
@@ -26,39 +27,85 @@ struct Setup {
     size_t smem = 0;
 };
 
-// The launch's shape and shared memory as ggml_cuda_flash_attn_ext_mma_f16_case() works them out.  Ampere or
-// later: on Turing the kernel has no 64-column tile.
-const Setup& setup() {
-    static const Setup s = [] {
-        Setup r;
-        const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
-        if (!GGML_CUDA_CC_IS_NVIDIA(cc) || !ampere_mma_available(cc)) return r;
-        const int nthreads = ggml_cuda_fattn_mma_get_nthreads(kD, kD, kCols, cc);
-        const int nbatch_K2 = ggml_cuda_fattn_mma_get_nbatch_K2(kD, kD, kCols, cc);
-        const int nbatch_V2 = ggml_cuda_fattn_mma_get_nbatch_V2(kD, kD, kCols, cc);
-        const int nbatch_combine = ggml_cuda_fattn_mma_get_nbatch_combine(kD, kD, kCols, cc);
-        const bool q_in_reg = ggml_cuda_fattn_mma_get_Q_in_reg(kD, kD, kCols, cc);
-        const int nstages = ggml_cuda_fattn_mma_get_nstages(kD, kD, kCols1, kCols2, cc);
-        r.nbatch_fa = ggml_cuda_fattn_mma_get_nbatch_fa(kD, kD, kCols, cc);
-        r.nwarps = nthreads / WARP_SIZE;
-        const int cols_per_warp = std::min(kCols, get_cols_per_warp(cc));
-        const int stride_K = ggml_cuda_fattn_smem_swizzle::tile_stride(nbatch_K2, cc);
-        const int stride_V = ggml_cuda_fattn_smem_swizzle::tile_stride(nbatch_V2, cc);
-        const size_t kv1 = size_t(r.nbatch_fa) * std::max(stride_K, stride_V) * sizeof(half2);
-        const size_t kv2 = size_t(r.nbatch_fa) * (stride_K + stride_V) * sizeof(half2);
-        const size_t q = size_t(kCols) * (kD / 2 + 4) * sizeof(half2);
-        const size_t mask = size_t(kCols1) * (r.nbatch_fa / 2 + 4) * sizeof(half2);
-        const size_t combine = size_t(r.nwarps) * cols_per_warp * (nbatch_combine + 4) * sizeof(half2);
-        const size_t kv = nstages <= 1 ? kv1 : kv2;
-        r.smem = std::max(combine, q_in_reg ? std::max(q, kv + mask) : q + kv + mask);
-        r.ok = cudaFuncSetAttribute(kKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, (int) r.smem) == cudaSuccess;
-        cudaGetLastError();
-        return r;
-    }();
-    return s;
+int grid(long long n, int per) { return (int) ((n + per - 1) / per); }
+
+// The launch's shape and shared memory as ggml_cuda_flash_attn_ext_mma_f16_case() works them out, for the
+// current card.  Ampere or later: on Turing the kernel has no 64-column tile.
+Setup make_setup(int cc) {
+    Setup r;
+    if (!GGML_CUDA_CC_IS_NVIDIA(cc) || !ampere_mma_available(cc)) return r;
+    const int nthreads = ggml_cuda_fattn_mma_get_nthreads(kD, kD, kCols, cc);
+    const int nbatch_K2 = ggml_cuda_fattn_mma_get_nbatch_K2(kD, kD, kCols, cc);
+    const int nbatch_V2 = ggml_cuda_fattn_mma_get_nbatch_V2(kD, kD, kCols, cc);
+    const int nbatch_combine = ggml_cuda_fattn_mma_get_nbatch_combine(kD, kD, kCols, cc);
+    const bool q_in_reg = ggml_cuda_fattn_mma_get_Q_in_reg(kD, kD, kCols, cc);
+    const int nstages = ggml_cuda_fattn_mma_get_nstages(kD, kD, kCols1, kCols2, cc);
+    r.nbatch_fa = ggml_cuda_fattn_mma_get_nbatch_fa(kD, kD, kCols, cc);
+    r.nwarps = nthreads / WARP_SIZE;
+    const int cols_per_warp = std::min(kCols, get_cols_per_warp(cc));
+    // the tile's max and sum reach dst_meta only with one warp a query column (np == 1, fattn_mma.cuh change 2);
+    // with more, the blocks of keys could not be merged
+    if (r.nwarps * cols_per_warp != kCols) return r;
+    const int stride_K = ggml_cuda_fattn_smem_swizzle::tile_stride(nbatch_K2, cc);
+    const int stride_V = ggml_cuda_fattn_smem_swizzle::tile_stride(nbatch_V2, cc);
+    const size_t kv1 = size_t(r.nbatch_fa) * std::max(stride_K, stride_V) * sizeof(half2);
+    const size_t kv2 = size_t(r.nbatch_fa) * (stride_K + stride_V) * sizeof(half2);
+    const size_t q = size_t(kCols) * (kD / 2 + 4) * sizeof(half2);
+    const size_t mask = size_t(kCols1) * (r.nbatch_fa / 2 + 4) * sizeof(half2);
+    const size_t combine = size_t(r.nwarps) * cols_per_warp * (nbatch_combine + 4) * sizeof(half2);
+    const size_t kv = nstages <= 1 ? kv1 : kv2;
+    r.smem = std::max(combine, q_in_reg ? std::max(q, kv + mask) : q + kv + mask);
+    r.ok = cudaFuncSetAttribute(kKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, (int) r.smem) == cudaSuccess;
+    cudaGetLastError();
+    return r;
 }
 
-int grid(long long n, int per) { return (int) ((n + per - 1) / per); }
+// Each card's own, worked out the first time it asks: a layer split may put cards of different generations in one
+// process, and cudaFuncSetAttribute() holds for the current card only.
+const Setup& setup() {
+    static std::mutex mu;
+    static Setup s[GGML_CUDA_MAX_DEVICES];
+    static bool done[GGML_CUDA_MAX_DEVICES] = {};
+    const int d = ggml_cuda_get_device();
+    std::lock_guard<std::mutex> lock(mu);
+    if (!done[d]) {
+        s[d] = make_setup(ggml_cuda_info().devices[d].cc);
+        done[d] = true;
+    }
+    return s[d];
+}
+
+// The scratch for a batch of n tokens: a block's results and their max and sum, the merged max and sum, the
+// causal block's steps, then K and V side by side, each piece 16-byte aligned (offsets in floats).  rows: the keys
+// a block takes, a whole number of steps and at most a grid's 65535 rows (dequant_kernel); 0 when the scratch
+// cannot hold a block of n + nbatch_fa rows.
+struct Layout {
+    size_t part = 0, pmeta = 0, ameta = 0, kv_max = 0, kv = 0;
+    long long rows = 0;
+};
+
+Layout layout(int n, int dim, int n_head, int kv_heads, int nbatch_fa, size_t scratch_floats) {
+    Layout L;
+    const size_t heads = size_t(n) * n_head;
+    size_t at = 0;
+    auto take = [&](size_t floats) {
+        const size_t p = at;
+        at += (floats + 3) & ~size_t(3);
+        return p;
+    };
+    L.part = take(heads * dim);
+    L.pmeta = take(2 * heads);
+    L.ameta = take(2 * heads);
+    L.kv_max = take((size_t) grid(n, kCols1));
+    L.kv = at;
+    if (at >= scratch_floats) return L;
+    // a row of K and one of V take kv_heads * dim floats together
+    const size_t width = size_t(kv_heads) * dim;
+    const long long rows =
+        std::min<long long>((long long) ((scratch_floats - at) / width), 65535) / nbatch_fa * nbatch_fa;
+    if (rows >= (long long) n + nbatch_fa) L.rows = rows;
+    return L;
+}
 
 void ck(const char* what) {
     const cudaError_t e = cudaGetLastError();
@@ -110,29 +157,18 @@ __global__ void merge_kernel(float* __restrict__ out, float2* __restrict__ meta,
 // lie, in one block, and only the last block is copied into the scratch.
 bool run(const float* q, Kvq8 kq8, Kvq8 vq8, const half* keys, const half* vals, int64_t pos, int n, float* out,
          int dim, int n_head, int kv_heads, float scale, float* scratch, size_t scratch_floats, void* stream) {
-    if (n <= 0 || !fattn_fits(dim, n_head, kv_heads)) return false;
+    if (n <= 0 || !fattn_fits(dim, n_head, kv_heads, n, scratch_floats)) return false;
     const Setup& S = setup();
     const int width = kv_heads * dim, tiles = grid(n, kCols1);
     const size_t heads = size_t(n) * n_head;
-    // the scratch: a block's results and their max and sum, the merged max and sum, the causal block's steps,
-    // then K and V side by side, each piece 16-byte aligned
-    size_t at = 0;
-    auto take = [&](size_t floats) {
-        float* p = scratch + at;
-        at += (floats + 3) & ~size_t(3);
-        return p;
-    };
-    float* part = take(heads * dim);
-    float2* pmeta = (float2*) take(2 * heads);
-    float2* ameta = (float2*) take(2 * heads);
-    int* kv_max = (int*) take((size_t) tiles);
-    if (at >= scratch_floats) return false;
-    // a row of K and one of V take `width` floats together
-    // at most a grid's 65535 rows (dequant_kernel)
-    const long long rows = std::min<long long>((long long) ((scratch_floats - at) / width), 65535) /
-                           S.nbatch_fa * S.nbatch_fa;
-    if (rows < (long long) n + S.nbatch_fa) return false;
-    half* kw = (half*) (scratch + at);
+    const Layout L = layout(n, dim, n_head, kv_heads, S.nbatch_fa, scratch_floats);
+    if (L.rows == 0) return false;
+    const long long rows = L.rows;
+    float* part = scratch + L.part;
+    float2* pmeta = (float2*) (scratch + L.pmeta);
+    float2* ameta = (float2*) (scratch + L.ameta);
+    int* kv_max = (int*) (scratch + L.kv_max);
+    half* kw = (half*) (scratch + L.kv);
     half* vw = kw + size_t(rows) * width;
 
     const cudaStream_t s = (cudaStream_t) stream;
@@ -181,8 +217,10 @@ bool run(const float* q, Kvq8 kq8, Kvq8 vq8, const half* keys, const half* vals,
 
 }  // namespace
 
-bool fattn_fits(int dim, int n_head, int kv_heads) {
-    return dim == kD && kv_heads > 0 && n_head == kCols2 * kv_heads && setup().ok;
+bool fattn_fits(int dim, int n_head, int kv_heads, int rows, size_t scratch_floats) {
+    if (dim != kD || kv_heads <= 0 || n_head != kCols2 * kv_heads || rows <= 0) return false;
+    const Setup& S = setup();
+    return S.ok && layout(rows, dim, n_head, kv_heads, S.nbatch_fa, scratch_floats).rows > 0;
 }
 
 bool fattn_q8(const float* q, Kvq8 kq8, Kvq8 vq8, int64_t pos, int n, float* out, int dim, int n_head, int kv_heads,
@@ -201,7 +239,7 @@ bool fattn_f16(const float* q, const uint16_t* keys, const uint16_t* vals, int64
 
 #else
 
-bool fattn_fits(int, int, int) { return false; }
+bool fattn_fits(int, int, int, int, size_t) { return false; }
 
 bool fattn_q8(const float*, Kvq8, Kvq8, int64_t, int, float*, int, int, int, float, float*, size_t, void*) {
     return false;

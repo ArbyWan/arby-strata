@@ -189,9 +189,10 @@ void Qwen35::assign_scratch() {
     // STRATA_FATTN=1: a prompt batch through llama.cpp's flash-attention kernel instead, in score_ (fattn.hpp)
     const char* fa = std::getenv("STRATA_FATTN");
     if (rows_ >= kStageRows && fa && std::atoi(fa) == 1) {
-        fattn_ = fattn_fits(head_dim_, n_head_, n_kv_);
+        fattn_ = fattn_fits(head_dim_, n_head_, n_kv_, rows_, (size_t) chunk_ * n_head_ * opt_.max_context);
         std::fprintf(stderr, "strata-poly: STRATA_FATTN: prompt attention %s\n",
-                     fattn_ ? "through llama.cpp's flash-attention kernel" : "unchanged (no kernel for it here)");
+                     fattn_ ? "through llama.cpp's flash-attention kernel"
+                            : "unchanged (no kernel for it on this card, or --prompt-batch too large for the scratch)");
     }
 }
 

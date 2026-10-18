@@ -147,8 +147,13 @@ int check(cublasHandle_t blas, const Cache& K, const Cache& V, Kvq8 kq, Kvq8 vq,
 }  // namespace
 
 int main() {
-    if (!fattn_fits(kDim, kHeads, kKvHeads)) {
+    if (!fattn_fits(kDim, kHeads, kKvHeads, kBatch, kScore)) {
         std::printf("no kernel for this card\n");
+        return 1;
+    }
+    // a batch whose results alone fill Qwen35's score_ (--prompt-batch 4096) is refused up front, not call by call
+    if (fattn_fits(kDim, kHeads, kKvHeads, 4096, kScore)) {
+        std::printf("FAIL: fattn_fits() takes a batch of 4096 rows in a scratch that cannot hold its results\n");
         return 1;
     }
     std::mt19937 rng(7);
