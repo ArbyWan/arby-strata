@@ -38,6 +38,10 @@ To add yours, open an issue at [VecSzn/PolyStrata](https://github.com/VecSzn/Pol
 [What to record](#what-to-record) lists. `python polystrata.py benchmark --model <name> --prompt-tokens 24000`
 gives the two speeds the README uses ([what it sends and prints](BACKENDS.md#benchmark)).
 
+An upstream-suite report from an [RX 6700 XT 12 GB, Ryzen 5 3600 and 32 GB RAM](../bench/results/2026-10-19-community-rx6700xt-polystrata/README.md)
+includes Qwen3.6, Ornith, Tiel Coder, Gemma 4, MiniCPM-V and LFM2.5 at 32K and 64K,
+with per-request data, exact settings and a separate Qwen UD-Q4_K_M speed control.
+
 ### Comparing with llama.cpp
 
 `bench/bench_vs_llama.py` is the script Strata used for
