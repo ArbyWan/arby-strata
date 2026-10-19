@@ -46,8 +46,9 @@ class FattnSync(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             work = Path(d) / "fattn_mma.cuh"
             shutil.copyfile(upstream(), work)
-            r = subprocess.run(["git", "apply", "--whitespace=nowarn", str(PATCH)], cwd=d, capture_output=True,
-                               text=True)
+            # outside any repository Git for Windows' system core.autocrlf=true would still write CRLF
+            r = subprocess.run(["git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn", str(PATCH)], cwd=d,
+                               capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, "src/poly/fattn_mma.patch does not apply to the pinned upstream file: "
                                               + r.stderr)
             self.assertEqual(work.read_bytes(), COPY.read_bytes(),
