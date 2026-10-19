@@ -206,6 +206,32 @@ class RedactionTests(unittest.TestCase):
         self.assertNotIn("hunter2", json.dumps(v))
 
 
+class MachineTests(unittest.TestCase):
+    def test_an_amd_card_without_rocm_smi_is_read_from_sysfs(self):
+        """ROCm from AMD's wheels has no rocm-smi: the card comes from amdgpu's sysfs files, not "cpu"."""
+        sys.path.insert(0, str(B.ROOT))
+        import serve.telemetry as T
+
+        class Card:
+            def __init__(self, i):
+                self.i = i
+
+            def ok(self):
+                return self.i == 0
+
+            def name(self):
+                return "AMD Radeon RX 6700 XT"
+
+            def read(self):
+                return {"mem_total": 12 << 30}
+
+        with mock.patch.object(B, "run_cmd", return_value=""), mock.patch.object(B.os, "name", "posix"), \
+                mock.patch.object(T, "_Amd", Card):
+            info = B.gpu_info_local()
+        self.assertEqual(info["gpus"], [{"name": "AMD Radeon RX 6700 XT", "vram_mib": 12288, "driver": None}])
+        self.assertEqual(B.gpu_slug({"gpu": [g["name"] for g in info["gpus"]]}), "rx-6700-xt")
+
+
 class ReportTests(unittest.TestCase):
     def setUp(self):
         p = mock.patch.object(B, "gpu_info_local", return_value={"gpus": []})     # the server's own GPU name, not this PC's

@@ -500,6 +500,20 @@ def gpu_info_local() -> dict:
         m2 = re.search(r"Driver version:\s*(\S+)", v)
         if m2:
             info["rocm_driver"] = m2.group(1)
+    if not info["gpus"] and os.name != "nt":
+        # ROCm from AMD's Python wheels (a container, setup's .venv) has no rocm-smi: the amdgpu driver's sysfs files
+        # name the cards the way the server reads them (the run was labelled "cpu" before)
+        try:
+            if str(ROOT) not in sys.path:
+                sys.path.insert(0, str(ROOT))
+            from serve.telemetry import _Amd
+            cards = []
+            while (card := _Amd(len(cards))).ok():
+                total = card.read().get("mem_total")
+                cards.append({"name": card.name(), "vram_mib": total >> 20 if total else None, "driver": None})
+            info["gpus"] = cards
+        except Exception:   # noqa: BLE001 - a report without the card's name is still a report
+            pass
     if not info["gpus"] and os.name == "nt":
         # #1587: Windows with only an AMD card has neither nvidia-smi nor rocm-smi; the display class in the registry
         # names the card, its VRAM and its driver (the run was labelled "CPU only" before)
