@@ -383,7 +383,7 @@ The full list: [docs/LFM.md](docs/LFM.md#what-you-need).
 
 | | |
 | --- | --- |
-| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 5 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On Linux an AMD card can run it as a beta: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
+| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 5 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On an AMD card it can run as a beta on Linux and under Windows: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
 | **RAM** | About **17, 21 or 27 GB** beside an 8 GB card for the three sizes, the installer's estimate. A card with 24 GB holds the two smaller sizes whole. All three sizes have run on a laptop with 32 GB. |
 | **Disk** | 13, 17 or 23 GB for the model file, 1 GB more to read pictures. |
 | **System** | Linux or Windows 10 / 11, and a current NVIDIA driver. |
@@ -391,7 +391,9 @@ The full list: [docs/LFM.md](docs/LFM.md#what-you-need).
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards on Windows, two cards on Windows, three cards or more.
+yet: two cards on Windows, three cards or more. On an AMD card under Windows setup compiles `strata-poly` for the
+card as it does on Linux (AMD's TheRock wheels in `.rocm-win`) and warns that runs there are new
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 Since its 0.1.44 the [Strata](https://github.com/Niko1221/Strata) project's own engine runs Qwen3.6 too, from UD-Q4_K_XL up
 (`--family qwen36-strata`, 32 GB of RAM or more). On an RTX 5090 with UD-Q4_K_XL it read a 4K prompt 1.6 times as fast
@@ -402,7 +404,7 @@ as strata-poly; a 31K prompt and writing came out about even ([measured](docs/BA
 
 | | |
 | --- | --- |
-| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 4 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On Linux an AMD card can run it as a beta: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
+| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 4 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On an AMD card it can run as a beta on Linux and under Windows: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
 | **RAM** | About **18, 22 or 28 GB** beside an 8 GB card for the three sizes, the installer's estimate. A card with 24 GB holds the two smaller sizes whole. All three sizes have run on a laptop with 32 GB. |
 | **Disk** | 14, 17 or 24 GB for the model file, 1 GB more to read pictures. |
 | **System** | Linux or Windows 10 / 11, and a current NVIDIA driver. |
@@ -410,13 +412,15 @@ as strata-poly; a 31K prompt and writing came out about even ([measured](docs/BA
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards on Windows, two cards on Windows, three cards or more.
+yet: two cards on Windows, three cards or more. On an AMD card under Windows setup compiles `strata-poly` for the
+card as it does on Linux (AMD's TheRock wheels in `.rocm-win`) and warns that runs there are new
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 ### Gemma 4 26B-A4B
 
 | | |
 | --- | --- |
-| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 6 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On Linux an AMD card can run it as a beta: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
+| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 6 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On an AMD card it can run as a beta on Linux and under Windows: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
 | **RAM** | About **15, 18 or 21 GB** beside an 8 GB card for the three sizes, the installer's estimate. By the same estimate a card with 16 GB holds the two smaller sizes whole. All three sizes have run on a laptop with 32 GB. |
 | **Disk** | 11, 13 or 17 GB for the model file and its draft model, 1 GB more to read pictures. |
 | **System** | Linux or Windows 10 / 11, and a current NVIDIA driver. |
@@ -424,13 +428,15 @@ yet: AMD cards on Windows, two cards on Windows, three cards or more.
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards on Windows, two cards on Windows, three cards or more.
+yet: two cards on Windows, three cards or more. On an AMD card under Windows setup compiles `strata-poly` for the
+card as it does on Linux (AMD's TheRock wheels in `.rocm-win`) and warns that runs there are new
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 ### Tiel Coder 35B-A3B
 
 | | |
 | --- | --- |
-| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 5 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On Linux an AMD card can run it as a beta: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
+| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 5 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On an AMD card it can run as a beta on Linux and under Windows: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
 | **RAM** | About **18, 21 or 27 GB** beside an 8 GB card for the three sizes, the installer's estimate. A card with 24 GB holds all three sizes whole. All three sizes have run on a laptop with 32 GB. |
 | **Disk** | 14, 17 or 23 GB for the model file, 1 GB more to read pictures. |
 | **System** | Linux or Windows 10 / 11, and a current NVIDIA driver. |
@@ -438,13 +444,15 @@ yet: AMD cards on Windows, two cards on Windows, three cards or more.
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards on Windows, two cards on Windows, three cards or more.
+yet: two cards on Windows, three cards or more. On an AMD card under Windows setup compiles `strata-poly` for the
+card as it does on Linux (AMD's TheRock wheels in `.rocm-win`) and warns that runs there are new
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 ### MiniCPM-V 4.7 35B-A3B
 
 | | |
 | --- | --- |
-| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 3.5 GB are taken before any expert. It has run on a 32 GB card and on a laptop's 8 GB card. On Linux an AMD card can run it as a beta: setup compiles the engine on your PC; it has run on an RX 7600. |
+| **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 3.5 GB are taken before any expert. It has run on a 32 GB card and on a laptop's 8 GB card. On an AMD card it can run as a beta on Linux and under Windows: setup compiles the engine on your PC; it has run on an RX 7600. |
 | **RAM** | About **19, 25 or 31 GB** beside an 8 GB card for the three sizes, the installer's estimate. A card with 32 GB holds all three sizes whole. All three sizes have run on a laptop with 32 GB. |
 | **Disk** | 16, 21 or 29 GB for the model file, 1 GB more to read pictures. |
 | **System** | Linux or Windows 10 / 11, and a current NVIDIA driver. |
@@ -452,7 +460,9 @@ yet: AMD cards on Windows, two cards on Windows, three cards or more.
 The installer sets up everything else, as it does for GLM 5.3 Flash. On Windows it downloads the engine ready-made
 from the latest release. On a processor without AVX2, or in a copy whose engine changed after that release, it
 compiles the engine instead with Visual Studio's 2022 compiler and the CUDA toolkit, and offers to install them. Not
-yet: AMD cards on Windows, two cards on Windows, three cards or more.
+yet: two cards on Windows, three cards or more. On an AMD card under Windows setup compiles `strata-poly` for the
+card as it does on Linux (AMD's TheRock wheels in `.rocm-win`) and warns that runs there are new
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 What each of the five needs and how it was checked: [docs/BACKENDS.md](docs/BACKENDS.md#install).
 

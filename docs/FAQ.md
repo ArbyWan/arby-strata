@@ -52,12 +52,14 @@ times as fast (the two runs are linked there).
 
 ### Does it run on Radeon / AMD?
 
-Qwen3.8-Flash-Next, yes: on a Radeon with 12 GB or more it runs through Strata's AMD backend. The five added
-models run on AMD under Linux since 0.1.42-poly.4, as a beta: setup compiles their engine for the card on your PC
-(there is no ready-made AMD engine, so not on Windows), a contributor's port tested with Qwen3.6 UD-Q2_K_XL and
+Qwen3.8-Flash-Next, yes: on a Radeon with 12 GB or more it runs through Strata's AMD backend. The added
+models run on AMD since 0.1.42-poly.4, as a beta: setup compiles their engine for the card on your PC
+(there is no ready-made AMD engine), on Linux with ROCm from your system or AMD's wheels, and on
+Windows with AMD's TheRock wheels as well. A contributor's port was tested with Qwen3.6 UD-Q2_K_XL and
 Ornith APEX-I-Mini on an RX 7600 with 8 GB: 74 and 40 tokens/s in a short chat, 53 and 43 after a 32K prompt,
-read at 481 and 444. Gemma 4, Tiel Coder, LFM2.5 and GLM have not been tried on an AMD card, and setup says so when
-you pick them. I don't have an AMD card myself, so reports from one help; see
+read at 481 and 444. One Windows run, Tiel Coder UD-Q3_K_XL on an RX 9070 XT, wrote at 55 to 75 tokens/s and
+read a 7,376-token prompt at 2,750. Gemma 4, LFM2.5 and GLM have not been tried on an AMD card, and setup says so
+when you pick them. I don't have an AMD card myself, so reports from one help; see
 [AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta).
 
 ### Will it run on a 6 GB card, or 4 GB?

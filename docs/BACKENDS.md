@@ -96,8 +96,10 @@ release was not built from, it compiles the engine with the CUDA Toolkit and Vis
 the newest that CUDA 13 takes. A newer Visual Studio serves when it has the 2022 toolset (v143) among its
 components; setup offers to install what is missing. After a `git pull` that changes the source, an engine compiled
 here is compiled again, and a ready-made one is replaced by the release's for the new source; until there is one,
-the ready-made engine already installed starts. GLM 5.3 Flash was not run on Windows, and setup says so before it
-installs it there.
+the ready-made engine already installed starts. On an AMD card under Windows there is nothing ready-made: setup
+compiles `strata-poly` for the card from AMD's TheRock wheels in `.rocm-win`, as it does for the Qwen engine, and
+keeps the images off ([AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta)). GLM 5.3 Flash was not run on Windows, and
+setup says so before it installs it there.
 
 Each install is a model of its own: `--list-models`, `/model` and the web page's list show all of them, and
 `./setup.sh --check` has a line for each with what this PC's card and RAM make of it.
@@ -1983,7 +1985,9 @@ Setup knows the files in the table above. Another file of one of these architect
 - NVIDIA cards only. Built and run on one Linux machine, and the three new models' nine sizes on one Windows
   laptop as well. GLM 5.3 Flash was not run on Windows. Two cards can share a model since 2026-10-11
   ([MULTI_GPU.md](MULTI_GPU.md#the-strata-poly-models)); that ran with Qwen3.6 and Gemma 4 on two RTX 3080
-  under Linux only.
+  under Linux only. An AMD card runs them through the HIP build as well
+  ([AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta)): Qwen3.6 and Ornith on an RX 7600 under Linux, Tiel Coder on
+  an RX 9070 XT under Windows; nothing else on either.
 - The changes that came from the laptop were built on Windows first, and on Linux on 2026-10-10 (gcc 11.4,
   CUDA 12.8), where the first sizes were checked against llama.cpp and with and without guesses again, and the
   benchmark of [A prompt of 30,000 tokens](#a-prompt-of-30000-tokens) was run. GLM 5.3 Flash, which only that

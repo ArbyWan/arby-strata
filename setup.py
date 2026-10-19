@@ -2459,6 +2459,17 @@ ROCM_FAMILY_PINS = {"gfx103X-all": "7.13.0a20260515",    # #1103: 7.13.0a2026051
 ROCM_VERSION_OVERRIDE = os.environ.get("STRATA_ROCM_VERSION") or None
 ROCM_VERSION = ROCM_VERSION_OVERRIDE or ROCM_VERSION_DEFAULT   # kept for callers that read one version
 ROCM_SYSTEM_MIN = (7, 0)       # an older system ROCm is passed over for the wheels (gfx1201 needs ROCm 6.4 or newer)
+# Windows: the same ROCm from AMD's TheRock Windows wheels, into .rocm-win (the private venv tools/hip/build_windows.bat
+# uses; a package per card family, so the device wheels are asked for by arch).  The Windows HIP engine itself is
+# ready-made (WIN_HIP_ASSET); only strata-poly is compiled here, for its card (build_engine_poly_hip_win).
+# STRATA_ROCM_WIN_VERSION forces one exact version of those wheels, and so does STRATA_ROCM_VERSION, the name
+# build_windows.bat reads for the same venv; the index stays ROCM_WIN_INDEX.
+ROCM_WIN_VERSION_DEFAULT = "10.2.0a20260930"               # what PolyStrata's Windows HIP build is tested with
+ROCM_WIN_VERSION_OVERRIDE = os.environ.get("STRATA_ROCM_WIN_VERSION") or \
+    os.environ.get("STRATA_ROCM_VERSION") or None
+ROCM_WIN_VERSION = ROCM_WIN_VERSION_OVERRIDE or ROCM_WIN_VERSION_DEFAULT
+ROCM_WIN_INDEX = "https://nightly.repo.amd.com/rocm/whl-next/"
+ROCM_WIN_VENV = ".rocm-win"
 # STRATA_EXPERIMENTAL_GFX1103=1 (opt-in, unsupported): the Radeon 780M / 760M / 740M iGPU (Ryzen 7040 / 8040, gfx1103) is taken
 # as a unified-memory AMD card like Strix Halo, with the native dot4 and gfx11 WMMA kernels, the gfx1103 exact speed switches
 # and a hipBLASLt table when one matches (measured on one machine: Ryzen 7 8745HS).  Unset: unchanged.
@@ -3376,6 +3387,57 @@ def rocm_root(archs):
         dirs += [str(d / "lib") for d in libs if (d / "lib").is_dir()]
     ok(f"ROCm: {root}")
     return root, list(dict.fromkeys(dirs))
+
+
+def rocm_win_version(venv):
+    """The version of AMD's ROCm wheels installed in a Windows venv, out of their pip metadata; None when it holds
+    none (a venv made by hand, or one whose wheels were installed some other way)."""
+    for info in sorted((Path(venv) / "Lib" / "site-packages").glob("rocm-*.dist-info")):
+        name = info.name[len("rocm-"):-len(".dist-info")]
+        if name:
+            return name
+    return None
+
+
+def rocm_win_root(archs):
+    """Windows: ROCm for compiling the HIP engine for `archs` (one arch, or the cards of a layer split): the TheRock
+    wheels in .rocm-win (a private venv, the one tools/hip/build_windows.bat uses: no admin rights, no AMD GPU), with
+    the device package of every arch.  An installation there holding the wanted version and all of them is kept as it
+    is; another version (STRATA_ROCM_WIN_VERSION) is installed in its place.  Returns (root, the library
+    folders)."""
+    archs = [archs] if isinstance(archs, str) else list(archs)
+    venv = ROOT / ROCM_WIN_VENV
+    py, sdk = venv / "Scripts" / "python.exe", venv / "Scripts" / "rocm-sdk.exe"
+    if not py.exists():
+        say(f"  Installing ROCm into {ROCM_WIN_VENV} (AMD's TheRock wheels for Windows, ~7 GB) ...")
+        run([sys.executable, "-m", "venv", str(venv)])
+    root = None
+    if sdk.exists():
+        got = out([str(sdk), "path", "--root"]).strip()
+        root = Path(got) if got else None
+    have = rocm_win_version(venv)
+    other = have is not None and have != ROCM_WIN_VERSION
+    if other:
+        warn(f"{ROCM_WIN_VENV} holds ROCm {have}; {ROCM_WIN_VERSION} is installed in its place "
+             "(STRATA_ROCM_WIN_VERSION)")
+    elif have is None and ROCM_WIN_VERSION_OVERRIDE and sdk.exists():
+        warn(f"{ROCM_WIN_VENV} does not say which ROCm it holds: keeping it, so STRATA_ROCM_WIN_VERSION "
+             f"{ROCM_WIN_VERSION} is not taken - remove the folder and run this again to install it")
+    missing = root is None or not (root / "lib" / "llvm" / "bin" / "clang++.exe").exists() or \
+        [a for a in archs if not (root / ".kpack" / f"blas_lib_{a}.kpack").exists()] or other
+    if missing:
+        extras = "libraries,devel" + "".join(f",device-{a}" for a in archs)
+        say(f"  Installing ROCm {ROCM_WIN_VERSION} for AMD GPUs into {ROCM_WIN_VENV} (AMD's TheRock wheels, ~7 GB) ...")
+        run([str(py), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--index-url", ROCM_WIN_INDEX,
+             f"rocm[{extras}]=={ROCM_WIN_VERSION}"])
+        run([str(sdk), "init"])
+        got = out([str(sdk), "path", "--root"]).strip()
+        root = Path(got) if got else None
+    if root is None or not (root / "lib" / "llvm" / "bin" / "clang++.exe").exists():
+        fail(f"ROCm was installed but its compiler is missing ({root})",
+             f"remove the folder {venv} and run this again (AMD's wheels from {ROCM_WIN_INDEX})")
+    ok(f"ROCm: {root}")
+    return root, [str(root / "bin")]
 
 
 def hipblaslt_version(lib_dirs):
@@ -5984,17 +6046,18 @@ def poly_ram_need(d, vram_gb) -> float:
 
 def poly_fits(d, ram, vram_gb, hip) -> bool:
     """Whether a size of strata-poly's models runs on this PC with its experts in RAM, by setup's estimate."""
-    return not (hip and WIN) and vram_gb >= poly_beside_gb(d) + 2 and ram >= poly_ram_need(d, vram_gb) - 4
+    return vram_gb >= poly_beside_gb(d) + 2 and ram >= poly_ram_need(d, vram_gb) - 4
 
 
 def poly_verdict(d, ram, vram_gb, hip, windows=False) -> str:
     """--check's line for a size of strata-poly's models.  `windows`: its family has run there (FAMILIES)."""
-    if hip and WIN:
-        return "does not run on AMD cards on Windows yet (its HIP engine is compiled on Linux)"
     if vram_gb < poly_beside_gb(d) + 2:
         return f"does not fit: it takes about {poly_beside_gb(d)} GB of VRAM before any expert"
     need = poly_ram_need(d, vram_gb)
-    return "EXPERIMENTAL, " + ("not tried on Windows, " if WIN and not windows else "") + (
+    # an AMD card on Windows: setup compiles the HIP engine there (AMD's ROCm wheels); one RX 9070 XT has run one
+    head = ("EXPERIMENTAL, measured on one AMD card on Windows, " if hip and WIN else
+            "EXPERIMENTAL, " + ("not tried on Windows, " if WIN and not windows else ""))
+    return head + (
         f"fits by setup's estimate (~{need:.0f} GB of RAM on this card)" if poly_fits(d, ram, vram_gb, hip) else
         f"wants ~{need:.0f} GB of RAM on this card: with {ram:.0f} its experts are read from the SSD")
 
@@ -6145,8 +6208,11 @@ def build_engine_poly(gpu, yes, llama, vision="none", toolkit=13) -> Path:
 
 def build_engine_poly_hip(gpu, llama) -> Path:
     """Compile strata-poly for this AMD GPU into engine-poly/ (again only when its source changed: a `git pull`).
-    ROCm comes from rocm_root: a system ROCm 7 or AMD's TheRock wheels in .venv, as for the main engine's HIP
-    build.  There is no ready-made AMD engine and no HIP image encoder: images stay off."""
+    Windows: AMD's TheRock Windows wheels in .rocm-win (build_engine_poly_hip_win).  Linux: ROCm from rocm_root: a
+    system ROCm 7 or AMD's TheRock wheels in .venv, as for the main engine's HIP build.  There is no ready-made AMD
+    engine and no HIP image encoder: images stay off."""
+    if WIN:
+        return build_engine_poly_hip_win(gpu, llama)
     eng = ROOT / ENGINE_POLY_DIR
     eng.mkdir(exist_ok=True)
     stamp = eng / "BUILD.json"
@@ -6182,6 +6248,63 @@ def build_engine_poly_hip(gpu, llama) -> Path:
     shutil.copy2(ROOT / "build-poly-hip" / POLY_EXE, eng / POLY_EXE)
     stamp.write_text(json.dumps({"source": "local-hip", "backend": "hip", "version": source_version(),
                                  "archs": archs, "vision": "none", "lib_dirs": dirs, "src": src}, indent=1))
+    ok(f"strata-poly compiled: {eng / POLY_EXE}")
+    return eng
+
+
+def build_engine_poly_hip_win(gpu, llama) -> Path:
+    """Compile strata-poly for this AMD GPU on Windows into engine-poly/ (again only when its source changed: a
+    `git pull`).  ROCm comes from AMD's TheRock Windows wheels in .rocm-win (rocm_win_root), MSVC's headers, linker
+    and runtime from the Visual Studio C++ build tools, and ROCm's clang compiles the host code too (CMake refuses to
+    mix it with cl.exe: tools/hip/build_windows.bat).  The DLLs and kernels it loads are the ready-made main engine's
+    bundled ROCm, or .rocm-win's own: the config's lib_dirs points there, so the libraries are not on the disk twice.
+    There is no HIP image encoder: images stay off."""
+    eng = ROOT / ENGINE_POLY_DIR
+    eng.mkdir(exist_ok=True)
+    stamp = eng / "BUILD.json"
+    meta = json.loads(stamp.read_text(encoding="utf-8")) if stamp.exists() else {}
+    src = source_hash(ENGINE_SOURCES)
+    archs = sorted(set(gpu.get("archs") or [gpu["arch"]]))
+    engine_ok = meta.get("backend") == "hip" and (eng / POLY_EXE).exists() and meta.get("src") == src and \
+        set(archs) <= set(meta.get("archs", []))
+    if engine_ok:
+        ok("strata-poly already built for this PC")
+        return eng
+    vcvars = find_vcvars()
+    if vcvars is None:
+        fail("the Visual Studio C++ build tools were not found",
+             "install them (Visual Studio 2019 or 2022, workload 'Desktop development with C++') and run setup again")
+    root, _ = rocm_win_root(archs)
+    rocm = str(root).replace("\\", "/")
+    bitcode = f"{rocm}/lib/llvm/amdgcn/bitcode"
+    os.environ.update({"HIP_PLATFORM": "amd", "HIP_PATH": str(root), "ROCM_PATH": str(root)})
+    os.environ["PATH"] = os.pathsep.join([str(root / "bin"), str(root / "lib" / "llvm" / "bin"),
+                                          os.environ.get("PATH", "")])
+    say("  strata-poly's source changed: compiling it again (only what changed, a few minutes) ..."
+        if meta.get("backend") == "hip" and (eng / POLY_EXE).exists()
+        else f"  Compiling the strata-poly engine for your AMD GPU ({', '.join(archs)}; 10-20 minutes, once) ...")
+    bdir = ROOT / "build-poly-hip-win"
+    cmake_build(ROOT, bdir, "strata-poly",
+                ["-DSTRATA_ENABLE_HIP=ON", "-DSTRATA_ENABLE_CUDA=OFF", "-DSTRATA_BUILD_TESTS=OFF",
+                 "-DSTRATA_PREFILL_MMQ=ON", "-DSTRATA_PORTABLE=OFF",
+                 "-DCMAKE_HIP_ARCHITECTURES=" + ";".join(archs),
+                 f"-DCMAKE_C_COMPILER={rocm}/lib/llvm/bin/clang.exe",
+                 f"-DCMAKE_CXX_COMPILER={rocm}/lib/llvm/bin/clang++.exe",
+                 f"-DCMAKE_HIP_COMPILER={rocm}/lib/llvm/bin/clang++.exe",
+                 f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={rocm}", f"-DCMAKE_PREFIX_PATH={rocm}",
+                 f"-DCMAKE_HIP_FLAGS=--rocm-path={rocm} --rocm-device-lib-path={bitcode}",
+                 f"-DSTRATA_GGML_DIR={llama}"], vcvars, "build-strata-poly-hip.bat")
+    shutil.copy2(bdir / POLY_EXE, eng / POLY_EXE)
+    # the DLLs, the GEMM kernels and the .kpack files rocBLAS finds beside its DLL come from the ready-made main
+    # engine's bundled ROCm (the same wheels; lib_dirs points there, so nothing is on the disk twice), else from
+    # .rocm-win itself (rocm/bin, where its own kernels are)
+    bundled = ROOT / "engine" / "rocm" / "bin"
+    dirs = [str(bundled)] if bundled.is_dir() else [str(root / "bin")]
+    stamp.write_text(json.dumps({"source": "local-hip", "backend": "hip", "platform": "windows-x64",
+                                 "version": source_version(), "archs": archs, "rocm": ROCM_WIN_VERSION,
+                                 "hipblaslt_version": hipblaslt_version([str(root / "bin")]), "vision": "none",
+                                 "lib_dirs": dirs, "src": src}, indent=1))
+    hip_runtime_beside_exe(eng)                        # #468 #461: before System32's amdhip64_7.dll
     ok(f"strata-poly compiled: {eng / POLY_EXE}")
     return eng
 
@@ -6281,10 +6404,11 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     config and the start script."""
     fam = FAMILIES[family]
     title = fam["title"]
-    if hip and WIN:
-        fail(f"{title} has no AMD engine for Windows: its HIP engine is compiled on Linux",
-             "choose another model for this card, or run setup on Linux")
-    if hip and family in ("glm", "deepseek", "lfm25", "gemma4", "tiel"):   # the engine runs on AMD, these models not yet
+    if hip and WIN:   # the engine is compiled here from AMD's ROCm Windows wheels (rocm_win_root)
+        warn(f"{title} on AMD cards on Windows: EXPERIMENTAL.  Setup compiles the HIP engine here (AMD's ROCm "
+             "wheels), which has run one model on an RX 9070 XT and nothing else yet; the log says where it stops "
+             "if it does")
+    elif hip and family in ("glm", "deepseek", "lfm25", "gemma4", "tiel"):   # the engine runs on AMD, these models not yet
         warn(f"{title} on the AMD card has not been tried: the engine runs there, this model was not")
     if cuda_tk == 12:
         warn(f"{title}'s engine with CUDA 12 is compiled here (the ready-made one is CUDA 13)" +
@@ -6547,6 +6671,10 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     elif gpu["count"] > 1 or a.gpu is not None:
         cfg["gpu"] = gpu["index"]                      # the engine is told this card (issue #51)
         cfg["gpus_asked"] = True
+    if hip and WIN:                                    # AMD on Windows: HIP_VISIBLE_DEVICES and hip_env_guard
+        cfg["backend"] = "hip"
+        if not multi and gpu.get("driver") == "hip":   # setup's list is the HIP runtime's own here (#325: an iGPU
+            cfg["hip_ordinal"] = gpu["index"]          # may be HIP's device 0); the ordinal wins for one card
     if cuda_tk == 12:
         cfg["cuda"] = 12                               # a copy set up from this install takes it too
     if a.host:
