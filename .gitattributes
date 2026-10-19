@@ -10,3 +10,6 @@ tests/data/native_experts/** -text
 
 # the quant yardstick's text set: tokenized byte for byte (set.ids.json), never convert its line endings
 data/quant_quality/** -text
+
+# llama.cpp's flash-attention kernel and its patch: git apply (tools/test_fattn_sync.py) rejects them with CRLF
+src/poly/fattn_mma.* text eol=lf
