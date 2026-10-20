@@ -93,7 +93,10 @@ Their numbers are in the
 weights from the GGUF, so a fine-tune that keeps the architecture of Qwen3.6, Ornith 1.5 or Gemma 4 should run.
 Setup only knows the files it offers. To give it another, put the file in a folder under the name of the size
 closest to it, `Qwen3.6-35B-A3B-UD-Q4_K_M.gguf` for a Q4_K_M of Qwen3.6, and run setup with
-`--family qwen36 --model UD-Q4_K_M --gguf-dir <that folder>`.
+`--family qwen36 --model UD-Q4_K_M --gguf-dir <that folder>`. Setup checks that the file is a whole GGUF of the
+family's architecture (`qwen35moe` for Qwen3.6, Ornith 1.5 and Tiel Coder, `gemma4` for Gemma 4), says that it is
+not the file it offers, and uses it as it is; it never deletes a file in that folder. Its RAM and VRAM estimates
+are those of the size whose name the file took.
 
 ### Can I use any GLM 5.3 Flash GGUF?
 
