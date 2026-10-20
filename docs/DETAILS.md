@@ -2094,6 +2094,24 @@ model's.
 changes at 10% of positions, mean KL from the stock model 0.063 nats (max 4.1), perplexity +15% on code, +2.3% on
 the document, +0.4% on the chat. Details: `bench/results/2026-09-27-esp/`.
 
+## strata-poly: flash attention for prompt reading (`STRATA_FATTN=1`, off by default)
+
+For strata-poly's Qwen3.6 family (heads of 256 values, 8 heads a group) on an Ampere or later NVIDIA card. With
+`STRATA_FATTN=1` in the environment a prompt batch's attention runs through llama.cpp's flash-attention kernel
+(`src/poly/fattn_mma.cuh`, a copy of `fattn-mma-f16.cuh` with the causal mask computed in the kernel) instead of
+two cuBLAS products and a softmax over scores in memory. Under the q8_0 cache (`--kv int8`) blocks of keys are
+dequantized to fp16 in the attention's existing score scratch; an fp16 cache is read where it lies. No VRAM is added.
+The server logs `STRATA_FATTN: prompt attention through llama.cpp's flash-attention kernel`. Decode, Turing, HIP and
+other models keep the old path, and without the variable nothing changes.
+
+**Measured** on an RTX 3070 8 GB (PCIe 3.0 x16; Ryzen 5 2600X, 32 GB DDR4-3200; Cyber-Tiel-Coder 35B-A3B
+UD-Q4_K_XL, `--max-context 262144`, q8_0 cache), a coding-agent conversation of growing turns: prompt read 1,437 -> 1,824 tokens/s at 32K of context, 749 -> 1,268 at 103K,
+610 -> 1,066 at 143K (+65-85% at 103-143K against the range of earlier control runs); decode the same within 1
+token/s; a 107K recall test 3 of 3. The kernel sums the value products in halves, so its results are further from
+the arithmetic in doubles (up to 7.7e-3 on results up to 2.9) than the old path's (2.3e-3); `poly_fattn_test` checks
+both caches. Greedy answers part from the old path's after a few dozen characters, at near-ties where the old path
+also parts from itself between runs.
+
 ---
 
 ## Troubleshooting
