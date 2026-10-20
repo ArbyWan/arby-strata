@@ -36,8 +36,12 @@ namespace strata::poly {
 class Shards;
 struct Likeliest;
 
-/// The attention caches' storing format: fp16 (default) or ggml Q8_0; opt-in via --kv.
-enum class KvFmt { kFp16 = 0, kQ8_0 = 1 };
+/// The attention caches' storing format, opt-in via --kv.  q8_0 is ggml's blocks (one fp16 scale a 32-value
+/// block of int8 codes) and reads them back element by element; int8 is the same rule with the codes and the
+/// deltas in two arrays, which a reader can take four codes to a load, and int8k keeps only the keys' side
+/// quantized.  q8_0 is qwen35moe's; int8 and int8k are Gemma 4's - the two readers are not the same arithmetic,
+/// so a model has one or the other rather than a choice between them.
+enum class KvFmt { kFp16 = 0, kQ8_0 = 1, kInt8 = 2, kInt8K = 3 };
 
 struct Options {
     std::string model;
@@ -186,6 +190,10 @@ public:
     double numa_share() const { return node_share_; }
     int64_t pos() const { return pos_; }
     int64_t meta_u(const char* key, int64_t fallback) const;
+    /// What --kv asked for, in the two short forms an architecture's code reads: the int8 codes/delta cache
+    /// (both sides, or the keys' side alone under int8k).
+    bool int8() const { return opt_.kv_format == KvFmt::kInt8 || opt_.kv_format == KvFmt::kInt8K; }
+    bool int8k() const { return opt_.kv_format == KvFmt::kInt8K; }
 
     /// Forget the sequence.
     void reset();

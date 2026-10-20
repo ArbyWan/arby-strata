@@ -1053,8 +1053,12 @@ void usage() {
                  "                         as a CUDA graph and replayed)\n"
                  "  --kv-whole             give the attention caches VRAM for the whole context at load (default: as\n"
                  "                         the conversation grows, the expert cache having the rest until then)\n"
-                 "  --kv fmt               the K and V attention caches' format: fp16 (default, unchanged) or q8_0\n"
-                 "                         (ggml Q8_0 blocks: half the KV VRAM, slightly different answers); opt-in\n"
+                 "  --kv fmt               the K and V attention caches' format, opt-in: fp16 (default,\n"
+                 "                         unchanged); q8_0 (ggml Q8_0 blocks: half the KV VRAM, slightly\n"
+                 "                         different answers; qwen35moe's); int8 / int8k (Gemma 4's: the same\n"
+                 "                         Q8_0 rule with the codes and their deltas in two arrays, so a\n"
+                 "                         reader takes four codes to a load; int8k keeps the keys' side\n"
+                 "                         quantized and the values' in fp16)\n"
                  "  --expert-swaps N       while an answer is written, up to N experts it keeps using are on their way\n"
                  "                         into VRAM, in place of cached ones it uses less (default 64, 0 = the cache\n"
                  "                         stays as it was loaded)\n"
@@ -1151,8 +1155,11 @@ int main(int argc, char** argv) {
             const std::string fmt = val();
             if (fmt == "fp16") o.kv_format = KvFmt::kFp16;
             else if (fmt == "q8_0") o.kv_format = KvFmt::kQ8_0;
+            else if (fmt == "int8") o.kv_format = KvFmt::kInt8;
+            else if (fmt == "int8k") o.kv_format = KvFmt::kInt8K;
             else {
-                std::fprintf(stderr, "strata-poly: --kv %s: unknown format (use fp16 or q8_0)\n", fmt.c_str());
+                std::fprintf(stderr, "strata-poly: --kv %s: unknown format (use fp16, q8_0, int8 or int8k)\n",
+                             fmt.c_str());
                 std::exit(2);
             }
         }

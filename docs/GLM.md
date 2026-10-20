@@ -258,7 +258,7 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
 | `--draft-model FILE.gguf` | | a file of the same model to take that block from, when `--model` has none; setup passes the one it downloaded |
 | `--draft-vocab N` | 131072 for Qwen3.6, Ornith and Tiel Coder, all of it for the others | the block guesses among the vocabulary's first N tokens; 0 = all |
 | `--kv-whole` | on an AMD card | give the attention caches VRAM for the whole context at load, not as the conversation grows; setup writes it for an AMD card, where ROCm keeps the VRAM the expert cache gives back ([AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta)) |
-| `--kv fmt` | fp16 | the K and V attention caches' format: `fp16` (default, unchanged) or `q8_0` (ggml Q8_0 blocks: one fp16 scale a 32-value block of int8 codes): half the KV VRAM, the same answers on the tested models ([Q8_KV.md](Q8_KV.md)) |
+| `--kv fmt` | fp16 | the K and V attention caches' format: `fp16` (default, unchanged); `q8_0` (ggml Q8_0 blocks: one fp16 scale a 32-value block of int8 codes: half the KV VRAM, the same answers on the tested models; `qwen35moe`'s); `int8` / `int8k` (Gemma 4's: the same rule in two arrays, so a reader takes four codes to a load; `int8k` keeps only the keys' side quantized) ([Q8_KV.md](Q8_KV.md)) |
 | `--prompt-batch N` | 1024 | prompt tokens read at a time, 1 to 4096; about 1.4 MiB of VRAM each |
 | `--stage-mib N` | 2048 | VRAM the experts outside the cache pass through while a prompt is read |
 | `--stage-ahead N` | 1024 | from N tokens, a batch copies those experts before the layer has chosen, as does every batch of a prompt of N tokens or more that is read several at a time; 0 = never |
@@ -279,6 +279,18 @@ goes on from where it stopped, and an edit goes back to the nearest checkpoint.
 `qwen35moe` models. [Q8_KV.md](Q8_KV.md) has the format, the measured VRAM saving (46.88% at 131072), the
 fp16↔q8_0 parity on Tiel, Ornith and Occamy, and what was left alone (the `strata` engine, `glm5next`, Gemma 4,
 the default path).
+
+Gemma 4 has its own pair beside it: `--kv int8` (both sides quantized) and `--kv int8k` (the keys' side only,
+the values in fp16), with the same Q8_0 rule — the block's largest magnitude over 127 as the delta,
+`roundf(x / delta)` as the code — but the codes and the deltas in two arrays instead of ggml's 34-byte
+`block_q8_0`, so a reader takes four codes to an aligned load and a decode step is one `__dp4a`
+(`src/poly/kernels.cu`, `store_int8` / `attend_int8`; above 16K keys, an int8 tensor-core MMA). A prompt batch
+converts the codes it needs to halves once — O(rows) against an attention's O(rows²) — and cuBLAS takes it from
+there, as llama.cpp does on CUDA. Both are rejected for any other architecture at load
+(`--kv int8 and --kv int8k are Gemma 4's; for a qwen35moe model use --kv q8_0`). The figures: the kernel unit
+test (`poly_kv_int8_test`, 35 checks) agrees with ggml's own quantizer to the bit, and on a Gemma 4 26B the
+three formats run within run-to-run scatter of each other (prompt 984.0 / 941.8 / 968.1 ms and decode 37.68 /
+38.22 / 38.01 tok/s for fp16 / int8 / int8k, RTX 4070 Laptop, medians of 15) with the answers kept.
 
 ## What is missing
 
