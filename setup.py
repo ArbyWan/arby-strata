@@ -2179,6 +2179,22 @@ def gguf_arch(s: Path) -> str:
         return ""
 
 
+def mixed_gate_up(s: Path) -> str:
+    """The first layer whose routed experts' gate and up are stored with different types, as "blk.16: IQ2_S and
+    IQ3_XXS", which Engine::load() refuses (it computes the two as one); "" for none or a file it cannot read."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    from gguf_reader import GGUFFile
+    try:
+        types = {t.name: t.type_name for t in GGUFFile(s).tensors}
+    except (OSError, ValueError, struct.error):
+        return ""
+    for name, gate in types.items():
+        up = types.get(name.replace(".ffn_gate_exps.", ".ffn_up_exps.")) if ".ffn_gate_exps." in name else None
+        if up and up != gate:
+            return f"{name.split('.ffn_')[0]}: {gate} and {up}"
+    return ""
+
+
 def verify_poly_own(s: Path, size: int, sha: str, family: str) -> None:
     """--gguf-dir's file for a strata-poly family: the pinned file, or another GGUF of the family's architecture (a
     fine-tune, another quantization: docs/FAQ.md), which the engine reads as it is.  Nothing in that folder is
@@ -2195,6 +2211,10 @@ def verify_poly_own(s: Path, size: int, sha: str, family: str) -> None:
              f"give --gguf-dir a GGUF of {FAMILIES[family]['title']}'s architecture")
     if not whole_shard(s):
         fail(f"{s} is shorter than its own tensor directory says: an incomplete copy", "copy the whole file again")
+    mixed = mixed_gate_up(s)
+    if mixed:
+        fail(f"{s} stores its experts' gate and up with different types ({mixed}), which the strata-poly engine "
+             "does not run: it computes the two as one", "use a quantization that keeps them alike, or one setup offers")
     warn(f"{s.name} is not the file setup offers ({s.stat().st_size:,} bytes, not {size:,}): your own {arch} GGUF, "
          "run as it is; setup's RAM and VRAM estimates are the offered file's")
     mark(s, "own file")
