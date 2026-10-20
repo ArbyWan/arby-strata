@@ -3,11 +3,18 @@
 // doubles for three tokens of each batch.  Also with a scratch that holds only a few thousand keys, so that the
 // keys go in many blocks and are merged.  Then the same cases with fattn_f16() on an fp16 cache of the same values.
 //
-// llama.cpp's kernel sums the values' products in halves (attend_batch() in floats), so it is the further from the
-// doubles, by up to about 1e-2 on results up to 4 (measured on an RTX 3070).  The bounds catch a wrong mask or merge,
-// which is off by tenths.
+// llama.cpp's kernel sums the values' products in halves on NVIDIA cards (T_C_VKQ in fattn_mma.cuh, upstream's
+// choice, not one of our changes; attend_batch() sums in floats), so it is the further from the doubles, and by how
+// much depends on the card: an RTX 3070 (sm_86) and an RTX 4070 (sm_89) give the same 1.06e-2 in one case where an
+// RTX 5090 (sm_120) gives 4.85e-3.  So the bounds scale with the largest result and are about twice the most sm_86
+// gives (9.4e-3 of the largest result from attend_batch(), 3.4e-3 from the doubles).  They catch a wrong mask or
+// merge, which is off by tenths.
 //
-// usage: poly_fattn_test   (exit 0: every case within 2.5e-2 of attend_batch() and 1e-2 of the doubles)
+// The inputs are drawn from mt19937's raw output (draw()), not std::normal_distribution, whose numbers differ between
+// standard libraries, so that every platform tests the same data.
+//
+// usage: poly_fattn_test   (exit 0: every case within kRoomBatch and kRoomDoubles, times max(1, largest result), of
+//        attend_batch() and the doubles)
 //        poly_fattn_test dec   fdec_q8() and fdec_f16() (the decode kernel) against attend() and the doubles, up
 //                              to 170,000 rows; a token alone and with others, and from a position on the card,
 //                              to the bit
@@ -32,6 +39,15 @@ using namespace strata::poly;
 
 constexpr int kDim = 256, kHeads = 16, kKvHeads = 2, kWidth = kKvHeads * kDim, kMaxRows = 131072, kBatch = 1024;
 constexpr size_t kScore = size_t(16) << 20;   // Qwen35's score_ (kScoreFloats)
+constexpr float kRoomBatch = 2e-2f, kRoomDoubles = 7.5e-3f;   // the bounds, as shares of the largest result (at least 1)
+
+// the same numbers from the same seed on every standard library: uniform in (0, 1) from the raw 32 bits, and a
+// normal one by Box-Muller on two of them
+double uniform(std::mt19937& rng) { return (rng() + 0.5) / 4294967296.0; }
+float draw(std::mt19937& rng) {
+    const double u = uniform(rng), v = uniform(rng);
+    return (float) (std::sqrt(-2.0 * std::log(u)) * std::cos(6.283185307179586 * v));
+}
 
 template <typename T> T* upload(const std::vector<T>& v) {
     T* d = nullptr;
@@ -62,13 +78,11 @@ struct Cache {
 };
 
 Cache make(std::mt19937& rng, size_t rows = kMaxRows) {
-    std::normal_distribution<float> nd(0.f, 1.f);
-    std::uniform_real_distribution<float> ud(0.5f, 1.5f);
     Cache c;
     c.codes.resize(rows * kWidth);
     c.scales.resize(rows * (kWidth / 32));
-    for (auto& x : c.codes) x = (int8_t) std::clamp(std::lround(40.f * nd(rng)), -127L, 127L);
-    for (auto& x : c.scales) x = __half_as_ushort(__float2half(ud(rng) / 40.f));
+    for (auto& x : c.codes) x = (int8_t) std::clamp(std::lround(40.f * draw(rng)), -127L, 127L);
+    for (auto& x : c.scales) x = __half_as_ushort(__float2half((float) (0.5 + uniform(rng)) / 40.f));
     return c;
 }
 
@@ -140,7 +154,8 @@ int check(cublasHandle_t blas, const Cache& K, const Cache& V, Kvq8 kq, Kvq8 vq,
                 most_ref = std::max(most_ref, (float) std::fabs(ref[at] - o));
             }
         }
-    const bool ok = most <= 2.5e-2f && most_fa <= 1e-2f;
+    const float room = std::max(1.f, big);
+    const bool ok = most <= kRoomBatch * room && most_fa <= kRoomDoubles * room;
     std::printf("%s %s pos %6lld rows %4d scratch %5.1f MiB: %.2e from attend_batch (mean %.1e, results up to %.2f); "
                 "against doubles: fattn %.2e, attend_batch %.2e; %.2f ms against %.2f\n",
                 ok ? "ok  " : "FAIL", kh ? "f16" : "q8 ", pos, n, fattn_floats * 4.0 / (1 << 20), most, sum / cells, big, most_fa,
@@ -298,9 +313,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     std::mt19937 rng(7);
-    std::normal_distribution<float> nd(0.f, 1.f);
     std::vector<float> q(size_t(kBatch) * kHeads * kDim);
-    for (float& x : q) x = 2.f * nd(rng);   // spread scores, so the softmax has a few large weights
+    for (float& x : q) x = 2.f * draw(rng);   // spread scores, so the softmax has a few large weights
     Cache K = make(rng), V = make(rng);
     int8_t *kc = upload(K.codes), *vc = upload(V.codes);
     uint16_t *ks = upload(K.scales), *vs = upload(V.scales);
