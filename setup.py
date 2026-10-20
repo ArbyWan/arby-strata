@@ -2200,6 +2200,18 @@ def verify_poly_own(s: Path, size: int, sha: str, family: str) -> None:
     mark(s, "own file")
 
 
+def verify_poly_download(s: Path, size: int, sha: str, family: str) -> None:
+    """A strata-poly family's file in setup's own models folder: the pinned one (verify_sha256).  A whole GGUF of the
+    family's architecture of another size there is the user's own file put where setup keeps its downloads (issue 54):
+    setup says how to run it instead of telling them to delete it."""
+    have = s.stat().st_size if s.exists() else -1
+    if have != size and have > 0 and whole_shard(s) and gguf_arch(s) in POLY_GGUF_ARCHS.get(family, ("qwen35moe",)):
+        fail(f"{s} is a whole {gguf_arch(s)} GGUF but not the file setup offers ({have:,} bytes, not {size:,})",
+             "to run your own file, move it to a folder of its own and run setup with --gguf-dir <that folder>; "
+             "to download setup's file instead, delete it and run setup again")
+    verify_sha256(s, size, sha)
+
+
 def ready_files(model: str) -> list:
     """A ready-made pack's files (NVFP4_REPOS): (role, repo, revision, path, bytes, sha256) each."""
     repo = MODELS[model]["repo"]
@@ -6654,7 +6666,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         if a.gguf_dir:
             verify_poly_own(s, *fam["sha256"][s.name], family)
         else:
-            verify_sha256(s, *fam["sha256"][s.name])
+            verify_poly_download(s, *fam["sha256"][s.name], family)
     if guesser is not None:
         if not have_guesser:
             say("  Its draft model lets it guess a few words ahead and check them at once (faster answers).")

@@ -62,6 +62,18 @@ class OwnGguf(unittest.TestCase):
         self.assertEqual(quiet(setup.verify_poly_own, self.f, 13_600_000_000, "0" * 64, "tiel")[0], "stopped")
         self.assertTrue(self.f.exists())
 
+    def test_ones_own_file_in_setups_folder_is_pointed_to_gguf_dir(self):
+        # issue 54: renamed into setup's own models folder, without --gguf-dir
+        gguf(self.f, "qwen35moe")
+        code, out = quiet(setup.verify_poly_download, self.f, 13_600_000_000, "0" * 64, "tiel")
+        self.assertEqual(code, "stopped")
+        self.assertIn("--gguf-dir", out)
+        self.assertNotIn("delete it and run setup again (the download restarts)", out)
+        self.assertTrue(self.f.exists())
+        gguf(self.f, "qwen35moe", short=100)       # a truncated download is still one to fetch again
+        code, out = quiet(setup.verify_poly_download, self.f, 13_600_000_000, "0" * 64, "tiel")
+        self.assertIn("the download restarts", out)
+
     def test_a_wrong_hash_deletes_only_what_setup_downloaded(self):
         gguf(self.f, "qwen35moe")
         size = self.f.stat().st_size
