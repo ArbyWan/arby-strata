@@ -1083,7 +1083,8 @@ void usage() {
                  "                         state and attention rows (default 0 = one at a time; at most 8);\n"
                  "                         --slots N is the same\n"
                  "  --check-batch K        with --tokens and --batch K or more: K prompts answered on their own and\n"
-                 "                         then together, compared token by token\n"
+                 "                         then together, compared token by token (takes --kv-whole, so the expert\n"
+                 "                         cache stays as it is)\n"
                  "  --eos-ids ID,ID,...    tokens that end a reply (default: the GGUF's eos, eot and eom)\n"
                  "  --temperature F --top-k N --top-p F --min-p F --seed N   sampling for --tokens (default greedy)\n"
                  "  --images FILE          with --tokens: the prompt's pictures, as strata-vision writes them\n"
@@ -1207,6 +1208,9 @@ int main(int argc, char** argv) {
                              "with tokens left of --tokens\n");
         return 2;
     }
+    // --check-batch: K sequences growing together would take VRAM from the expert cache that the single runs had,
+    // and an expert moved to the CPU rounds differently (issue 55).  Their attention rows get VRAM at load instead.
+    if (check > 0) o.kv_grow = false;
     // over --tail-skip, as Strata's engine reads it: =0 turns a model's default off
     if (const char* v = std::getenv("STRATA_ROUTE_TAIL_SKIP")) o.tail_skip = std::atoi(v);
     const long long most = 1LL << 24;   // MiB: 16 TiB

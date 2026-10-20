@@ -50,7 +50,10 @@ do. A model split across cards (`"layer_split"`) runs its slots card after card.
 Check it on your PC with the engine alone: `strata-poly --model M.gguf --batch 3 --check-batch 3 --tokens ID,ID,...`
 answers three prompts (the given one, and it without its first one and two tokens) one after the other and then
 together, and says for each how many tokens came out the same. To compare token by token, keep the expert cache
-fixed and leave guesses and the tail skip out: `--expert-swaps 0 --cpu-share 0 --window 1 --tail-skip 0`. On the
+fixed and leave guesses and the tail skip out: `--expert-swaps 0 --cpu-share 0 --window 1 --tail-skip 0`. The
+check gives the attention caches their VRAM at load (`--kv-whole`): otherwise the sequences growing together take
+VRAM from the expert cache, an expert that moves to the CPU rounds differently, and long prompts part for that
+reason alone ([issue 55](https://github.com/VecSzn/PolyStrata/issues/55)). On the
 laptop every token matched for Qwen3.6, Gemma 4 and LFM2.5 with 2 to 4 sequences and prompts of 19 to 3,000 tokens,
 and on the RTX 5090 for Qwen3.6, MiniCPM-V, LFM2.5, DeepSeek V4 Flash and GLM 5.3 Flash with 3 sequences after
 prompts of 64 and 3,000 tokens. Through the server on the laptop, with the same four options in the run config,
