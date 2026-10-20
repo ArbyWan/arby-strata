@@ -365,14 +365,14 @@ Liquid AI 的许可证只允许年收入低于 1,000 万美元的公司商用（
 
 | | |
 | --- | --- |
-| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 5 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 Linux 上的 AMD 显卡也能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
+| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 5 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 AMD 显卡在 Linux 和 Windows 上都能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
 | **内存** | 配 8 GB 显卡，三个规格分别约需 **17、21、27 GB**，这是安装程序的估算。24 GB 的显卡能放下较小两个规格的整个模型。三个规格都在一台 32 GB 内存的笔记本上跑过。 |
 | **硬盘** | 模型文件 13、17 或 23 GB，要看图片再加 1 GB。 |
 | **系统** | Linux 或 Windows 10 / 11，以及 NVIDIA 的最新显卡驱动。 |
 
 其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。在 Windows 上，安装程序直接从最新 release 下载编译好的引擎。
 如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
-就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
+就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上用两张显卡、三张及以上显卡。在 Windows 上用 AMD 显卡时，setup 会像在 Linux 上一样编译 `strata-poly`（AMD 的 TheRock wheel 装在 `.rocm-win` 里），并警告说在那里跑还很新（[AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)）。
 
 [Strata](https://github.com/Niko1221/Strata) 从 0.1.44 起也能用它自己的引擎跑 Qwen3.6，UD-Q4_K_XL 及以上（`--family qwen36-strata`，要 32 GB 以上内存）。
 在 RTX 5090 上用 UD-Q4_K_XL 比，它读 4K 提示比 strata-poly 快 1.6 倍，读 31K 提示和写字两边差不多（[测法](docs/BACKENDS.md#qwen36-on-two-engines)，英文）。
@@ -382,53 +382,53 @@ Liquid AI 的许可证只允许年收入低于 1,000 万美元的公司商用（
 
 | | |
 | --- | --- |
-| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 4 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 Linux 上的 AMD 显卡也能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
+| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 4 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 AMD 显卡在 Linux 和 Windows 上都能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
 | **内存** | 配 8 GB 显卡，三个规格分别约需 **18、22、28 GB**，这是安装程序的估算。24 GB 的显卡能放下较小两个规格的整个模型。三个规格都在一台 32 GB 内存的笔记本上跑过。 |
 | **硬盘** | 模型文件 14、17 或 24 GB，要看图片再加 1 GB。 |
 | **系统** | Linux 或 Windows 10 / 11，以及 NVIDIA 的最新显卡驱动。 |
 
 其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。在 Windows 上，安装程序直接从最新 release 下载编译好的引擎。
 如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
-就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
+就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上用两张显卡、三张及以上显卡。在 Windows 上用 AMD 显卡时，setup 会像在 Linux 上一样编译 `strata-poly`（AMD 的 TheRock wheel 装在 `.rocm-win` 里），并警告说在那里跑还很新（[AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)）。
 
 ### Gemma 4 26B-A4B
 
 | | |
 | --- | --- |
-| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 6 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 Linux 上的 AMD 显卡也能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
+| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 6 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 AMD 显卡在 Linux 和 Windows 上都能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
 | **内存** | 配 8 GB 显卡，三个规格分别约需 **15、18、21 GB**，这是安装程序的估算。按同样的估算，16 GB 的显卡能放下较小两个规格的整个模型。三个规格都在一台 32 GB 内存的笔记本上跑过。 |
 | **硬盘** | 模型文件和它的草稿模型共 11、13 或 17 GB，要看图片再加 1 GB。 |
 | **系统** | Linux 或 Windows 10 / 11，以及 NVIDIA 的最新显卡驱动。 |
 
 其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。在 Windows 上，安装程序直接从最新 release 下载编译好的引擎。
 如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
-就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
+就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上用两张显卡、三张及以上显卡。在 Windows 上用 AMD 显卡时，setup 会像在 Linux 上一样编译 `strata-poly`（AMD 的 TheRock wheel 装在 `.rocm-win` 里），并警告说在那里跑还很新（[AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)）。
 
 ### Tiel Coder 35B-A3B
 
 | | |
 | --- | --- |
-| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 5 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 Linux 上的 AMD 显卡也能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
+| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 5 GB。在 32 GB 的卡上跑过，在把这张卡限制到 8 GB 的情况下跑过，也在笔记本的 8 GB 显卡上跑过。 AMD 显卡在 Linux 和 Windows 上都能跑，属测试版：setup 在你电脑上编译引擎；目前只在一张 RX 7600 上用 Qwen3.6 和 Ornith 测过。 |
 | **内存** | 配 8 GB 显卡，三个规格分别约需 **18、21、27 GB**，这是安装程序的估算。24 GB 的显卡三个规格的整个模型都放得下。三个规格都在一台 32 GB 内存的笔记本上跑过。 |
 | **硬盘** | 模型文件 14、17 或 23 GB，要看图片再加 1 GB。 |
 | **系统** | Linux 或 Windows 10 / 11，以及 NVIDIA 的最新显卡驱动。 |
 
 其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。在 Windows 上，安装程序直接从最新 release 下载编译好的引擎。
 如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
-就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
+就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上用两张显卡、三张及以上显卡。在 Windows 上用 AMD 显卡时，setup 会像在 Linux 上一样编译 `strata-poly`（AMD 的 TheRock wheel 装在 `.rocm-win` 里），并警告说在那里跑还很新（[AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)）。
 
 ### MiniCPM-V 4.7 35B-A3B
 
 | | |
 | --- | --- |
-| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 3.5 GB。在 32 GB 的卡上和笔记本的 8 GB 显卡上跑过。 Linux 上的 AMD 显卡也能跑，属测试版：setup 在你电脑上编译引擎；在一张 RX 7600 上跑过。 |
+| **显卡** | 一张 **NVIDIA** GeForce RTX 20 系列或更新的显卡，**8 GB 或以上显存**。放专家之前要占掉约 3.5 GB。在 32 GB 的卡上和笔记本的 8 GB 显卡上跑过。 AMD 显卡在 Linux 和 Windows 上都能跑，属测试版：setup 在你电脑上编译引擎；在一张 RX 7600 上跑过。 |
 | **内存** | 配 8 GB 显卡，三个规格分别约需 **19、25、31 GB**，这是安装程序的估算。32 GB 的显卡三个规格的整个模型都放得下。三个规格都在一台 32 GB 内存的笔记本上跑过。 |
 | **硬盘** | 模型文件 16、21 或 29 GB，要看图片再加 1 GB。 |
 | **系统** | Linux 或 Windows 10 / 11，以及 NVIDIA 的最新显卡驱动。 |
 
 其他的都由安装程序搞定，和 GLM 5.3 Flash 一样。在 Windows 上，安装程序直接从最新 release 下载编译好的引擎。
 如果 CPU 不支持 AVX2，或者你这份代码的引擎在那个 release 之后又改过，
-就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上的 AMD 显卡、Windows 上用两张显卡、三张及以上显卡。
+就改用 Visual Studio 的 2022 编译器和 CUDA 工具包在本机编译，缺的话会问你要不要装。暂时不支持：Windows 上用两张显卡、三张及以上显卡。在 Windows 上用 AMD 显卡时，setup 会像在 Linux 上一样编译 `strata-poly`（AMD 的 TheRock wheel 装在 `.rocm-win` 里），并警告说在那里跑还很新（[AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)）。
 
 这五个模型各自需要什么、是怎么验证的：[docs/BACKENDS.md](docs/BACKENDS.md#install)（英文）。
 

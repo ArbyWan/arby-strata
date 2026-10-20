@@ -384,7 +384,7 @@ La lista completa: [docs/LFM.md](docs/LFM.md#what-you-need) (en inglés).
 
 | | |
 | --- | --- |
-| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En Linux una tarjeta AMD también lo ejecuta, en beta: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En una tarjeta AMD también lo ejecuta, en beta, en Linux y en Windows: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
 | **RAM** | Unos **17, 21 o 27 GB** junto a una tarjeta de 8 GB para los tres tamaños, según la estimación del instalador. Una tarjeta de 24 GB guarda enteros los dos tamaños más pequeños. Los tres tamaños han funcionado en un portátil con 32 GB. |
 | **Disco** | 13, 17 o 23 GB para el archivo del modelo, 1 GB más para leer imágenes. |
 | **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |
@@ -392,7 +392,9 @@ La lista completa: [docs/LFM.md](docs/LFM.md#what-you-need) (en inglés).
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
+dos tarjetas en Windows, tres tarjetas o más. En una tarjeta AMD bajo Windows el instalador compila `strata-poly` para
+la tarjeta, como en Linux (las wheels TheRock de AMD en `.rocm-win`), y avisa de que ejecutarlo allí es nuevo
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 Desde la 0.1.44, el propio motor de [Strata](https://github.com/Niko1221/Strata) también ejecuta Qwen3.6, a partir de
 UD-Q4_K_XL (`--family qwen36-strata`, 32 GB de RAM o más). En una RTX 5090 con UD-Q4_K_XL leyó un prompt de 4K 1,6
@@ -403,7 +405,7 @@ en inglés). Los tamaños más pequeños, para tarjetas de 8 GB, siguen en strat
 
 | | |
 | --- | --- |
-| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 4 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En Linux una tarjeta AMD también lo ejecuta, en beta: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 4 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En una tarjeta AMD también lo ejecuta, en beta, en Linux y en Windows: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
 | **RAM** | Unos **18, 22 o 28 GB** junto a una tarjeta de 8 GB para los tres tamaños, según la estimación del instalador. Una tarjeta de 24 GB guarda enteros los dos tamaños más pequeños. Los tres tamaños han funcionado en un portátil con 32 GB. |
 | **Disco** | 14, 17 o 24 GB para el archivo del modelo, 1 GB más para leer imágenes. |
 | **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |
@@ -411,13 +413,15 @@ en inglés). Los tamaños más pequeños, para tarjetas de 8 GB, siguen en strat
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
+dos tarjetas en Windows, tres tarjetas o más. En una tarjeta AMD bajo Windows el instalador compila `strata-poly` para
+la tarjeta, como en Linux (las wheels TheRock de AMD en `.rocm-win`), y avisa de que ejecutarlo allí es nuevo
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 ### Gemma 4 26B-A4B
 
 | | |
 | --- | --- |
-| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 6 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En Linux una tarjeta AMD también lo ejecuta, en beta: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 6 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En una tarjeta AMD también lo ejecuta, en beta, en Linux y en Windows: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
 | **RAM** | Unos **15, 18 o 21 GB** junto a una tarjeta de 8 GB para los tres tamaños, según la estimación del instalador. Según la misma estimación, una tarjeta de 16 GB guarda enteros los dos tamaños más pequeños. Los tres tamaños han funcionado en un portátil con 32 GB. |
 | **Disco** | 11, 13 o 17 GB para el archivo del modelo y su modelo borrador, 1 GB más para leer imágenes. |
 | **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |
@@ -425,13 +429,15 @@ tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
+dos tarjetas en Windows, tres tarjetas o más. En una tarjeta AMD bajo Windows el instalador compila `strata-poly` para
+la tarjeta, como en Linux (las wheels TheRock de AMD en `.rocm-win`), y avisa de que ejecutarlo allí es nuevo
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 ### Tiel Coder 35B-A3B
 
 | | |
 | --- | --- |
-| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En Linux una tarjeta AMD también lo ejecuta, en beta: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En una tarjeta AMD también lo ejecuta, en beta, en Linux y en Windows: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
 | **RAM** | Unos **18, 21 o 27 GB** junto a una tarjeta de 8 GB para los tres tamaños, según la estimación del instalador. Una tarjeta de 24 GB guarda enteros los tres tamaños. Los tres tamaños han funcionado en un portátil con 32 GB. |
 | **Disco** | 14, 17 o 23 GB para el archivo del modelo, 1 GB más para leer imágenes. |
 | **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |
@@ -439,13 +445,15 @@ tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
+dos tarjetas en Windows, tres tarjetas o más. En una tarjeta AMD bajo Windows el instalador compila `strata-poly` para
+la tarjeta, como en Linux (las wheels TheRock de AMD en `.rocm-win`), y avisa de que ejecutarlo allí es nuevo
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 ### MiniCPM-V 4.7 35B-A3B
 
 | | |
 | --- | --- |
-| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 3.5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB y en la tarjeta de 8 GB de un portátil. En Linux una tarjeta AMD también lo ejecuta, en beta: el instalador compila el motor en tu PC; ha funcionado en una RX 7600. |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 3.5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB y en la tarjeta de 8 GB de un portátil. En una tarjeta AMD también lo ejecuta, en beta, en Linux y en Windows: el instalador compila el motor en tu PC; ha funcionado en una RX 7600. |
 | **RAM** | Unos **19, 25 o 31 GB** junto a una tarjeta de 8 GB para los tres tamaños, según la estimación del instalador. Una tarjeta de 32 GB guarda enteros los tres tamaños. Los tres tamaños han funcionado en un portátil con 32 GB. |
 | **Disco** | 16, 21 o 29 GB para el archivo del modelo, 1 GB más para leer imágenes. |
 | **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |
@@ -453,7 +461,9 @@ tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
 El instalador se encarga de todo lo demás, como con GLM 5.3 Flash. En Windows descarga el motor ya compilado de la
 última versión publicada. En un procesador sin AVX2, o en una copia cuyo motor cambió después de esa versión, lo
 compila en su lugar con el compilador de 2022 de Visual Studio y el CUDA Toolkit, y ofrece instalarlos. Todavía no:
-tarjetas AMD en Windows, dos tarjetas en Windows, tres tarjetas o más.
+dos tarjetas en Windows, tres tarjetas o más. En una tarjeta AMD bajo Windows el instalador compila `strata-poly` para
+la tarjeta, como en Linux (las wheels TheRock de AMD en `.rocm-win`), y avisa de que ejecutarlo allí es nuevo
+([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
 
 Qué necesita cada uno de los cinco y cómo se comprobó: [docs/BACKENDS.md](docs/BACKENDS.md#install) (en inglés).
 

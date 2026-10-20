@@ -461,13 +461,22 @@ an RX 9070 XT 16 GB and a Radeon AI PRO R9700 32 GB (both gfx1201), a Ryzen 9 39
 The four smaller models of PolyStrata's own engine (Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder) and GLM 5.3 Flash
 run through `strata-poly`, which is CUDA-shaped code; since 0.1.42-poly.4 it compiles for an AMD card through the
 same `hip_compat` headers as the main engine, with the CUDA driver's virtual memory calls mapped onto HIP's
-(`hip_compat/cuda.h`). Linux only: there is no ready-made AMD engine, and setup refuses these models on an AMD
-card under Windows.
+(`hip_compat/cuda.h`). There is no ready-made AMD engine: setup compiles one for the card. On Linux with ROCm from
+a system install or AMD's wheels in `.venv`, as for the main engine; on Windows with AMD's TheRock
+Windows wheels in `.rocm-win` (the private venv `tools\hip\build_windows.bat` uses) and Visual Studio 2022's C++
+build tools. The Windows path has run one model on one card (Tiel Coder 35B-A3B below); every other one there is
+unreported, so setup warns before it installs a model.
 
 - Install as for NVIDIA: `./setup.sh --family qwen36` (or `lfm25`, `ornith`, `gemma4`, `tiel`, `glm`, `deepseek`).
-  Setup compiles the engine for the card into `engine-poly/` (`build_engine_poly_hip`), with ROCm from a system
-  install or AMD's wheels in `.venv`, as for the main engine, and compiles again after a `git pull` that changed the
-  engine.
+  Setup compiles the engine for the card into `engine-poly/` (`build_engine_poly_hip`; on Windows
+  `build_engine_poly_hip_win`), with ROCm from a system install or AMD's wheels in `.venv` on Linux and from
+  `.rocm-win` on Windows, as for the main engine, and compiles again after a `git pull` that changed the
+  engine. `STRATA_ROCM_WIN_VERSION` picks which version of AMD's TheRock Windows wheels setup installs; the name
+  `tools\hip\build_windows.bat` reads for the same venv, `STRATA_ROCM_VERSION`, works too (the index stays
+  `https://nightly.repo.amd.com/rocm/whl-next/`; `STRATA_ROCM_INDEX` is not read there). A version other than
+  the one `.rocm-win` already holds is installed in its place (7 GB again, and the engine is kept until its
+  source changes); a `.rocm-win` that does not say which version it holds - one made by hand - is kept, with a
+  warning naming this setting.
 - Images stay off: the image encoder is a CUDA program.
 - The attention caches take their VRAM at load on an AMD card (`--kv-whole`; setup writes it into the config and
   adds it to an older one on update). On NVIDIA they grow with the conversation, and the expert cache gives VRAM
@@ -484,8 +493,17 @@ card under Windows.
   | Ornith 1.5 APEX-I-Mini | 40 tokens/s | 444 / 43 tokens/s |
 
   The first tokens after a load come slower while the expert cache fills (the port's own steady-state figures
-  were 64 and 35 tokens/s, with 5,125 and 4,517 experts in VRAM). Gemma 4, Tiel Coder and GLM have not been tried
-  on an AMD card, and setup warns so.
+  were 64 and 35 tokens/s, with 5,125 and 4,517 experts in VRAM). Gemma 4 and GLM have not been tried on an AMD
+  card, and setup warns so.
+- Measured under Windows 11 on an RX 9070 XT (gfx1201, 16 GB; Ryzen 7 7800X3D, 64 GB of RAM), engine 0.1.45
+  compiled by setup from AMD's TheRock wheels (ROCm 10.2.0a20260930), Tiel Coder 35B-A3B UD-Q3_K_XL, 32K of
+  context, `--kv-whole`, one request at a time: the engine loaded in 8.5 s (15.5 s the first time) with 8,031 of
+  10,496 experts in VRAM (10.5 GiB); a 7,376-token prompt was read at 2,750 tokens/s, and the next request on
+  that same prompt came from the conversation cache (`--conversation-cache-mib 8192`: 7,375 of its tokens
+  reused, 25 ms); answers were written at 55 to 75 tokens/s (13 to 18 ms/token), with 72 to 93% of the guessed
+  tokens right. An answer right after a load wrote at 30 to 34 tokens/s while the experts the cache did not hold
+  were read in. This is one model on one card: the other models on an AMD card under Windows are unreported, and
+  setup warns so.
 - The same greedy tokens as on CUDA are not promised across backends, as above, and the card's experts and the
   CPU's do not give the same ones on either: with every expert on the CPU (`--no-gpu-experts`) a greedy answer
   parts from the card's after 15 to 50 tokens on the RX 7600, and after 11 to 70 on an RTX 5090 (Qwen3.6
