@@ -18,11 +18,11 @@ It is early. This project has built and run it on one machine, with Linux and on
 | Model | `GLM-5.3-Flash-GSQ-RCO-3.0bit-q4kattn.gguf`, 113.6 GB, from [neuralll/GLM-5.3-Flash-GSQ-RCO-3.0bit-Q4Kattn-GGUF](https://huggingface.co/neuralll/GLM-5.3-Flash-GSQ-RCO-3.0bit-Q4Kattn-GGUF) |
 | Context | 32K |
 
-| | `strata-poly` | llama.cpp ([neurall's fork](https://github.com/neurall/llama.cpp)), stock settings |
+| | `strata-poly` | llama.cpp ([neurall's fork](https://github.com/neurall/llama.cpp)), `-ngl 999 -fa on`, `-ncmoe` lowered until the card is full |
 | --- | ---: | ---: |
-| Writes answers | 46 tokens/s after the prompt of 11,673 tokens and 62 to 66 after the one of 29,069, 62 to 65 for a 400-token answer to a short one | 26 tokens/s |
-| Reads a prompt of 3,059 tokens | 641 to 648 tokens/s | about 265 tokens/s |
-| Reads a prompt of 11,673 tokens | 760 to 817 tokens/s | |
+| Writes answers | 46 tokens/s after the prompt of 11,673 tokens and 62 to 66 after the one of 29,069, 62 to 65 for a 400-token answer to a short one | 25.5 to 29.7 tokens/s |
+| Reads a prompt of 3,059 tokens | 641 to 648 tokens/s | 61, 154 to 157, 273 to 278 tokens/s with `-ub` 512, 2048, 4096 |
+| Reads a prompt of 11,673 tokens | 760 to 817 tokens/s | 61, 199, 353 tokens/s with `-ub` 512, 2048, 4096 |
 | Reads a prompt of 29,069 tokens | 740 to 782 tokens/s | |
 | Starts | about 7 s with the file in the page cache | |
 
@@ -34,8 +34,14 @@ two runs of the build of 2026-10-06, which read the three prompts at 610 to 620,
 and wrote 47 to 51 after the long ones; the 400-token answer is that build's, and came at 64 to 65 from this one.
 The 29,069-token prompt starts like the 11,673-token one before it, so its first 10,240 tokens are not read
 again. An earlier build, measured the same way without the draft block, wrote 26.7 to 27.7 tokens/s and read the
-three prompts at 373, 334 and 312; [BACKENDS.md](BACKENDS.md#what-was-tuned) has what changed since. llama.cpp was
-not run again.
+three prompts at 373, 334 and 312; [BACKENDS.md](BACKENDS.md#what-was-tuned) has what changed since.
+
+This table first gave llama.cpp at its stock settings, 26 tokens/s writing and about 265 reading. On 2026-10-21 it
+ran again on the same kind of machine with the same prompt ids, its experts placed by hand: the fork at c504768,
+`-ngl 999 -fa on -t 24 -c 16384`, and `-ncmoe` lowered until the card was full, 35 with the default batch of 512
+and 37 with `-ub 2048` and `-ub 4096`. A larger batch reads a prompt faster there and writes at the same speed, so
+the tuned runs end where the stock one did. On that machine the engine of 2f9d0e4d read the two prompts at 629 to
+634 and 799 to 802 tokens/s and wrote 42 to 53 tokens/s after them with the draft block, 44 to 48 without.
 
 The README's row for 3.0BIT is PolyStrata's own benchmark through the server, the test every model of this engine
 gets ([BACKENDS.md](BACKENDS.md#a-prompt-of-30000-tokens)), with the engine of the ready-made release: a short chat
