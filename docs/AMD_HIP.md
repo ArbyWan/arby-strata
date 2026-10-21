@@ -674,11 +674,11 @@ run it; the report below is from a community machine: an RX 6900 XT 16 GB (gfx10
   experts stream from disk with 31 GB of RAM). The ready-made Windows zip has no gfx1031 code unless it is built with it: `STRATA_HIP_ARCHS=gfx1031`
   in `tools\hip\build_windows.bat` (the default list has it from 0.1.40.2 on).
 - **gfx1032** (RX 6600 / 6600 XT / 6650 XT): setup knows it (the `gfx103X-all` wheels, unvalidated). One owner ran it
-  on Fedora with an RX 6600 XT 8 GB and 32 GB DDR5: an engine built for gfx1032 from the `gfx103X-all`
-  7.13.0a20260515 wheels, `HSA_OVERRIDE_GFX_VERSION=10.3.2` set (the card's own version), and Qwen3.6 UD-Q4_K_M on
-  strata-poly wrote at 51 tok/s over a 2,083-token answer with 72.5% of the experts from VRAM; the chat page showed
-  67.6 tok/s writing and 434 reading for another request
-  ([discussion 49](https://github.com/VecSzn/PolyStrata/discussions/49)).
+  on Fedora with an RX 6600 XT 8 GB and 32 GB DDR5: setup built the engine for gfx1032 from the `gfx103X-all`
+  7.13.0a20260515 wheels, and Qwen3.6 UD-Q4_K_M on strata-poly wrote at 69 tok/s over a 2,331-token answer with
+  71.1% of the experts from VRAM ([discussion 49](https://github.com/VecSzn/PolyStrata/discussions/49)). The card
+  needs no `HSA_OVERRIDE_GFX_VERSION`. One left in the shell from an older guide (10.3.0 makes the card a gfx1030)
+  stops this engine at the first request with `rms_norm: device kernel image is invalid`; unset it.
 - **gfx1150** (Radeon 890M, Ryzen AI 9 HX PRO 370, Strix Point, #1217): builds and runs from 0.1.40.2 as an unvalidated target (CMake warns; the
   device code already covers it: the WMMA guards and `gfx_arch_is_gfx11_wmma()` include it). One community machine: MINISFORUM N5 PRO, 96 GB DDR5-5600, GTT
   raised to 64 GiB (`ttm.pages_limit=16777216 ttm.page_pool_size=16777216`), TheRock ROCm 7.14.1 for gfx1150, an unprivileged LXC container, IQ3_XXS: chat and
