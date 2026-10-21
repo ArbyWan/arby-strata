@@ -1850,6 +1850,15 @@ class GpuChoice(unittest.TestCase):
         self.assertEqual(plain.get("CUDA_VISIBLE_DEVICES"), os.environ.get("CUDA_VISIBLE_DEVICES"))
         self.assertEqual(plain.get("CUDA_DEVICE_ORDER"), os.environ.get("CUDA_DEVICE_ORDER"))
 
+    def test_gdn_mma_env_override(self):
+        """The existing model env map can opt out of a parent process's kernel request."""
+        from serve.server import child_env
+        with mock.patch.dict(os.environ, {"STRATA_GDN_MMA": "1"}):
+            self.assertEqual(child_env({})["STRATA_GDN_MMA"], "1")
+            self.assertEqual(child_env({"env": {"STRATA_GDN_MMA": 0}})["STRATA_GDN_MMA"], "0")
+            self.assertEqual(child_env({"env": {"STRATA_GDN_MMA": "1"}})["STRATA_GDN_MMA"], "1")
+            self.assertEqual(os.environ["STRATA_GDN_MMA"], "1")
+
     def test_card_order(self):
         """#1352: with an auto layer split the faster card (SMs x clock) goes last; ties, a manual split, a
         measurement we lack, HIP and "gpu_order": "as_given" keep the config's order."""
