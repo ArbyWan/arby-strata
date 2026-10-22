@@ -3312,6 +3312,12 @@ class Service:
             turn_end = tokenizer.encode("<turn|>", parse_special=True)
             self.stop_ids |= set(turn_end if len(turn_end) == 1 else [])
             self.think_open_ids = tokenizer.encode("<|channel>thought\n", parse_special=True)
+        elif self.call_format == "glm":
+            # #70: GLM ends its turn with <|user|> and a tool call with <|observation|>, which llama.cpp's converter
+            # names eot and eom.  A GGUF can name neither (REAP50-Q3_K_M: eos only), and the reply then runs on.
+            for end in ("<|user|>", "<|observation|>"):
+                ids = tokenizer.encode(end, parse_special=True)
+                self.stop_ids |= set(ids if len(ids) == 1 else [])
         # an image in a prompt (prepare()): the token the template writes for it, which stands for each of its rows;
         # the token the template writes before that one, if it writes one; the tokens to put around the rows, if
         # the template leaves that to the program

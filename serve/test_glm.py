@@ -105,6 +105,13 @@ class ServiceForGlm(unittest.TestCase):
         self.assertEqual(chatml.stop_ids, {257, 258})       # <|im_end|>, <|endoftext|>
         self.assertEqual(chatml.call_format, "function")
 
+    def test_the_turn_ends_when_the_gguf_names_only_eos(self):
+        # #70: REAP50-Q3_K_M names <|endoftext|> and no eot or eom; the reply still ends at <|user|> and a call at
+        # <|observation|>
+        class EosOnly(GlmTokens):
+            special_ids = {"tokenizer.ggml.eos_token_id": 256}
+        self.assertEqual(self.service(EosOnly(), "<|assistant|>").stop_ids, {256, 257, 258})
+
     def test_thinking_off_closes_the_open_block(self):
         svc = self.service(GlmTokens(), "{{ messages[0].content }}<|assistant|><think>")
         msgs = [{"role": "user", "content": "q"}]
