@@ -273,9 +273,12 @@ void Gemma4::alloc_caches() {
                     rings += rows;
                 }
             }
-        uint8_t* rc = codes ? (uint8_t*) dmalloc(codes, "the attention cache") : nullptr;
-        uint8_t* rd = deltas ? (uint8_t*) dmalloc(deltas, "the attention cache") : nullptr;
-        uint16_t* rv = rings ? (uint16_t*) dmalloc(rings * sizeof(uint16_t), "the attention cache") : nullptr;
+        // The rings are one block for the whole model, as the fp16 ones are, but they are a sequence's own: a
+        // batch gives every row its own sequence, and a row reads and writes that sequence's ring, which
+        // seq_buf() reaches.  seq_alloc() gives each sequence its own and records it for the others.
+        uint8_t* rc = codes ? (uint8_t*) seq_alloc(codes, "the attention cache") : nullptr;
+        uint8_t* rd = deltas ? (uint8_t*) seq_alloc(deltas, "the attention cache") : nullptr;
+        uint16_t* rv = rings ? (uint16_t*) seq_alloc(rings * sizeof(uint16_t), "the attention cache") : nullptr;
         for (int il = 0; il < (int) blocks_.size(); ++il) {
             Block& B = blocks_[(size_t) il];
             if (!runs(il)) continue;
@@ -318,29 +321,36 @@ void Gemma4::alloc_caches() {
             // window layer's ring, whichever is wider): attn() maps more as prompts reach for it (twin_cover()).
             // vmm keeps the address, which a recorded launch holds; a cudaMalloc pair here would cost a short
             // conversation the whole of the context's worth of the expert cache.
-            size_t full_row = 0, swa_row = 0;
-            for (const Block& B : blocks_) {
-                const size_t row = (size_t) B.n_kv * B.dim;
-                if (B.swa) swa_row = std::max(swa_row, row);
-                else full_row = std::max(full_row, row);
+            // The twin is the sequence's, so a sequence that has one keeps it: alloc_caches() runs again for a
+            // sequence that is taken back (take_bound()), and the twin comes back with it.
+            if (!twin_k_.base) {
+                size_t full_row = 0, swa_row = 0;
+                for (const Block& B : blocks_) {
+                    const size_t row = (size_t) B.n_kv * B.dim;
+                    if (B.swa) swa_row = std::max(swa_row, row);
+                    else full_row = std::max(full_row, row);
+                }
+                const size_t first = std::min(twin_halves_,
+                                              std::max((size_t) rows_ * full_row, (size_t) ring_ * swa_row));
+                vmm_reserve(twin_k_, twin_halves_ * sizeof(uint16_t));
+                vmm_map(twin_k_, first * sizeof(uint16_t), SIZE_MAX, "the fp16 twin of the attention caches");
+                if (vq8) {
+                    vmm_reserve(twin_v_, twin_halves_ * sizeof(uint16_t));
+                    vmm_map(twin_v_, first * sizeof(uint16_t), SIZE_MAX, "the fp16 twin of the attention caches");
+                }
             }
-            const size_t first = std::min(twin_halves_,
-                                          std::max((size_t) rows_ * full_row, (size_t) ring_ * swa_row));
-            vmm_reserve(twin_k_, twin_halves_ * sizeof(uint16_t));
-            vmm_map(twin_k_, first * sizeof(uint16_t), SIZE_MAX, "the fp16 twin of the attention caches");
             twin_mapped_ = twin_k_.mapped / sizeof(uint16_t);
             sh_k_f16_ = (uint16_t*) twin_k_.base;
-            if (vq8) {
-                vmm_reserve(twin_v_, twin_halves_ * sizeof(uint16_t));
-                vmm_map(twin_v_, first * sizeof(uint16_t), SIZE_MAX, "the fp16 twin of the attention caches");
-                sh_v_f16_ = (uint16_t*) twin_v_.base;
-            }
+            if (vq8) sh_v_f16_ = (uint16_t*) twin_v_.base;
         } else {
-            sh_k_f16_ = (uint16_t*) dmalloc(twin_halves_ * sizeof(uint16_t), "the fp16 twin of the attention caches");
+            if (!sh_k_f16_) {
+                sh_k_f16_ =
+                    (uint16_t*) dmalloc(twin_halves_ * sizeof(uint16_t), "the fp16 twin of the attention caches");
+                if (vq8)
+                    sh_v_f16_ = (uint16_t*) dmalloc(twin_halves_ * sizeof(uint16_t),
+                                                    "the fp16 twin of the attention caches");
+            }
             twin_mapped_ = twin_halves_;
-            if (vq8)
-                sh_v_f16_ = (uint16_t*) dmalloc(twin_halves_ * sizeof(uint16_t),
-                                                "the fp16 twin of the attention caches");
         }
         for (Block& B : blocks_) {
             B.k_f16 = sh_k_f16_;
@@ -371,6 +381,8 @@ void Gemma4::alloc_caches() {
 }
 
 Gemma4::~Gemma4() {
+    // The twins are the sequences' (the engine's), and the engine frees them with the sequences it holds; the
+    // bound one's is here.
     if (twin_k_.base) vmm_free(twin_k_);
     if (twin_v_.base) vmm_free(twin_v_);
 }
@@ -740,14 +752,39 @@ void Gemma4::attn_rows(Block& B, int n) {
                        rms_eps_, st_, freq, nullptr, 1, ai);
         head_norm_rope(kraw_ + i * kv, B.dim, fp(B.k_norm), k_ + i * kv, B.dim, B.n_kv, B.n_rot, B.theta_scale, 0, 1,
                        rms_eps_, st_, freq, nullptr, 1, ai);
-        uint16_t* kc = (uint16_t*) seq_buf(r.seq, B.keys);
-        uint16_t* vc = (uint16_t*) seq_buf(r.seq, B.vals);
-        store_f16_at(k_ + i * kv, kc, (int) kv, ai, 1, ring, st_);
-        store_f16_at(v_ + i * kv, vc, (int) kv, ai, 1, ring, st_);
         const int64_t keep = pos_;
         pos_ = r.pos;
         const int sized = B.swa ? std::min(window_, opt_.max_context) : room(1);
         pos_ = keep;
+        if (int8()) {
+            // A row reads and writes the codes of the sequence it belongs to, not the bound one's (seq_buf is how
+            // the fp16 path reaches them), and the values' side of a row is the codes the mode asks for: both
+            // sides' codes under --kv int8, the fp16 cache under --kv int8k.
+            int8_t* kc8 = (int8_t*) seq_buf(r.seq, B.k_code);
+            uint16_t* kd8 = (uint16_t*) seq_buf(r.seq, B.k_delta);
+            // The row's own key goes to the cache at its own position (the ring's row included), as the fp16
+            // path's store_f16_at does: the position is the one the card holds for this row.
+            store_int8_at(k_ + i * kv, kc8, kd8, B.n_kv, B.dim, 1, ai, ring, st_);
+            if (int8k()) {
+                // The values are the fp16 cache: the row's own, at its own position.
+                uint16_t* vc8 = (uint16_t*) seq_buf(r.seq, B.vals);
+                store_f16_at(v_ + i * kv, vc8, (int) kv, ai, 1, ring, st_);
+                // The queries' codes are the row's own (a row at a time, so the scratch's first row's worth).
+                attend_int8_mixed(q_ + i * hq, KvInt8{q8c_, q8d_}, KvInt8{kc8, kd8}, vc8, r.pos, 1, score_, chunk_,
+                                  att_ + i * hq, B.dim, n_head_, B.n_kv, 1.f, st_, window, ring, false, ai, sized);
+                continue;
+            }
+            int8_t* vc8 = (int8_t*) seq_buf(r.seq, B.v_code);
+            uint16_t* vd8 = (uint16_t*) seq_buf(r.seq, B.v_delta);
+            store_int8_at(v_ + i * kv, vc8, vd8, B.n_kv, B.dim, 1, ai, ring, st_);
+            attend_int8(q_ + i * hq, KvInt8{q8c_, q8d_}, KvInt8{kc8, kd8}, KvInt8{vc8, vd8}, r.pos, 1, score_, chunk_,
+                        att_ + i * hq, B.dim, n_head_, B.n_kv, 1.f, st_, window, ring, false, ai, sized);
+            continue;
+        }
+        uint16_t* kc = (uint16_t*) seq_buf(r.seq, B.keys);
+        uint16_t* vc = (uint16_t*) seq_buf(r.seq, B.vals);
+        store_f16_at(k_ + i * kv, kc, (int) kv, ai, 1, ring, st_);
+        store_f16_at(v_ + i * kv, vc, (int) kv, ai, 1, ring, st_);
         attend(q_ + i * hq, kc, vc, r.pos, 1, score_, chunk_, att_ + i * hq, B.dim, n_head_, B.n_kv, 1.f, st_, window,
                ring, false, ai, sized);
     }

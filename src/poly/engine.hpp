@@ -626,11 +626,20 @@ protected:
         std::vector<std::vector<void*>> heads;   ///< Layer::heads, by layer
         std::map<std::vector<int>, void*> passes;
         void* tail = nullptr;
+        // A sequence's own fp16 twin of its int8 caches (Gemma 4's --kv int8), and the halves of it that have
+        // VRAM behind them.  The twin is a sequence's: a batch gives every row its own sequence, and the twin is
+        // where that sequence's prompt batch reads, so the twin belongs with the sequence's other members.
+        Mapped twin_k, twin_v;
+        size_t twin_mapped = 0;
     };
     std::vector<Seq> seqs_;      ///< the bound one's place holds nothing while it is bound
     int bound_ = 0;
     std::vector<Buf> bufs_;      ///< the bound sequence's: what kv_alloc() and seq_alloc() gave it, in that order
     size_t again_ = SIZE_MAX;    ///< while alloc_caches() points at the bound sequence's buffers again: the next one
+    // The bound sequence's fp16 twin of its int8 caches (Gemma 4's --kv int8): the addresses for the whole and
+    // the VRAM behind them.  A sequence's own, since a batch gives every row its own sequence.
+    Mapped twin_k_, twin_v_;
+    size_t twin_mapped_ = 0;
     void park_bound();
     void take_bound(int s);
     void hold(int s);   ///< bind() on this card alone

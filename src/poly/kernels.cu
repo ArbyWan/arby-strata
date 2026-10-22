@@ -1227,54 +1227,17 @@ __global__ void attn_softmax_kernel(float* score, int n_keys, long long pos, int
     const int n = attn_rows(p + blockIdx.y, window, last, &lo), own = int(lo - lo0);
     float* all = score + (size_t(blockIdx.y) * gridDim.x + blockIdx.x) * n_keys;
     float* row = all + own;   // the token's rows of the span
-    // The three passes walk the span four values at a time where the address allows (a row starts wherever the
-    // score buffer put it) and one at a time at the ends: the same 3 x n floats, a quarter of the instructions.
-    // This kernel is the one the fp16 path shares, so both sides of --kv pay for it.
-    const int lead = int(((16 - (reinterpret_cast<uintptr_t>(row) & 15)) & 15) >> 2);
-    const int n4 = n > lead ? (n - lead) >> 2 : 0;
-    const int body = lead + (n4 << 2);
-    float4* r4 = reinterpret_cast<float4*>(row + lead);
-    const int tid = threadIdx.x, stride = blockDim.x;
-
     float mx = -INFINITY;
-    for (int j = tid; j < lead && j < n; j += stride) mx = fmaxf(mx, row[j]);
-    for (int j = tid; j < n4; j += stride) {
-        const float4 v = r4[j];
-        mx = fmaxf(mx, fmaxf(fmaxf(v.x, v.y), fmaxf(v.z, v.w)));
-    }
-    for (int j = body + tid; j < n; j += stride) mx = fmaxf(mx, row[j]);
+    for (int j = threadIdx.x; j < n; j += blockDim.x) mx = fmaxf(mx, row[j]);
     mx = block_max(mx, part);
-
     float sum = 0.0f;
-    for (int j = tid; j < lead && j < n; j += stride) {
-        row[j] = expf(row[j] - mx);
-        sum += row[j];
-    }
-    for (int j = tid; j < n4; j += stride) {
-        float4 v = r4[j];
-        v.x = expf(v.x - mx);
-        v.y = expf(v.y - mx);
-        v.z = expf(v.z - mx);
-        v.w = expf(v.w - mx);
-        r4[j] = v;
-        sum += (v.x + v.y) + (v.z + v.w);
-    }
-    for (int j = body + tid; j < n; j += stride) {
+    for (int j = threadIdx.x; j < n; j += blockDim.x) {
         row[j] = expf(row[j] - mx);
         sum += row[j];
     }
     const float inv = 1.0f / block_sum(sum, part);
     if (!wt) {
-        for (int j = tid; j < lead && j < n; j += stride) row[j] *= inv;
-        for (int j = tid; j < n4; j += stride) {
-            float4 v = r4[j];
-            v.x *= inv;
-            v.y *= inv;
-            v.z *= inv;
-            v.w *= inv;
-            r4[j] = v;
-        }
-        for (int j = body + tid; j < n; j += stride) row[j] *= inv;
+        for (int j = threadIdx.x; j < n; j += blockDim.x) row[j] *= inv;
         for (int j = threadIdx.x; j < own; j += blockDim.x) all[j] = 0.0f;
         for (int j = own + n + threadIdx.x; j < span; j += blockDim.x) all[j] = 0.0f;
         return;

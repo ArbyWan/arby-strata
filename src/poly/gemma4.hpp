@@ -121,10 +121,6 @@ private:
     size_t twin_halves_ = 0;   ///< --kv int8: the halves one side of the fp16 twin holds (widest layer's rows)
     uint16_t* sh_k_f16_ = nullptr;   ///< the pair a prompt batch reads, one for the whole model
     uint16_t* sh_v_f16_ = nullptr;
-    Mapped twin_k_, twin_v_;   ///< the twin's halves under --kv int8 with vmm: addresses for the whole, VRAM
-                               ///< for the rows a prompt has reached (twin_cover()), so a short conversation
-                               ///< does not pay the whole of the context's worth of the expert cache
-    size_t twin_mapped_ = 0;   ///< halves a side with VRAM behind them (twin_halves_ under a whole dmalloc)
     void twin_cover(size_t halves);
 
     int8_t* q8c_ = nullptr;    ///< --kv int8: this call's queries as codes, a chunk at a time, for attend_int8's dp4a
