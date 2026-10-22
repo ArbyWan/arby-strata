@@ -10,10 +10,10 @@ class SharedGdnBoundary(unittest.TestCase):
     def test_public_kernel_is_independent_of_poly(self):
         header = ROOT / 'include/strata/kernels/gdn_mma.hpp'
         self.assertTrue(header.is_file(), 'missing model-independent GDN consumer API')
-        text = header.read_text()
+        text = header.read_text(encoding='utf-8')
         self.assertNotIn('strata::poly', text)
         self.assertNotIn('engine.hpp', text)
-        cmake = (ROOT / 'CMakeLists.txt').read_text()
+        cmake = (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')
         target = re.search(r'add_executable\(gdn_mma_test\s+([^)]*)\)', cmake)
         self.assertIsNotNone(target, 'missing standalone shared-kernel consumer')
         self.assertNotIn('src/poly/', target.group(1))
