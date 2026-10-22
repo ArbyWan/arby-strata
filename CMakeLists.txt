@@ -1985,6 +1985,36 @@ if(STRATA_BUILD_TESTS)
   add_test(NAME aux_cpus_test COMMAND aux_cpus_test)
 endif()
 
+# The opt-in lifecycle is a host-only test, including on non-CUDA builds.
+if(STRATA_BUILD_TESTS)
+  add_executable(poly_gdn_mma_control_test src/poly/gdn_mma_control_test.cpp)
+  add_test(NAME poly_gdn_mma_control_test COMMAND poly_gdn_mma_control_test)
+endif()
+
+# Shared prepared-input GDN recurrence. Either engine may link this library;
+# only the Poly Qwen35 adapter is integrated initially. Keep FP32/BF16 hi+lo math
+# separate from the MMQ targets' -use_fast_math compilation options.
+if(STRATA_NATIVE_EXPERTS AND STRATA_ENABLE_CUDA)
+  if(STRATA_GGML_DIR)
+    set(_strata_gdn_ggml ${STRATA_GGML_DIR}/ggml)
+  else()
+    set(_strata_gdn_ggml ${strata_llamacpp_SOURCE_DIR}/ggml)
+  endif()
+  add_library(strata_gdn_mma STATIC src/kernels/cuda/gdn_mma.cu)
+  target_include_directories(strata_gdn_mma PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE ${_strata_gdn_ggml}/include ${_strata_gdn_ggml}/src ${_strata_gdn_ggml}/src/ggml-cuda)
+  target_link_libraries(strata_gdn_mma PRIVATE ggml-base ${_strata_gpu_runtime_target})
+  if(STRATA_BUILD_TESTS)
+    add_executable(poly_gdn_mma_policy_test src/kernels/gdn_mma_policy_test.cpp)
+    target_include_directories(poly_gdn_mma_policy_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME poly_gdn_mma_policy_test COMMAND poly_gdn_mma_policy_test)
+    add_executable(gdn_mma_test src/kernels/gdn_mma_test.cu)
+    target_link_libraries(gdn_mma_test PRIVATE strata_gdn_mma ${_strata_gpu_runtime_target})
+    add_test(NAME gdn_mma_test COMMAND gdn_mma_test)
+    set_tests_properties(gdn_mma_test PROPERTIES SKIP_RETURN_CODE 77)
+  endif()
+endif()
+
 # ---- strata-poly: GLM 5.3 Flash (llama.cpp's glm5-next), read from its GGUF ----
 #
 # A second engine beside `strata`.  It shares the quantized matvec kernels and the GGUF reader, and takes the
@@ -2045,6 +2075,24 @@ if(STRATA_NATIVE_EXPERTS AND (STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP) AND NOT S
     target_link_libraries(strata_poly_mmq PUBLIC ggml-base hip::host)
   else()
     target_link_libraries(strata_poly_mmq PUBLIC ggml-base ${_strata_gpu_runtime_target})
+  endif()
+
+  if(STRATA_ENABLE_CUDA)
+    target_compile_definitions(strata_poly_mmq PUBLIC STRATA_POLY_GDN_MMA=1)
+    target_link_libraries(strata_poly_mmq PUBLIC strata_gdn_mma)
+
+    add_executable(poly_gdn_mma_test src/poly/gdn_mma_test.cu src/poly/kernels.cu)
+    target_include_directories(poly_gdn_mma_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(poly_gdn_mma_test PRIVATE strata_poly_mmq ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target})
+    add_test(NAME poly_gdn_mma_test COMMAND poly_gdn_mma_test)
+    set_tests_properties(poly_gdn_mma_test PROPERTIES SKIP_RETURN_CODE 77)
+    # Optional model/state check; run by hand with an MTP GGUF and frozen prompt IDs.
+    add_executable(poly_gdn_mma_state_test src/poly/gdn_mma_state_test.cpp src/poly/engine.cpp src/poly/glm5next.cpp
+                   src/poly/qwen35.cpp src/poly/gemma4.cpp src/poly/deepseek4.cpp src/poly/lfm2moe.cpp
+                   src/poly/cpu_experts.cpp src/poly/kernels.cu src/poly/kernels_dsv4.cu src/core/conversation_memory.cpp)
+    target_include_directories(poly_gdn_mma_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${_strata_gpu_include_directories})
+    target_link_libraries(poly_gdn_mma_state_test PRIVATE strata_poly_mmq strata_kernels strata_spec ggml-cpu ggml-base
+                         ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target} CUDA::cuda_driver Threads::Threads)
   endif()
 
   add_executable(strata-poly src/poly/main.cpp src/poly/engine.cpp src/poly/glm5next.cpp src/poly/qwen35.cpp

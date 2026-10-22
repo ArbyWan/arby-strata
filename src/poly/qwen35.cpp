@@ -7,6 +7,9 @@
 #include "runtime.hpp"
 #include "strata/poly/kernels.hpp"
 #include "strata/kernels/native_mmvq.hpp"
+#ifdef STRATA_POLY_GDN_MMA
+#include "gdn_mma.hpp"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -39,6 +42,7 @@ void Qwen35::check_draft_block() {
 }
 
 void Qwen35::load_geometry() {
+    gdn_mma_.capture_request();
     load_shape();
     auto find = [&](const char* key) { return meta_in(*gg_, key); };
     auto need = [](bool ok, const char* what) {
@@ -186,6 +190,22 @@ void Qwen35::assign_scratch() {
         work_halves_ = kQ8WorkRows * (size_t) n_kv_ * head_dim_;
         q8w_ = fbuf((2 * work_halves_ + 1) / 2);
     }
+    if (gdn_mma_.initialize([&] {
+#ifdef STRATA_POLY_GDN_MMA
+            return gdn_mma_available(s_dim_, v_heads_, k_heads_);
+#else
+            return false;
+#endif
+        })) {
+        std::fprintf(stderr, "strata-poly: STRATA_GDN_MMA: %s\n",
+                     gdn_mma_.enabled() ? "prefill through chunked GDN MMA; decode and snapshots unchanged"
+#ifdef STRATA_POLY_GDN_MMA
+                                        : "unchanged (unsupported shape, architecture or shared memory)"
+#else
+                                        : "unchanged (requires a CUDA build)"
+#endif
+        );
+    }
     // STRATA_FATTN=1: a prompt batch through llama.cpp's flash-attention kernel instead, in score_ (fattn.hpp)
     const char* fa = std::getenv("STRATA_FATTN");
     if (rows_ >= kStageRows && fa && std::atoi(fa) == 1 && !fattn_) {   // assign_scratch() runs twice: say it once
@@ -310,6 +330,10 @@ void Qwen35::gdn(Block& B, int n) {
     } else {
         conv4_silu(proj_, B.past, fp(B.conv), qkv_, conv_dim_, n, st_,
                    snap_bits_ ? snap_at_ + (B.past - state_) : nullptr, rec_n_, snap_bits_);
+#ifdef STRATA_POLY_GDN_MMA
+        if (!(gdn_mma_.enabled() && !recording_ && gdn_mma_step(qkv_, alpha_, beta_, fp(B.dt), fp(B.a), B.s, z_, fp(B.o_norm), gated_,
+                                          s_dim_, v_heads_, k_heads_, n, rms_eps_, st_, snap_bits_ != 0)))
+#endif
         gdn_step(qkv_, alpha_, beta_, fp(B.dt), fp(B.a), B.s, z_, fp(B.o_norm), gated_, s_dim_, v_heads_, k_heads_, n,
                  rms_eps_, st_, snap_bits_ ? snap_at_ + (B.s - state_) : nullptr, rec_n_, snap_bits_);
     }

@@ -1,6 +1,10 @@
 // src/poly/kernels.cu - see the header.  The reference for every formula is llama.cpp's graph of the model and the
 // ggml ops it builds.  Where a kernel takes several tokens, blockIdx.y is the token unless it says otherwise.
 #include "strata/poly/kernels.hpp"
+#ifdef STRATA_POLY_GDN_MMA
+#include "gdn_mma.hpp"
+#include "strata/kernels/gdn_mma_policy.hpp"
+#endif
 
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
@@ -2009,6 +2013,19 @@ __global__ void gdn_gates_kernel(float* __restrict__ alpha, float* __restrict__ 
     beta[at] = sigmoid(beta[at]);
 }
 
+#ifdef STRATA_POLY_GDN_MMA
+__global__ void gdn_log_gates_kernel(float* __restrict__ alpha, float* __restrict__ beta, const float* __restrict__ dt,
+                                 const float* __restrict__ a, int n_head, int n) {
+    const int at = blockIdx.x * blockDim.x + threadIdx.x;
+    if (at >= n) return;
+    const int h = at % n_head;
+    const float g = alpha[at] + dt[h];
+    alpha[at] = (g > 20.0f ? g : logf(1.0f + expf(g))) * a[h];
+    beta[at] = sigmoid(beta[at]);
+}
+
+#endif
+
 // The state's update, a warp a column: the blocks of a head share its columns among their warps, and a lane holds
 // every 32nd value of its warp's column, so a column is read and written as whole lines and its two sums are a
 // few terms a lane and a sum over the warp.  The block walks the tokens, and no warp waits for another.
@@ -2695,6 +2712,40 @@ void shortconv(const float* bcx, float* state, const float* w, float* out, int c
     if (const cudaError_t e = cudaGetLastError(); e != cudaSuccess)
         throw std::runtime_error(std::string("shortconv: ") + cudaGetErrorString(e));
 }
+
+#ifdef STRATA_POLY_GDN_MMA
+bool gdn_mma_step(float* qkv, float* alpha, float* beta, const float* dt, const float* a, float* s,
+                  const float* z, const float* o_norm, float* out, int dim, int n_head, int k_heads, int rows,
+                  float norm_eps, void* stream, bool snapshots) {
+    if (!kernels::gdn_mma_shape(dim, n_head, k_heads, rows, snapshots)) return false;
+    const size_t keys = size_t(k_heads) * dim, row = (2 * size_t(k_heads) + n_head) * dim;
+    kernels::GdnMmaArgs args{};
+    args.q = qkv;
+    args.k = qkv + keys;
+    args.v = qkv + 2 * keys;
+    args.log_decay = alpha;
+    args.beta = beta;
+    args.state = args.state_out = s;
+    args.output = out;
+    args.dim = dim;
+    args.heads = n_head;
+    args.key_heads = k_heads;
+    args.rows = rows;
+    args.qk_row_stride = args.v_row_stride = row;
+    args.gate_row_stride = n_head;
+    // Poly's normalization already includes 1/sqrt(dim) in Q.
+    args.query_scale = 1.f;
+    if (!kernels::gdn_mma_supported(args) || !kernels::gdn_mma_available(dim, n_head, k_heads)) return false;
+    gdn_norm_kernel<<<rows * k_heads, dim, 0, cs(stream)>>>(qkv, dim, k_heads, row, norm_eps);
+    gdn_log_gates_kernel<<<grid(rows * n_head, 256), 256, 0, cs(stream)>>>(alpha, beta, dt, a, n_head, rows * n_head);
+    // Preparation mutates Q/K and gates. Never run stock on these modified inputs
+    // if device availability unexpectedly changes after the preflight above.
+    if (!kernels::gdn_mma_try(args, stream))
+        throw std::runtime_error("GDN MMA: prepared execution became unavailable");
+    gdn_out_kernel<<<rows * n_head, dim, 0, cs(stream)>>>(out, z, o_norm, dim, norm_eps);
+    return true;
+}
+#endif
 
 void gdn_step(float* qkv, float* alpha, float* beta, const float* dt, const float* a, float* s, const float* z,
               const float* o_norm, float* out, int dim, int n_head, int k_heads, int rows, float norm_eps, void* stream,

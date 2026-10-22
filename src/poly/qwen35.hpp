@@ -8,6 +8,7 @@
 #pragma once
 
 #include "engine.hpp"
+#include "gdn_mma_control.hpp"
 
 namespace strata::poly {
 
@@ -85,6 +86,7 @@ private:
     uint64_t axes_set_ = 0;
     int s_dim_ = 0, k_heads_ = 0, v_heads_ = 0, d_inner_ = 0, conv_dim_ = 0;
     int n_gdn_ = 0, n_attn_ = 0;
+    GdnMmaControl gdn_mma_;           ///< captured request and per-engine capability (STRATA_GDN_MMA=1)
     int chunk_ = 1;   ///< tokens the attention takes at a time
 
     // device scratch
