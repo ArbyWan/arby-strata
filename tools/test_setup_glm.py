@@ -169,12 +169,31 @@ class Config(unittest.TestCase):
             mine.mkdir()
             with mock.patch.object(sys, "executable", str(mine / "python")), \
                     mock.patch.object(setup.shutil, "which", lambda n: "/usr/bin/" + n), \
-                    mock.patch.object(setup.Path, "home", lambda: Path(t) / "home"):
+                    mock.patch.object(setup.Path, "home", lambda: Path(t) / "home"), \
+                    mock.patch.object(setup, "out", lambda c: "cmake version 3.31.6\n"), \
+                    mock.patch.object(setup, "run") as run:
                 self.assertEqual(setup.find_tool("cmake"), "/usr/bin/cmake")       # none of its own: PATH's
                 (mine / name).write_text("")
                 self.assertEqual(setup.find_tool("cmake"), str(mine / name))
                 with mock.patch.object(setup.shutil, "which", lambda n: None):
                     self.assertIsNone(setup.find_tool("ninja"))
+                run.assert_not_called()
+
+    def test_a_tool_whose_launcher_names_a_moved_folder_is_installed_again(self):
+        # issue 78: .venv\Scripts\cmake.exe named the Python of the folder before it was moved and did not start
+        with tempfile.TemporaryDirectory() as t:
+            mine, name = Path(t) / "bin", "cmake" + (".exe" if setup.WIN else "")
+            mine.mkdir()
+            (mine / name).write_text("")
+            with mock.patch.object(sys, "executable", str(mine / "python")), \
+                    mock.patch.object(setup, "out", lambda c: ""), \
+                    mock.patch("importlib.metadata.version", lambda n: "3.31.6"), \
+                    mock.patch.object(setup, "run") as run, \
+                    mock.patch.object(setup, "say"):
+                self.assertEqual(setup.find_tool("cmake"), str(mine / name))
+            cmd = run.call_args.args[0]
+            self.assertEqual(cmd[:4], [str(mine / "python"), "-m", "pip", "install"])
+            self.assertEqual(cmd[-3:], ["--force-reinstall", "--no-deps", "cmake==3.31.6"])
 
     def test_saved_conversation_cache(self):
         with tempfile.TemporaryDirectory() as t:

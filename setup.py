@@ -1921,10 +1921,21 @@ def vcvars_toolset(vcvars) -> str:
 
 def find_tool(name):
     """cmake or ninja: the one pip installed next to this Python, else one on PATH.  The system's own can be older
-    than CMakeLists.txt takes: Ubuntu 22.04 has cmake 3.22, and the engine asks for 3.24."""
+    than CMakeLists.txt takes: Ubuntu 22.04 has cmake 3.22, and the engine asks for 3.24.  pip's launcher names the
+    Python it was installed with, so in a folder moved after setup it does not start ("Fatal error in launcher",
+    issue 78); the same version installed again writes it for this folder."""
     file = name + (".exe" if WIN else "")
     for d in (Path(sys.executable).parent / "Scripts", Path(sys.executable).parent):
         if (d / file).exists():
+            if not out([str(d / file), "--version"]).strip():
+                say(f"  {file} does not start (was this folder moved?): installing it again")
+                try:
+                    import importlib.metadata as md
+                    spec = f"{name}=={md.version(name)}"
+                except Exception:
+                    spec = name
+                run([sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+                     "--force-reinstall", "--no-deps", spec])
             return str(d / file)
     p = shutil.which(name)
     if p:
