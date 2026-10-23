@@ -4,6 +4,7 @@
 """
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -43,7 +44,7 @@ class ToolCalls(unittest.TestCase):
             + CONTENT + "</arg_value></tool_call>")
 
     def events(self, stream_tools, step):
-        p = OutputParser(thinking=True, tools=self.SCHEMA, stream_tools=stream_tools, call_format="glm")
+        p = OutputParser(thinking=True, tools=self.SCHEMA, stream_tools=stream_tools, call_format="glm", opened=True)
         evs = []
         for i in range(0, len(self.TEXT), step):
             evs += p.feed(self.TEXT[i:i + step])
@@ -77,7 +78,7 @@ class Reasoning(unittest.TestCase):
         text = 'so I should just say "Paris."</think>Paris'
         for size in (1, 5, len(text)):
             with self.subTest(size=size):
-                p = OutputParser(thinking=True, call_format="glm")
+                p = OutputParser(thinking=True, call_format="glm", opened=True)   # the prompt ended on <think>
                 evs = [e for i in range(0, len(text), size) for e in p.feed(text[i:i + size])] + p.finish()
                 self.assertEqual("".join(e.text for e in evs if e.kind == "reasoning"), 'so I should just say "Paris."')
                 self.assertEqual("".join(e.text for e in evs if e.kind == "content"), "Paris")
@@ -117,6 +118,19 @@ class ServiceForGlm(unittest.TestCase):
         msgs = [{"role": "user", "content": "q"}]
         self.assertEqual(svc.render_prompt(msgs, None, {}), "q<|assistant|><think>")
         self.assertEqual(svc.render_prompt(msgs, None, {"enable_thinking": False}), "q<|assistant|><think></think>")
+
+    def test_the_reply_goes_on_inside_the_thinking_the_prompt_opened(self):
+        # GLM's prompt ends on <think> and Flint's does not (serve/test_flint.py): the prompt's last tokens tell them
+        tok = GlmTokens()
+        svc = self.service(tok, "{{ messages[0].content }}<|assistant|><think>")
+        for kwargs, reply, reasoning in (({}, "say Paris</think>Paris<|user|>", "say Paris"),
+                                         ({"enable_thinking": False}, "Paris<|user|>", "")):
+            with self.subTest(**kwargs):
+                ids = svc.encode_prompt([{"role": "user", "content": "q"}], None, kwargs)
+                svc.engine = MockEngine(tok, reply)
+                evs = [e for kind, e in svc.run(ids, not kwargs, None, 64, {}, threading.Event()) if kind == "event"]
+                self.assertEqual("".join(e.text for e in evs if e.kind == "reasoning"), reasoning)
+                self.assertEqual("".join(e.text for e in evs if e.kind == "content"), "Paris")
 
 
 if __name__ == "__main__":

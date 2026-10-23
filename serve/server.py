@@ -150,7 +150,7 @@ VISION_START = "<|vision_start|>"
 # turn: strata-poly keeps a checkpoint there (turn_at), which the chat's next request goes on from.  The second one
 # ends the first turn: the system prompt with the tools, which "warm_start" keeps.
 TURN_OPENERS = {"function": ("<|im_start|>",), "gemma": ("<|turn>",),
-                "glm": ("<|system|>", "<|user|>", "<|assistant|>", "<|observation|>"),
+                "glm": ("<|system|>", "<|developer|>", "<|user|>", "<|assistant|>", "<|observation|>"),
                 "dsml": ("<｜User｜>", "<｜Assistant｜>"), "lfm2": ("<|im_start|>",)}
 WARM_MIN_TOKENS = 2048           # a shorter prompt start is quick to read again: not kept
 # #606: a reply that repeats one token this many times in a row is ended there ("length"): a model in a loop, or a
@@ -3296,7 +3296,7 @@ class Service:
             if key in special}
         # how the model writes a tool call (serve/frontend.py's OutputParser)
         pre = getattr(tokenizer, "pre", "")
-        self.call_format = "glm" if pre in ("glm4", "glm5") else "gemma" if pre == "gemma4" else \
+        self.call_format = "glm" if pre in ("glm4", "glm5", "flint") else "gemma" if pre == "gemma4" else \
             "dsml" if pre in ("joyai-llm", "deepseek-v3") else "lfm2" if pre == "lfm2" else "function"
         self.turn_ids = frozenset(t[0] for t in (tokenizer.encode(s, parse_special=True)
                                                  for s in TURN_OPENERS[self.call_format]) if len(t) == 1)
@@ -3313,9 +3313,11 @@ class Service:
             self.stop_ids |= set(turn_end if len(turn_end) == 1 else [])
             self.think_open_ids = tokenizer.encode("<|channel>thought\n", parse_special=True)
         elif self.call_format == "glm":
+            self.think_open_ids = tokenizer.encode("<think>", parse_special=True)   # GLM's prompt opens it, Flint itself
             # #70: GLM ends its turn with <|user|> and a tool call with <|observation|>, which llama.cpp's converter
             # names eot and eom.  A GGUF can name neither (REAP50-Q3_K_M: eos only), and the reply then runs on.
-            for end in ("<|user|>", "<|observation|>"):
+            # Flint, which writes GLM's tool calls, also opens a developer turn; llama.cpp ends a reply at all three.
+            for end in ("<|user|>", "<|observation|>", "<|developer|>"):
                 ids = tokenizer.encode(end, parse_special=True)
                 self.stop_ids |= set(ids if len(ids) == 1 else [])
         # an image in a prompt (prepare()): the token the template writes for it, which stands for each of its rows;
