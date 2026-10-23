@@ -385,12 +385,13 @@ __global__ void kda_conv_state_kernel(const float* __restrict__ proj, float* __r
 // One block per head, and a column of the state to every `lanes` threads of it: a thread holds every lanes-th
 // value of its column, so a column's two sums are a few terms a thread and a sum over its threads.  A thread a
 // column read the column's 128 values one after the other, twice, and that was 25 microseconds a token.  The
-// block walks the tokens.  s[i + hd * j] holds key dimension i of column j.  blockDim.x is hd * lanes.
-__global__ void kda_step_kernel(const float* __restrict__ qkv, const float* __restrict__ g1,
-                                const float* __restrict__ a, const float* __restrict__ beta, float* __restrict__ s,
-                                const float* __restrict__ g2, const float* __restrict__ o_norm,
-                                float* __restrict__ out, int hd, int n_head, int rows, float lower_bound,
-                                float norm_eps, float* __restrict__ snap, size_t stride, int n_snap) {
+// block walks the tokens.  s[i + hd * j] holds key dimension i of column j.  blockDim.x is hd * lanes, up to 1024,
+// so the bound: without it sm_70 gave the kernel 72 registers a thread and its launch failed.
+__global__ void __launch_bounds__(1024)
+kda_step_kernel(const float* __restrict__ qkv, const float* __restrict__ g1, const float* __restrict__ a,
+                const float* __restrict__ beta, float* __restrict__ s, const float* __restrict__ g2,
+                const float* __restrict__ o_norm, float* __restrict__ out, int hd, int n_head, int rows,
+                float lower_bound, float norm_eps, float* __restrict__ snap, size_t stride, int n_snap) {
     __shared__ float part[32];
     __shared__ float qn[256], kn[256], decay[256];
     const int lanes = int(blockDim.x) / hd;
@@ -2070,12 +2071,13 @@ __global__ void gdn_state_kernel(const float* __restrict__ qkv, const float* __r
 // gdn_state_kernel with the warp's column in registers, PER values a lane, for the whole walk over the tokens:
 // a token reads and writes no state.  The sums go in the same order, so the result is the same to the bit.  A
 // token's inputs are read while the token before is computed: a walk that waited for each token's reads took
-// about a microsecond a token, the latency of those reads.
+// about a microsecond a token, the latency of those reads.  A block is 32 warps, so the bound: without it PER 8
+// took 79 registers a thread on sm_70 and 71 on sm_75, more than a 1024-thread launch can have.
 template <int PER>
-__global__ void gdn_state_reg_kernel(const float* __restrict__ qkv, const float* __restrict__ decay,
-                                     const float* __restrict__ share, float* __restrict__ s, float* __restrict__ out,
-                                     int dim, int n_head, int k_heads, int rows, float* __restrict__ snap,
-                                     size_t stride, unsigned snaps) {
+__global__ void __launch_bounds__(1024)
+gdn_state_reg_kernel(const float* __restrict__ qkv, const float* __restrict__ decay, const float* __restrict__ share,
+                     float* __restrict__ s, float* __restrict__ out, int dim, int n_head, int k_heads, int rows,
+                     float* __restrict__ snap, size_t stride, unsigned snaps) {
     const int per_head = dim / int(blockDim.x / WARP);
     const int h = blockIdx.x / per_head, hk = h % k_heads;
     const int j = (blockIdx.x % per_head) * int(blockDim.x / WARP) + int(threadIdx.x / WARP);
