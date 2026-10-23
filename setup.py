@@ -6770,9 +6770,9 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     elif gpu["count"] > 1 or a.gpu is not None:
         cfg["gpu"] = gpu["index"]                      # the engine is told this card (issue #51)
         cfg["gpus_asked"] = True
-    if hip and WIN:                                    # AMD on Windows: HIP_VISIBLE_DEVICES and hip_env_guard
+    if hip:                                            # AMD: HIP_VISIBLE_DEVICES, hip_env_guard, sysfs GPU readings
         cfg["backend"] = "hip"
-        if not multi and gpu.get("driver") == "hip":   # setup's list is the HIP runtime's own here (#325: an iGPU
+        if WIN and not multi and gpu.get("driver") == "hip":   # Windows: setup's list is HIP's own (#325: an iGPU
             cfg["hip_ordinal"] = gpu["index"]          # may be HIP's device 0); the ordinal wins for one card
     if cuda_tk == 12:
         cfg["cuda"] = 12                               # a copy set up from this install takes it too
