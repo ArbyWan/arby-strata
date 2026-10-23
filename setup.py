@@ -85,6 +85,7 @@ HF_REVISIONS = {
     "unsloth/DeepSeek-V4-Flash-0731-GGUF": "fbbb5b93fb787c21338159b0af3318bb3f4d9768",               # 2026-10-15
     "unsloth/LFM2.5-24B-A2B-GGUF": "faa77113e93335b63423e9e8d33395f86eaf8946",                        # 2026-10-15
     "LiquidAI/LFM2.5-24B-A2B-GGUF": "0912d33141f77e10705345a6732bfd83f0252fdc",                       # 2026-10-15
+    "unsloth/flint-GGUF": "20468edfc38ab43d6914cc88b08cbecb05d0fc62",                                 # 2026-10-21
     "openbmb/MiniCPM-V-4.7-35B-A3B-gguf": "77f6d8cb08b2b115ce27d2e2ac1359e126921689",                   # 2026-10-12
 }
 
@@ -554,6 +555,35 @@ FAMILIES = {
                          (21861204224, "abcb7e21e006eb4c826a2b75fb91c0804db7b20f908a61beeebdbdd07c88f41d"),
                          "LFM2.5-24B-A2B-Q8_0.gguf":
                          (25493733344, "97cd912b01124793a69ddebc309abbbad7ebb38ac2fb9c2bc55dfc1ad9d1809e")}},
+    # Flint (llama.cpp's flint): no draft block and no image encoder.  Its window layers' caches are rings, so a context
+    # token is the full layers' rows only.  UD-Q4_K_XL is taken unasked only with 15 GB of RAM past its estimate,
+    # about 40 GB beside an 8 GB card: on the 32 GB laptop its file did not stay in RAM beside the desktop's programs,
+    # and a short chat was written at 20 to 30 tokens/s, UD-Q3_K_XL's at 61 to 63.  UD-Q6_K_XL did not fit on the
+    # 5090's disk: its VRAM beside the experts is Q8_0's, whose weights outside them are the same.
+    "flint": {"title": "Flint 40B-A2.5B", "by": "Recursive; quantized by Unsloth",
+              "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a 25 GB file, ~29 GB of RAM "
+                       "beside an 8 GB card; three other sizes too, no images",
+              "hf": hf("unsloth/flint-GGUF"), "file": "flint-{q}.gguf", "shards": 1,
+              "tag": "flint-", "name": "flint-40b-a2.5b", "engine": "poly", "vision": False, "experimental": True,
+              "windows": True, "ran_on_gb": 8, "row_bytes": 28672, "batch_gb": 0.4, "batch_from_gb": 7.5,
+              "laptop_tps": {32768: "38-45"},
+              "models": {"UD-Q4_K_XL": {"about": "4- and 5-bit experts (Unsloth Dynamic)",
+                                        "download_gb": 25.1, "ram_gb": 29, "arena_gb": 23.1, "vram_beside_gb": 4.0,
+                                        "pick_extra_gb": 15},
+                         "UD-Q3_K_XL": {"about": "3-bit i-quant experts, 4-bit where they write: the least RAM",
+                                        "download_gb": 18.5, "ram_gb": 22, "arena_gb": 16.5, "vram_beside_gb": 3.8},
+                         "UD-Q6_K_XL": {"about": "6-bit experts, 8-bit where they write",
+                                        "download_gb": 36.3, "ram_gb": 40, "arena_gb": 34.2, "vram_beside_gb": 4.3},
+                         "Q8_0": {"about": "8-bit throughout: the closest to the model as trained",
+                                  "download_gb": 42.3, "ram_gb": 46, "arena_gb": 40.2, "vram_beside_gb": 4.3}},
+              "sha256": {"flint-UD-Q4_K_XL.gguf":
+                         (25054688704, "63c2ecc461ca545134b670c660e76fa20f47240f8d39b6510bfd21c4dd6e072f"),
+                         "flint-UD-Q3_K_XL.gguf":
+                         (18494977472, "91b8d85ab6ff7fb095d9a972f9afa6f3fa2b9acb642867a079f3e013ea3c350c"),
+                         "flint-UD-Q6_K_XL.gguf":
+                         (36319999424, "086231093581c67f8bf2964f8b49198889c4f0775b39857ba63b4c37041279c2"),
+                         "flint-Q8_0.gguf":
+                         (42301076928, "5df42b56859c7b5142228005d7d63c327ec9e34c99c72548016d805309a0d284")}},
     "qwen36": {"title": "Qwen3.6-35B-A3B", "by": "Qwen; quantized by Unsloth",
                "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a 17 GB file, ~21 GB of RAM "
                         "beside an 8 GB card; a smaller and a larger size too",
@@ -2177,7 +2207,7 @@ def verify_sha256(s: Path, size: int, sha: str, own: bool = False) -> None:
 # general.architecture of each strata-poly family's GGUFs, the name Engine::open() (src/poly/engine.cpp) picks its
 # code by; the families not listed are qwen35moe
 POLY_GGUF_ARCHS = {"glm": ("glm5-next", "glm5next"), "deepseek": ("deepseek4",), "lfm25": ("lfm2moe",),
-                   "gemma4": ("gemma4",)}
+                   "gemma4": ("gemma4",), "flint": ("flint",)}
 
 
 def gguf_arch(s: Path) -> str:
@@ -6150,8 +6180,8 @@ def poly_batch(fam, d, vram_gb, ctx) -> bool:
 
 def poly_default(sizes, ram, vram_gb) -> str:
     """The size setup takes when none is named: the first whose RAM estimate this PC meets, else the one that wants
-    the least."""
-    return next((m for m, d in sizes.items() if ram >= poly_ram_need(d, vram_gb) - 4),
+    the least.  A size's "pick_extra_gb" is RAM it wants beyond that before it is taken unasked."""
+    return next((m for m, d in sizes.items() if ram >= poly_ram_need(d, vram_gb) - 4 + d.get("pick_extra_gb", 0)),
                 min(sizes, key=lambda m: poly_ram_need(sizes[m], vram_gb)))
 
 
@@ -6525,7 +6555,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         warn(f"{title} on AMD cards on Windows: EXPERIMENTAL.  Setup compiles the HIP engine here (AMD's ROCm "
              "wheels), which has run one model on an RX 9070 XT and nothing else yet; the log says where it stops "
              "if it does")
-    elif hip and family in ("glm", "deepseek", "lfm25", "gemma4", "tiel"):   # the engine runs on AMD, these models not yet
+    elif hip and family in ("glm", "deepseek", "lfm25", "flint", "gemma4", "tiel"):   # the engine runs on AMD, these models not yet
         warn(f"{title} on the AMD card has not been tried: the engine runs there, this model was not")
     if cuda_tk == 12:
         warn(f"{title}'s engine with CUDA 12 is compiled here (the ready-made one is CUDA 13)" +
@@ -7270,7 +7300,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--family", choices=list(FAMILIES) + list(PREVIEW_FAMILIES),
                     help="qwen = Qwen3.8-Flash-Next, swift = Swift 1.5, glm = GLM 5.3 Flash (docs/GLM.md), deepseek = "
-                         "DeepSeek V4 Flash, lfm25 = LFM2.5-24B-A2B, qwen36 = Qwen3.6-35B-A3B on strata-poly, ornith = "
+                         "DeepSeek V4 Flash, lfm25 = LFM2.5-24B-A2B, flint = Flint 40B-A2.5B, qwen36 = "
+                         "Qwen3.6-35B-A3B on strata-poly, ornith = "
                          "Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel Coder 35B-A3B, minicpmv = MiniCPM-V 4.7 "
                          "35B-A3B (docs/BACKENDS.md), qwen36-strata = Qwen3.6-35B-A3B on the Strata project's "
                          "own engine (UD-Q4_K_XL and up, 32 GB of RAM or more; pictures with --vision, several "

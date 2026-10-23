@@ -123,6 +123,18 @@ FALLBACK_FAMILIES = {
                                         "download_gb": 21.9, "ram_gb": 27, "arena_gb": 20.9},
                          "Q8_0": {"about": "8-bit throughout: the closest to the model as trained",
                                   "download_gb": 25.5, "ram_gb": 31, "arena_gb": 24.4}}},
+    "flint": {"title": "Flint 40B-A2.5B", "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a "
+                                                    "25 GB file, ~29 GB of RAM beside an 8 GB card; three other sizes "
+                                                    "too, no images",
+              "tag": "flint-", "engine": "poly", "vision": False, "experimental": True,
+              "models": {"UD-Q4_K_XL": {"about": "4- and 5-bit experts (Unsloth Dynamic)",
+                                        "download_gb": 25.1, "ram_gb": 29, "arena_gb": 23.1},
+                         "UD-Q3_K_XL": {"about": "3-bit i-quant experts, 4-bit where they write: the least RAM",
+                                        "download_gb": 18.5, "ram_gb": 22, "arena_gb": 16.5},
+                         "UD-Q6_K_XL": {"about": "6-bit experts, 8-bit where they write",
+                                        "download_gb": 36.3, "ram_gb": 40, "arena_gb": 34.2},
+                         "Q8_0": {"about": "8-bit throughout: the closest to the model as trained",
+                                  "download_gb": 42.3, "ram_gb": 46, "arena_gb": 40.2}}},
     # a family with sizes of its own ("models"): two of these have a size of one name
     "qwen36": {"title": "Qwen3.6-35B-A3B", "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a "
                                                      "17 GB file, ~21 GB of RAM beside an 8 GB card; a smaller and a "
@@ -1056,7 +1068,7 @@ def tool_defs(models: dict, families: dict, contexts: list) -> list:
          "description": "The models and sizes PolyStrata's setup offers (families: qwen = Qwen3.8-Flash-Next, swift = "
                         "Swift 1.5, coder = the Coder, unsloth = Unsloth's ~4-bit, glm = GLM 5.3 Flash, another "
                         "model with its own engine, deepseek = DeepSeek V4 Flash on that engine, lfm25 = LFM2.5-24B-A2B, "
-                        "qwen36 = Qwen3.6-35B-A3B, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B and tiel = Tiel "
+                        "flint = Flint 40B-A2.5B, qwen36 = Qwen3.6-35B-A3B, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B and tiel = Tiel "
                         "Coder 35B-A3B, 11-25 GB models on that engine), with "
                         "download size, RAM needed, "
                         "whether each fits this PC, which are installed, the context lengths, and the recommendation. "
@@ -1081,11 +1093,11 @@ def tool_defs(models: dict, families: dict, contexts: list) -> list:
                                        "Flash (another model: Linux, one NVIDIA card, 64-128 GB of RAM, a 79 or "
                                        "114 GB download, no images), deepseek = DeepSeek V4 Flash (GLM's "
                                        "engine: Linux, one NVIDIA card, ~72 GB of RAM beside a 32 GB card, a 91 "
-                                       "GB download, no images), lfm25 = LFM2.5-24B-A2B, qwen36 = "
+                                       "GB download, no images), lfm25 = LFM2.5-24B-A2B, flint = Flint 40B-A2.5B, qwen36 = "
                                        "Qwen3.6-35B-A3B, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = "
                                        "Tiel Coder 35B-A3B (GLM's engine: one NVIDIA card, an 11-25 GB download, "
                                        "15-31 GB of RAM beside an 8 GB card by setup's estimate; images with "
-                                       "vision except LFM2.5)"},
+                                       "vision except LFM2.5 and Flint)"},
              "model": {"type": "string", "enum": list(dict.fromkeys(
                            [*models, *(m for f in families.values() for m in f.get("models", ()))])),
                        "description": "the size (quantization): see strata_models"},
