@@ -10,6 +10,7 @@
 #include <climits>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 
@@ -3020,20 +3021,11 @@ void attend_int8(const float* q, KvInt8 q8, KvInt8 k, KvInt8 v, int64_t pos, int
         throw std::invalid_argument("attend_int8: queries are read four values at a time");
     const long long last = whole ? pos + rows - 1 : -1;
     const int per = n_head / kv_heads;
-    // Where the prompt's time goes, measured by leaving a stage out: STRATA_KV_SKIP=store|score|softmax|value.
-    // (An event-based split is not available: the engine captures this sequence into a CUDA graph, and a record
-    // inside a capture fails it.)  Unset, this costs one getenv and one strstr per call.
-    static const char* skip = std::getenv("STRATA_KV_SKIP");
-    static const bool sk_store = skip && std::strstr(skip, "store");
-    static const bool sk_score = skip && std::strstr(skip, "score");
-    static const bool sk_soft = skip && std::strstr(skip, "softmax");
-    static const bool sk_val = skip && std::strstr(skip, "value");
     for (int first = 0; first < rows; first += chunk) {
         const int c = std::min(chunk, rows - first);
         // this chunk's queries in the cache's own form, at the rows the score kernel will look them up at
-        if (!sk_store)
-            store_int8(q + (size_t) first * n_head * dim, const_cast<int8_t*>(q8.code),
-                     const_cast<uint16_t*>(q8.delta), n_head, dim, first, c, stream);
+        store_int8(q + (size_t) first * n_head * dim, const_cast<int8_t*>(q8.code),
+                   const_cast<uint16_t*>(q8.delta), n_head, dim, first, c, stream);
         const long long p = pos + first, lo = window > 0 && p >= window ? p - window + 1 : 0;
         const int keys = at ? room : int((whole ? last : p + c - 1) - lo) + 1;
         // One warp is a (key, group) pair, so the grid is the pairs over the warps a block holds - the plain
@@ -3047,7 +3039,7 @@ void attend_int8(const float* q, KvInt8 q8, KvInt8 k, KvInt8 v, int64_t pos, int
         };
         // The head's size is the template: a lane owns dim / WARP of the head's values, the run the dp4a walks.
         // go is the plain kernel, kept as the fallback for a group whose heads do not divide by 4.
-        if (!sk_score) {
+        {
             const auto reg = [&](auto kernel) {   // this one's units are a warp count, not a block count
                 const unsigned units = grid(size_t(keys), SCORE_KEYS) * kv_heads;
                 kernel<<<grid(units, SCORE_WARPS), threads, 0, cs(stream)>>>(
@@ -3091,10 +3083,9 @@ void attend_int8(const float* q, KvInt8 q8, KvInt8 k, KvInt8 v, int64_t pos, int
             else throw std::invalid_argument("attend_int8: a head is 64, 128, 256 or 512 values");
         }
         // the weights in place: attn_value_int8_kernel reads them from the scores' buffer, so no transposed copy
-        if (!sk_soft)
-            attn_softmax_kernel<<<dim3(n_head, c), 256, 0, cs(stream)>>>(score, keys, (long long) pos, first, c,
-                                                                        window, last, at, nullptr, per);
-        if (!sk_val) {
+        attn_softmax_kernel<<<dim3(n_head, c), 256, 0, cs(stream)>>>(score, keys, (long long) pos, first, c,
+                                                                     window, last, at, nullptr, per);
+        {
             const int dims = grid(dim, VALUE_DIMS), blocks = grid(c * per, VALUE_QUERIES);
             attn_value_int8_kernel<<<dim3(kv_heads * dims, blocks), VALUE_DIMS * VALUE_SHARES, 0, cs(stream)>>>(
                 score, v, out, keys, dim, n_head, kv_heads, (long long) pos, first, c, window, ring, last, at);
@@ -3112,20 +3103,11 @@ void attend_int8_mixed(const float* q, KvInt8 q8, KvInt8 k, const uint16_t* v_h,
         throw std::invalid_argument("attend_int8: queries are read four values at a time");
     const long long last = whole ? pos + rows - 1 : -1;
     const int per = n_head / kv_heads;
-    // Where the prompt's time goes, measured by leaving a stage out: STRATA_KV_SKIP=store|score|softmax|value.
-    // (An event-based split is not available: the engine captures this sequence into a CUDA graph, and a record
-    // inside a capture fails it.)  Unset, this costs one getenv and one strstr per call.
-    static const char* skip = std::getenv("STRATA_KV_SKIP");
-    static const bool sk_store = skip && std::strstr(skip, "store");
-    static const bool sk_score = skip && std::strstr(skip, "score");
-    static const bool sk_soft = skip && std::strstr(skip, "softmax");
-    static const bool sk_val = skip && std::strstr(skip, "value");
     for (int first = 0; first < rows; first += chunk) {
         const int c = std::min(chunk, rows - first);
         // this chunk's queries in the cache's own form, at the rows the score kernel will look them up at
-        if (!sk_store)
-            store_int8(q + (size_t) first * n_head * dim, const_cast<int8_t*>(q8.code),
-                     const_cast<uint16_t*>(q8.delta), n_head, dim, first, c, stream);
+        store_int8(q + (size_t) first * n_head * dim, const_cast<int8_t*>(q8.code),
+                   const_cast<uint16_t*>(q8.delta), n_head, dim, first, c, stream);
         const long long p = pos + first, lo = window > 0 && p >= window ? p - window + 1 : 0;
         const int keys = at ? room : int((whole ? last : p + c - 1) - lo) + 1;
         // One warp is a (key, group) pair, so the grid is the pairs over the warps a block holds - the plain
@@ -3139,7 +3121,7 @@ void attend_int8_mixed(const float* q, KvInt8 q8, KvInt8 k, const uint16_t* v_h,
         };
         // The head's size is the template: a lane owns dim / WARP of the head's values, the run the dp4a walks.
         // go is the plain kernel, kept as the fallback for a group whose heads do not divide by 4.
-        if (!sk_score) {
+        {
             const auto reg = [&](auto kernel) {   // this one's units are a warp count, not a block count
                 const unsigned units = grid(size_t(keys), SCORE_KEYS) * kv_heads;
                 kernel<<<grid(units, SCORE_WARPS), threads, 0, cs(stream)>>>(
@@ -3182,11 +3164,10 @@ void attend_int8_mixed(const float* q, KvInt8 q8, KvInt8 k, const uint16_t* v_h,
             else if (dim == 64) go(attn_score_int8_kernel<8, 8>);
             else throw std::invalid_argument("attend_int8: a head is 64, 128, 256 or 512 values");
         }
-        // the weights in place: attn_value_int8_kernel reads them from the scores' buffer, so no transposed copy
-        if (!sk_soft)
-            attn_softmax_kernel<<<dim3(n_head, c), 256, 0, cs(stream)>>>(score, keys, (long long) pos, first, c,
-                                                                        window, last, at, nullptr, per);
-        if (!sk_val) {
+        // the weights in place: attn_value_kernel reads them from the scores' buffer, so no transposed copy
+        attn_softmax_kernel<<<dim3(n_head, c), 256, 0, cs(stream)>>>(score, keys, (long long) pos, first, c,
+                                                                     window, last, at, nullptr, per);
+        {
             const int dims = grid(dim, VALUE_DIMS), blocks = grid(c * per, VALUE_QUERIES);
             attn_value_kernel<<<dim3(kv_heads * dims, blocks), VALUE_DIMS * VALUE_SHARES, 0, cs(stream)>>>(
                 score, (const half*) v_h, out, keys, dim, n_head, kv_heads, (long long) pos, first, c, window, ring,
