@@ -177,18 +177,18 @@ Medido como o LFM2.5-24B-A2B logo acima, nos mesmos dois PCs, com um prompt de c
 
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 20-30 tokens/s | 920-1,040 tokens/s |
-| **UD-Q3_K_XL** | 61-63 tokens/s | 1,155 tokens/s |
-| **UD-Q6_K_XL** | 7-8 tokens/s | 630 tokens/s |
-| **Q8_0** | 4-5 tokens/s | 540-550 tokens/s |
+| **UD-Q4_K_XL** | 20-29 tokens/s | 1,310-1,420 tokens/s |
+| **UD-Q3_K_XL** | 61-63 tokens/s | 2,000-2,010 tokens/s |
+| **UD-Q6_K_XL** | 6-7 tokens/s | 830-950 tokens/s |
+| **Q8_0** | 3-4 tokens/s | 770-790 tokens/s |
 
 </td><td>
 
 | Tamanho | Escreve respostas | Lê seu prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 249-250 tokens/s | 8,280-8,320 tokens/s |
-| **UD-Q3_K_XL** | 260-261 tokens/s | 8,320-8,360 tokens/s |
-| **Q8_0** | 140-149 tokens/s | 5,460 tokens/s |
+| **UD-Q4_K_XL** | 251-252 tokens/s | 12,900 tokens/s |
+| **UD-Q3_K_XL** | 260-264 tokens/s | 13,080-13,200 tokens/s |
+| **Q8_0** | 158-160 tokens/s | 6,740-6,970 tokens/s |
 
 </td></tr>
 </table>
@@ -197,9 +197,13 @@ No notebook só o UD-Q3_K_XL fica nos 32 GB de RAM ao lado dos programas da áre
 os experts do SSD de novo e de novo, e por isso são lentos lá; o instalador escolhe lá o UD-Q3_K_XL. A placa da
 estação de trabalho guarda inteiros o UD-Q4_K_XL e o UD-Q3_K_XL; o UD-Q6_K_XL não rodou lá.
 
+No notebook o llama.cpp com `--fit on`, o mais rápido dos ajustes testados lá, leu um prompt de 29,442 tokens a 390
+tokens/s e escreveu depois a 35; o PolyStrata o leu a 1,950-2,010 e escreveu a 49-52
+([as medições](bench/results/2026-10-24-laptop-flint-llamacpp-a37cc46/README.md)).
+
 Na estação de trabalho o llama-bench do llama.cpp leu 29,816 tokens a 7,790 tokens/s com o lote padrão de 512 e a
-12,470 com 2,048, o PolyStrata a 7,840-8,150; token a token o llama.cpp escreveu a 222 tokens/s e a 188 depois desse
-prompt, o PolyStrata a 250-253 e 132-135. Um prompt de 124,122 tokens em um contexto de 128K foi lido e respondido em 40
+12,470 com 2,048, o PolyStrata a 12,910-12,940; token a token o llama.cpp escreveu a 222 tokens/s e a 188 depois desse
+prompt, o PolyStrata a 249-256 e 212-213. Um prompt de 124,122 tokens em um contexto de 128K foi lido e respondido em 20
 segundos, e os três fatos escondidos nele foram encontrados.
 
 ### Qwen3.6-35B-A3B
@@ -661,9 +665,9 @@ UD-Q3_K_XL abaixo disso; ao lado de uma placa maior o UD-Q4_K_XL precisa de meno
 | **UD-Q6_K_XL** | experts de 6 bits | 36 GB | cerca de 40 GB |
 | **Q8_0** | 8 bits em tudo, o mais próximo do modelo como foi treinado | 42 GB | cerca de 46 GB |
 
-No notebook de 32 GB o arquivo do UD-Q4_K_XL não ficou na RAM: ele escreveu um chat curto a 20-30 tokens/s, o
+No notebook de 32 GB o arquivo do UD-Q4_K_XL não ficou na RAM: ele escreveu um chat curto a 20-29 tokens/s, o
 UD-Q3_K_XL a 61-63. Contra o Q8_0, em cinco prompts de 256 tokens cada, os outros tamanhos escolhem o token mais
-provável do Q8_0 em 97,9% dos passos (UD-Q6_K_XL), 96,4% (UD-Q4_K_XL) e 93,5% (UD-Q3_K_XL).
+provável do Q8_0 em 97,8% dos passos (UD-Q6_K_XL), 95,9% (UD-Q4_K_XL) e 94,0% (UD-Q3_K_XL).
 
 ### Qwen3.6-35B-A3B
 
@@ -754,7 +758,7 @@ Onde eles diferem:
 | **Imagens** | Responda sim para "Images?" na instalação. Depois clique em **Picture** no chat, ou anexe imagens no seu app. Placas AMD entendem imagens no Linux usando o processador; no Windows, ainda não. | Ainda não. | Ele só lê texto. | Ele só lê texto. | Ele só lê texto. | Responda sim para "Images?" na instalação, e depois como no Qwen3.8-Flash-Next. Numa placa com menos de 16 GB, o codificador de imagens roda no processador, e uma imagem leva alguns segundos. |
 | **Uma requisição por vez** | Por padrão, o PolyStrata responde uma requisição e as outras esperam. Para responder várias ao mesmo tempo, defina `"parallel": 2` ([BATCHING.md](docs/BATCHING.md)). Numa placa de 12 GB, isso deixa cada resposta mais lenta. | Uma por vez, as outras esperam. | Uma por vez, as outras esperam. | Uma por vez, as outras esperam. | Uma por vez, as outras esperam. | Uma por vez, as outras esperam. |
 | **Várias conversas** | A última é mantida, então as mensagens seguintes começam em segundos. Dois argumentos do motor mantêm várias na RAM ([detalhes](docs/DETAILS.md#using-it)). | A última é mantida. A instalação pergunta se deve manter várias na RAM, para que um agente e seus subagentes se revezem sem que os prompts sejam lidos de novo ([como](docs/GLM.md#several-conversations-at-once)). | Como o GLM 5.3 Flash. | Como o GLM 5.3 Flash. | Como o GLM 5.3 Flash. | Como o GLM 5.3 Flash. |
-| **Prompts longos** | O PolyStrata lê a primeira mensagem de uma conversa inteira, cerca de 1 minuto a cada 30,000 tokens. As mensagens seguintes começam em segundos. | A primeira mensagem é lida inteira, cerca de 40 segundos a cada 30,000 tokens. | A primeira mensagem é lida inteira, cerca de 29 segundos a cada 30,000 tokens. | A primeira mensagem é lida inteira: 30,000 tokens levam 1,3 a 1,5 segundo na estação de trabalho e 8 a 10 segundos no notebook de 8 GB. | A primeira mensagem é lida inteira: 30,000 tokens levam cerca de 3,6 segundos na estação de trabalho e 25 a 32 segundos no notebook de 8 GB. | A primeira mensagem é lida por inteiro: 30,000 tokens levam 4 a 5 segundos na estação de trabalho e 14 a 27 segundos no notebook de 8 GB. |
+| **Prompts longos** | O PolyStrata lê a primeira mensagem de uma conversa inteira, cerca de 1 minuto a cada 30,000 tokens. As mensagens seguintes começam em segundos. | A primeira mensagem é lida inteira, cerca de 40 segundos a cada 30,000 tokens. | A primeira mensagem é lida inteira, cerca de 29 segundos a cada 30,000 tokens. | A primeira mensagem é lida inteira: 30,000 tokens levam 1,3 a 1,5 segundo na estação de trabalho e 8 a 10 segundos no notebook de 8 GB. | A primeira mensagem é lida inteira: 30,000 tokens levam cerca de 2,3 segundos na estação de trabalho e 15 a 22 segundos no notebook de 8 GB. | A primeira mensagem é lida por inteiro: 30,000 tokens levam 4 a 5 segundos na estação de trabalho e 14 a 27 segundos no notebook de 8 GB. |
 
 Mais: [onde suas conversas ficam salvas](docs/INSTALL.md#where-things-are-stored), [a API](docs/DETAILS.md#using-it).
 

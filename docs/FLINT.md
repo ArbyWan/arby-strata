@@ -31,63 +31,79 @@ two below, with the run configs setup writes for each machine.
 ### On a laptop with 8 GB of VRAM
 
 An RTX 4070 Laptop with 8 GB, an i7-14700HX, 32 GB of RAM, Windows 10, CUDA 13.0. A context of 32,768 and 13 threads
-for the experts the card does not hold, and a prompt read 2,048 tokens at a time. The prompt came to 28,827 tokens;
-for Q8_0 and the last run of UD-Q6_K_XL, 28,968, after this repository's docs had changed.
+for the experts the card does not hold, and a prompt read 2,048 tokens at a time. The prompt came to 29,165 tokens.
 
 | Size | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM | Machine's RAM, GiB |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| UD-Q4_K_XL | 27.8 to 31.6 | 916 to 1,039 | 20 to 30 | 38 to 39 | 40% | 31.5 |
-| UD-Q3_K_XL | 25.0 | 1,155 | 61 to 63 | 45 | 49% to 50% | 29.2 to 29.4 |
-| UD-Q6_K_XL | 46.0 to 46.2 | 631 to 632 | 7 to 8 | 6 to 7 | 29% | 31.7 to 31.8 |
-| Q8_0 | 52.8 to 54.0 | 544 to 554 | 4 to 5 | 5 to 6 | 27% to 28% | 31.5 to 31.6 |
+| UD-Q4_K_XL | 20.6 to 22.4 | 1,310 to 1,425 | 20 to 29 | 46 to 50 | 39% | 31.5 to 31.7 |
+| UD-Q3_K_XL | 14.6 to 14.7 | 1,999 to 2,006 | 61 to 63 | 49 | 49% | 28.0 to 28.2 |
+| UD-Q6_K_XL | 31.1 to 36.2 | 827 to 945 | 6 to 7 | 8 to 10 | 29% to 31% | 31.5 to 31.6 |
+| Q8_0 | 37.2 to 38.3 | 767 to 790 | 3 to 4 | 5 to 6 | 26% | 31.5 to 31.6 |
 
 Only UD-Q3_K_XL stays in the laptop's RAM beside the desktop's programs. The other three fill the 32 GB, and the
 experts that drop out of the OS file cache are read from the SSD again while the model answers: UD-Q4_K_XL's short
-chat came at 14 to 30 tokens/s over its three runs, and UD-Q6_K_XL and Q8_0 are of little use there. That is why
+chat came at 15 to 29 tokens/s over its three runs, and UD-Q6_K_XL and Q8_0 are of little use there. That is why
 setup takes UD-Q4_K_XL only from about 40 GB of RAM beside an 8 GB card.
-
-Read 1,024 tokens at a time, as setup did here before Flint got a batch of 2,048, the prompt went at 840 to 901
-tokens/s with UD-Q3_K_XL and 715 to 777 with UD-Q4_K_XL. With 2,048 the experts outside VRAM are copied to the card
-half as often, and the answer after the prompt came no slower: 45 tokens/s against 39 to 42 with UD-Q3_K_XL.
 
 ### On a workstation
 
 An RTX 5090 (32 GB), 25 vCPU of a Xeon Platinum 8470Q, 90 GB of RAM for the container, Linux, CUDA 12.8. The card
 holds every expert of UD-Q3_K_XL and UD-Q4_K_XL; of Q8_0 it holds 8,447 of the 12,032 at a 32K context, and the CPU
-runs the rest. A prompt is read 2,048 tokens at a time.
+runs the rest. A prompt is read 2,048 tokens at a time. The prompt came to 28,827 tokens.
 
 | Size | First token, s | Reads, tokens/s | Writes a short chat | Writes after the prompt | Experts from VRAM |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| UD-Q4_K_XL | 3.6 | 8,283 to 8,316 | 249 to 250 | 144 | 100% |
-| UD-Q3_K_XL | 3.6 | 8,315 to 8,360 | 260 to 261 | 143 | 100% |
-| Q8_0 | 5.4 | 5,455 to 5,463 | 140 to 149 | 103 to 106 | 88% to 89% |
+| UD-Q4_K_XL | 2.3 | 12,897 to 12,899 | 251 to 252 | 213 | 100% |
+| UD-Q3_K_XL | 2.3 | 13,075 to 13,196 | 260 to 264 | 225 | 100% |
+| Q8_0 | 4.3 to 4.4 | 6,737 to 6,969 | 158 to 160 | 140 to 166 | 88% to 89% |
 
 UD-Q6_K_XL did not fit on the workstation's disk beside the other three, and was not run there.
 
 ### Against llama.cpp
 
 On the workstation, `llama-bench` of llama.cpp a37cc46104 (the first with Flint), every layer on the card and flash
-attention on, UD-Q4_K_XL:
+attention on, UD-Q4_K_XL; PolyStrata's engine with the same tokens, one at a time (`--window 1`):
 
 | | PolyStrata | llama.cpp, batch of 512 (its default) | llama.cpp, batch of 2,048 |
 | --- | ---: | ---: | ---: |
-| Reads 29,816 tokens | 7,842 to 8,154 tokens/s (7,323 to 7,379 with a batch of 1,024) | 7,794 | 12,470 |
-| Writes, one token at a time | 250 to 253 tokens/s | 222 | |
-| Writes after 29,816 tokens, one at a time | 132 to 135 tokens/s | 188 | |
+| Reads 29,816 tokens | 12,906 to 12,936 tokens/s (10,326 to 10,374 with a batch of 1,024) | 7,794 | 12,470 |
+| Writes, one token at a time | 249 to 256 tokens/s | 222 | |
+| Writes after 29,816 tokens, one at a time | 212 to 213 tokens/s | 188 | |
 
-With a batch of 2,048 llama.cpp reads the prompt 1.5 to 1.6 times as fast as PolyStrata. One token at a time
-PolyStrata writes 13% to 14% faster after a short prompt and 28% to 30% slower after 29,816 tokens: Flint's heads have
-128 values and a sink, and its attention runs on the engine's general kernels, not on the ones written for heads of
-64. Through the server, with its guesses from text the conversation repeats, it wrote 249 to 250 tokens/s in the
-short chat and 144 after the long prompt.
+PolyStrata reads the prompt 3% to 4% faster than llama.cpp with a batch of 2,048 (11,843 in its first run after the
+build) and 1.66 times as fast as with llama.cpp's default. One token at a time it writes 12% to 15% faster after a
+short prompt and 13% faster after 29,816 tokens.
+
+On the laptop, UD-Q3_K_XL through each server with the same prompts
+([the runs](../bench/results/2026-10-24-laptop-flint-llamacpp-a37cc46/README.md)):
+
+| | PolyStrata | llama.cpp a37cc46104, `--fit on` | llama.cpp, `--n-cpu-moe 36` |
+| --- | ---: | ---: | ---: |
+| Reads 3,566 tokens | 1,682 to 1,773 tokens/s | 402 to 406 | 392 to 409 |
+| Writes after them | 63 to 69 tokens/s | 42.3 to 43.2 | 39.6 to 43.9 |
+| Reads 29,442 tokens | 1,946 to 2,012 tokens/s | 390 to 391 | 379 to 394 |
+| Writes after them | 49 to 52 tokens/s | 35.3 to 35.4 | 31.9 to 35.6 |
+
+`--fit on` was the fastest of the three settings tried for llama.cpp there; `--n-cpu-moe 40` was slower still.
+
+### What was tuned for it
+
+UD-Q4_K_XL reading 29,816 tokens on the RTX 5090, tokens/s, and UD-Q3_K_XL's README pass on the laptop:
+
+| Commit | Change | Effect |
+| --- | --- | --- |
+| 5ff592f1 | the model runs | 7,465 to 7,530 through the server, a prompt batch of 1,024 |
+| c914fcf0 | setup's config reads 2,048 tokens at a time | 8,283 to 8,316; the laptop 1,155 instead of 840 to 901 |
+| 372f4ece | a prompt batch's attention of heads of 128 values in registers (attn_flash128_kernel), and a few tokens' in blocks of 64 rows a launch block each | 11,864 to 12,025; one token at a time after 29,816 tokens 212 instead of 132 to 135 |
+| 3863358e | the router's product in tiles of 4 tokens by 4 outputs a thread, the same bits | 12,929 to 12,936; the laptop 1,999 to 2,006 |
 
 ## Long contexts
 
 Flint's model card gives it a context of 262,144 tokens; setup offers up to 131,072. The test is the one DEEPSEEK.md
 has: a document of this repository's docs with three facts planted at 15%, 50% and 85% of it, then three questions.
 On the workstation, UD-Q4_K_XL with a context of 131,072 read and answered the 124,122-token request through the
-server in 39.6 s with setup's batch of 2,048 (41.0 s with 1,024) and found all three facts both times. Flint always
-thinks, and its thinking quoted the three sentences before it answered; it wrote 171 and 177 tokens in all.
+server in 20.4 s and found all three facts (39.6 s before 372f4ece). Flint always thinks, and its thinking quoted
+the three sentences before it answered; it wrote 170 tokens in all.
 
 ## How it was checked
 
@@ -95,13 +111,14 @@ thinks, and its thinking quoted the three sentences before it answered; it wrote
   Chinese, Japanese), BACKENDS.md, a Python file and a CUDA file.
 - With greedy sampling and the expert cache fixed, the engine and llama.cpp with its experts on the CPU write the
   same tokens on two short prompts, 34 of 34 and 64 of 64, on the laptop and on the workstation. After the first 100,
-  600, 1,500 and 3,740 tokens of a longer prompt they agree on the first 3 to 17 of 24 tokens (once on all 24), and
-  part each time where llama.cpp's two or three most likely tokens were 0.17 to 0.74 nats apart.
+  600, 1,500 and 3,740 tokens of a longer prompt they agree on 11, 24, 6 and 24 of 24 tokens on the workstation. The
+  1,500-token prefix parts where llama.cpp gives the two most likely tokens 0.400 and 0.205 and the engine 0.287 and
+  0.402; read token by token with its plain float kernels the engine gives them 0.242 and 0.258.
 - Three answers written together are the ones written one at a time, all 64 tokens of each, after a prompt of 15
   tokens and one of 3,000, with every expert on the card and with the card held to 8 GB.
-- `poly_sink_attend_test` checks the attention of a prompt batch against a token's, with the sinks and a window of
-  513 over a ring of rows; `serve/test_flint.py` checks the pre-tokenizer, the tool calls, the stop tokens and the
-  thinking.
+- `poly_sink_attend_test` checks the attention of a prompt batch (attn_flash128_kernel) and of a few tokens in
+  blocks of rows (attn_split_kernel) against the plain kernels, with the sinks and a window of 513 over a ring of
+  rows; `serve/test_flint.py` checks the pre-tokenizer, the tool calls, the stop tokens and the thinking.
 
 ## How the sizes compare
 
@@ -112,11 +129,11 @@ compared on the workstation; UD-Q6_K_XL, which did not fit there, on the laptop 
 
 | Size | Same most likely token as Q8_0 | Mean probability of Q8_0's token |
 | --- | ---: | ---: |
-| UD-Q6_K_XL | 97.9% (1,253 of 1,280) | 0.858 |
-| UD-Q4_K_XL | 96.4% (1,234 of 1,280) | 0.857 |
-| UD-Q3_K_XL | 93.5% (1,197 of 1,280) | 0.839 |
+| UD-Q6_K_XL | 97.8% (1,252 of 1,280) | 0.870 |
+| UD-Q4_K_XL | 95.9% (1,228 of 1,280) | 0.854 |
+| UD-Q3_K_XL | 94.0% (1,203 of 1,280) | 0.844 |
 
-Q8_0 gives its own tokens 0.861 on average on the workstation and 0.857 on the laptop.
+Q8_0 gives its own tokens 0.861 on average on the workstation and 0.872 on the laptop.
 
 ## What you need
 
@@ -173,5 +190,4 @@ several conversations in RAM, downloads the file, checks its SHA-256, writes the
 - Pictures: the model reads text only.
 - A draft model. Recursive publishes none.
 - Contexts past 128K in setup, although the model card gives 262,144: not tried here.
-- The engine's own work for it. The attention runs on the general kernels, without the ones written for 64-value
-  heads, and writing one token at a time after a long prompt is 28% to 30% slower than llama.cpp's.
+- The laptop's writing speed after a prompt that fills a 64K or 128K context: not measured, and setup says so.

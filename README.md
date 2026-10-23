@@ -176,18 +176,18 @@ Measured the same way as LFM2.5-24B-A2B above, on the same two PCs, with a promp
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 20-30 tokens/s | 920-1,040 tokens/s |
-| **UD-Q3_K_XL** | 61-63 tokens/s | 1,155 tokens/s |
-| **UD-Q6_K_XL** | 7-8 tokens/s | 630 tokens/s |
-| **Q8_0** | 4-5 tokens/s | 540-550 tokens/s |
+| **UD-Q4_K_XL** | 20-29 tokens/s | 1,310-1,420 tokens/s |
+| **UD-Q3_K_XL** | 61-63 tokens/s | 2,000-2,010 tokens/s |
+| **UD-Q6_K_XL** | 6-7 tokens/s | 830-950 tokens/s |
+| **Q8_0** | 3-4 tokens/s | 770-790 tokens/s |
 
 </td><td>
 
 | Size | Writes answers | Reads your prompt |
 | --- | ---: | ---: |
-| **UD-Q4_K_XL** | 249-250 tokens/s | 8,280-8,320 tokens/s |
-| **UD-Q3_K_XL** | 260-261 tokens/s | 8,320-8,360 tokens/s |
-| **Q8_0** | 140-149 tokens/s | 5,460 tokens/s |
+| **UD-Q4_K_XL** | 251-252 tokens/s | 12,900 tokens/s |
+| **UD-Q3_K_XL** | 260-264 tokens/s | 13,080-13,200 tokens/s |
+| **Q8_0** | 158-160 tokens/s | 6,740-6,970 tokens/s |
 
 </td></tr>
 </table>
@@ -196,10 +196,14 @@ On the laptop only UD-Q3_K_XL stays in the 32 GB of RAM beside the desktop's pro
 experts from the SSD, which is what makes them slow there, and the installer takes UD-Q3_K_XL there. The
 workstation's card holds UD-Q4_K_XL and UD-Q3_K_XL whole; UD-Q6_K_XL was not run there.
 
+On the laptop llama.cpp with `--fit on`, the fastest of the settings tried there, read a prompt of 29,442 tokens at
+390 tokens/s and wrote after it at 35; PolyStrata read it at 1,950 to 2,010 and wrote at 49 to 52
+([the runs](bench/results/2026-10-24-laptop-flint-llamacpp-a37cc46/README.md)).
+
 On the workstation llama-bench of llama.cpp read 29,816 tokens at 7,790 tokens/s with its default batch of 512 and
-at 12,470 with 2,048, where PolyStrata reads at 7,840-8,150; one token at a time llama.cpp wrote at 222 tokens/s and at
-188 after that prompt, PolyStrata at 250-253 and 132-135. A prompt of 124,122 tokens in a 128K context was read and
-answered in 40 seconds, and the three facts hidden in it were found.
+at 12,470 with 2,048, where PolyStrata reads at 12,910-12,940; one token at a time llama.cpp wrote at 222 tokens/s and at
+188 after that prompt, PolyStrata at 249-256 and 212-213. A prompt of 124,122 tokens in a 128K context was read and
+answered in 20 seconds, and the three facts hidden in it were found.
 
 ### Qwen3.6-35B-A3B
 
@@ -662,9 +666,9 @@ beside a larger card UD-Q4_K_XL needs less. The others are chosen by name: `--mo
 | **UD-Q6_K_XL** | 6-bit experts | 36 GB | about 40 GB |
 | **Q8_0** | 8-bit throughout, the closest to the model as trained | 42 GB | about 46 GB |
 
-On the 32 GB laptop UD-Q4_K_XL's file did not stay in RAM: it wrote a short chat at 20-30 tokens/s, UD-Q3_K_XL at
-61-63. Against Q8_0, on five prompts of 256 tokens each, the other sizes pick Q8_0's most likely token at 97.9% of
-the steps (UD-Q6_K_XL), 96.4% (UD-Q4_K_XL) and 93.5% (UD-Q3_K_XL).
+On the 32 GB laptop UD-Q4_K_XL's file did not stay in RAM: it wrote a short chat at 20-29 tokens/s, UD-Q3_K_XL at
+61-63. Against Q8_0, on five prompts of 256 tokens each, the other sizes pick Q8_0's most likely token at 97.8% of
+the steps (UD-Q6_K_XL), 95.9% (UD-Q4_K_XL) and 94.0% (UD-Q3_K_XL).
 
 ### Qwen3.6-35B-A3B
 
@@ -759,7 +763,7 @@ Where they differ:
 | **Pictures** | Say yes to "Images?" in setup. Then click **Picture** in the chat, or attach pictures in your app. AMD cards read pictures on Linux through the processor; on Windows they can't yet. | Not yet. | It reads text only. | It reads text only. | It reads text only. | Say yes to "Images?" in setup, then as with Qwen3.8-Flash-Next. On a card with less than 16 GB the picture encoder runs on the processor, and a picture takes a few seconds. |
 | **Several requests** | One at a time by default, the others wait. `"parallel": 2` answers several at once ([BATCHING.md](docs/BATCHING.md)); on a 12 GB card each answer gets slower. | One at a time, the others wait. | One at a time, the others wait. | One at a time, the others wait. | One at a time, the others wait. | One at a time, the others wait. |
 | **Several conversations** | The last one is kept, so follow-up messages start in seconds. Two engine arguments keep several in RAM ([details](docs/DETAILS.md#using-it)). | The last one is kept. Setup asks whether to keep several in RAM, so that an agent and its subagents take turns without their prompts being read again ([how](docs/GLM.md#several-conversations-at-once)). | As GLM 5.3 Flash. | As GLM 5.3 Flash. | As GLM 5.3 Flash. | As GLM 5.3 Flash. |
-| **Long prompts** | The first message of a chat is read in full, about 1 minute per 30,000 tokens. | The first message is read in full, about 40 seconds per 30,000 tokens. | The first message is read in full, about 29 seconds per 30,000 tokens. | The first message is read in full: 30,000 tokens take 1.3 to 1.5 seconds on the workstation and 8 to 10 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take about 3.6 seconds on the workstation and 25 to 32 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take 4 to 5 seconds on the workstation and 14 to 27 seconds on the 8 GB laptop. |
+| **Long prompts** | The first message of a chat is read in full, about 1 minute per 30,000 tokens. | The first message is read in full, about 40 seconds per 30,000 tokens. | The first message is read in full, about 29 seconds per 30,000 tokens. | The first message is read in full: 30,000 tokens take 1.3 to 1.5 seconds on the workstation and 8 to 10 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take about 2.3 seconds on the workstation and 15 to 22 seconds on the 8 GB laptop. | The first message is read in full: 30,000 tokens take 4 to 5 seconds on the workstation and 14 to 27 seconds on the 8 GB laptop. |
 
 More: [where your chats are stored](docs/INSTALL.md#where-things-are-stored), [the API](docs/DETAILS.md#using-it).
 
