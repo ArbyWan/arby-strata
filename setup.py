@@ -558,7 +558,7 @@ FAMILIES = {
     # Flint (llama.cpp's flint): no draft block and no image encoder.  Its window layers' caches are rings, so a context
     # token is the full layers' rows only.  UD-Q4_K_XL is taken unasked only with 15 GB of RAM past its estimate,
     # about 40 GB beside an 8 GB card: on the 32 GB laptop its file did not stay in RAM beside the desktop's programs,
-    # and a short chat was written at 20 to 30 tokens/s, UD-Q3_K_XL's at 61 to 63.  UD-Q6_K_XL did not fit on the
+    # and a short chat was written at 20 to 29 tokens/s, UD-Q3_K_XL's at 61 to 63.  UD-Q6_K_XL did not fit on the
     # 5090's disk: its VRAM beside the experts is Q8_0's, whose weights outside them are the same.
     "flint": {"title": "Flint 40B-A2.5B", "by": "Recursive; quantized by Unsloth",
               "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a 25 GB file, ~29 GB of RAM "
@@ -566,7 +566,7 @@ FAMILIES = {
               "hf": hf("unsloth/flint-GGUF"), "file": "flint-{q}.gguf", "shards": 1,
               "tag": "flint-", "name": "flint-40b-a2.5b", "engine": "poly", "vision": False, "experimental": True,
               "windows": True, "ran_on_gb": 8, "row_bytes": 28672, "batch_gb": 0.4, "batch_from_gb": 7.5,
-              "laptop_tps": {32768: "38-45"},
+              "laptop_tps": {32768: "46-50"},
               "models": {"UD-Q4_K_XL": {"about": "4- and 5-bit experts (Unsloth Dynamic)",
                                         "download_gb": 25.1, "ram_gb": 29, "arena_gb": 23.1, "vram_beside_gb": 4.0,
                                         "pick_extra_gb": 15},

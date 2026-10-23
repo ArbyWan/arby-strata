@@ -84,7 +84,7 @@ class Main(unittest.TestCase):
         # measured after a 29K prompt on the 8 GB laptop; 64K and 128K were not run there
         code, out, _ = self.main(family="flint", model="UD-Q3_K_XL", ram=64.0, vram=8.0)
         self.assertEqual(code, 0, out)
-        self.assertIn("8 GB card: 38-45 tokens/s after a full prompt", out)
+        self.assertIn("8 GB card: 46-50 tokens/s after a full prompt", out)
         self.assertNotIn("52-58", out)
         self.assertIn("no long prompt run", out)
 
