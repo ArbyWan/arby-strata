@@ -378,8 +378,12 @@ Engine::~Engine() {
     mmq_.reset();
     for (void* p : dev_allocs_) cudaFree(p);
     for (Kv& k : kv_) vmm_free(k);
-    for (Seq& q : seqs_)
+    for (Seq& q : seqs_) {
         for (Kv& k : q.kv) vmm_free(k);
+        // The fp16 twins of the int8 caches (Gemma 4's --kv int8) are the sequences'.
+        if (q.twin_k.base) vmm_free(q.twin_k);
+        if (q.twin_v.base) vmm_free(q.twin_v);
+    }
     vmm_free(arena_);
     vmm_free(stage_map_);
     for (void* p : host_allocs_) cudaFreeHost(p);
@@ -629,6 +633,10 @@ void Engine::park_bound() {
     for (size_t il = 0; il < layers_.size(); ++il) q.heads[il] = std::exchange(layers_[il].heads, {});
     q.passes = std::exchange(passes_, {});
     q.tail = std::exchange(tail_, nullptr);
+    // The fp16 twin of the int8 caches is the sequence's too (Gemma 4's --kv int8).
+    q.twin_k = std::exchange(twin_k_, {});
+    q.twin_v = std::exchange(twin_v_, {});
+    q.twin_mapped = std::exchange(twin_mapped_, 0);
 }
 
 // Sequence s's members in place of the ones park_bound() put away, and the architecture's pointers into its
@@ -649,6 +657,10 @@ void Engine::take_bound(int s) {
     for (size_t il = 0; il < layers_.size() && il < q.heads.size(); ++il) layers_[il].heads = std::exchange(q.heads[il], {});
     passes_ = std::exchange(q.passes, {});
     tail_ = std::exchange(q.tail, nullptr);
+    // The fp16 twin of the int8 caches (Gemma 4's --kv int8) comes back with the sequence it belongs to.
+    twin_k_ = std::exchange(q.twin_k, {});
+    twin_v_ = std::exchange(q.twin_v, {});
+    twin_mapped_ = std::exchange(q.twin_mapped, 0);
     bound_ = s;
     again_ = 0;
     alloc_caches();
@@ -989,6 +1001,11 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
     const std::string name = arch ? arch->s : std::string();
     if (o.kv_format == KvFmt::kQ8_0 && name != "qwen35moe")
         throw std::runtime_error("--kv q8_0 is only supported for qwen35moe models in v1; this is a '" + name + "' model");
+    // int8 and int8k are Gemma 4's: their readers are not the arithmetic q8_0's are, so a model takes one
+    // family or the other rather than a choice between them.
+    if (name != "gemma4" && (o.kv_format == KvFmt::kInt8 || o.kv_format == KvFmt::kInt8K))
+        throw std::runtime_error("--kv int8 and --kv int8k are Gemma 4's; for a qwen35moe model use --kv q8_0 "
+                                 "(this is a '" + name + "' model)");
     const auto make = [&]() -> std::unique_ptr<Engine> {
         if (name == "glm5-next" || name == "glm5next") return std::make_unique<Glm5Next>();   // Unsloth: no hyphen
         if (name == "qwen35moe") return std::make_unique<Qwen35>();

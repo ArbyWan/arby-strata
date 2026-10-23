@@ -2184,6 +2184,17 @@ if(STRATA_NATIVE_EXPERTS AND (STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP) AND NOT S
                                                   Threads::Threads)
     add_test(NAME poly_kv_q8_test COMMAND poly_kv_q8_test)
   endif()
+  # --kv int8/int8k's kernels (store_int8 / attend_int8) against ggml's own quantizer and against attend() over the
+  # same numbers in fp16.  The reference is ggml-cpu's quantize_row_q8_0_ref, hence the ggml links; under HIP the
+  # mma tier's probes are behind STRATA_USE_HIP (the dp4a tier is what runs there anyway).
+  if(STRATA_BUILD_TESTS)
+    add_executable(poly_kv_int8_test src/poly/kv_int8_test.cpp src/poly/kernels.cu)
+    target_include_directories(poly_kv_int8_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+                                                      ${_strata_gpu_include_directories} ${_strata_gg}/include)
+    target_link_libraries(poly_kv_int8_test PRIVATE ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target}
+                                                  ggml-cpu ggml-base Threads::Threads)
+    add_test(NAME poly_kv_int8_test COMMAND poly_kv_int8_test)
+  endif()
 endif()
 
 if(STRATA_BUILD_TESTS)

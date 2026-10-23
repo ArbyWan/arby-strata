@@ -36,8 +36,12 @@ namespace strata::poly {
 class Shards;
 struct Likeliest;
 
-/// The attention caches' storing format: fp16 (default) or ggml Q8_0; opt-in via --kv.
-enum class KvFmt { kFp16 = 0, kQ8_0 = 1 };
+/// The attention caches' storing format, opt-in via --kv.  q8_0 is ggml's blocks (one fp16 scale a 32-value
+/// block of int8 codes) and reads them back element by element; int8 is the same rule with the codes and the
+/// deltas in two arrays, which a reader can take four codes to a load, and int8k keeps only the keys' side
+/// quantized.  q8_0 is qwen35moe's; int8 and int8k are Gemma 4's - the two readers are not the same arithmetic,
+/// so a model has one or the other rather than a choice between them.
+enum class KvFmt { kFp16 = 0, kQ8_0 = 1, kInt8 = 2, kInt8K = 3 };
 
 struct Options {
     std::string model;
@@ -186,6 +190,10 @@ public:
     double numa_share() const { return node_share_; }
     int64_t pos() const { return pos_; }
     int64_t meta_u(const char* key, int64_t fallback) const;
+    /// What --kv asked for, in the two short forms an architecture's code reads: the int8 codes/delta cache
+    /// (both sides, or the keys' side alone under int8k).
+    bool int8() const { return opt_.kv_format == KvFmt::kInt8 || opt_.kv_format == KvFmt::kInt8K; }
+    bool int8k() const { return opt_.kv_format == KvFmt::kInt8K; }
 
     /// Forget the sequence.
     void reset();
@@ -618,11 +626,20 @@ protected:
         std::vector<std::vector<void*>> heads;   ///< Layer::heads, by layer
         std::map<std::vector<int>, void*> passes;
         void* tail = nullptr;
+        // A sequence's own fp16 twin of its int8 caches (Gemma 4's --kv int8), and the halves of it that have
+        // VRAM behind them.  The twin is a sequence's: a batch gives every row its own sequence, and the twin is
+        // where that sequence's prompt batch reads, so the twin belongs with the sequence's other members.
+        Mapped twin_k, twin_v;
+        size_t twin_mapped = 0;
     };
     std::vector<Seq> seqs_;      ///< the bound one's place holds nothing while it is bound
     int bound_ = 0;
     std::vector<Buf> bufs_;      ///< the bound sequence's: what kv_alloc() and seq_alloc() gave it, in that order
     size_t again_ = SIZE_MAX;    ///< while alloc_caches() points at the bound sequence's buffers again: the next one
+    // The bound sequence's fp16 twin of its int8 caches (Gemma 4's --kv int8): the addresses for the whole and
+    // the VRAM behind them.  A sequence's own, since a batch gives every row its own sequence.
+    Mapped twin_k_, twin_v_;
+    size_t twin_mapped_ = 0;
     void park_bound();
     void take_bound(int s);
     void hold(int s);   ///< bind() on this card alone
