@@ -156,6 +156,56 @@ gemm_small_kernel(const float* __restrict__ w, const float* __restrict__ x, floa
     if (t < rows && o < n_out) y[size_t(t) * n_out + o] = acc;
 }
 
+// gemm_small_kernel for more outputs (a router's 128 or 256): a block TILE_TOK tokens and TILE_OUT outputs, a thread
+// 4 of each, so a value read from shared memory serves 4 products where it served one.  For 2,048 tokens of 2,048
+// values and 256 outputs gemm_small_kernel took 0.34 ms on an RTX 5090, 241 ms of the 3.7 s Flint read a prompt of
+// 29,816 tokens in.  Each output is still one fmaf after the other in the inputs' order: the same bits.
+constexpr int TILE_TOK = 32, TILE_OUT = 64, TILE_K = 32;
+
+__global__ void __launch_bounds__(TILE_TOK * TILE_OUT / 16)
+gemm_tile_kernel(const float* __restrict__ w, const float* __restrict__ x, float* __restrict__ y, int n_in, int n_out,
+                 int rows) {
+    constexpr int THREADS = TILE_TOK * TILE_OUT / 16;
+    // a step's inputs and weights by input, so a thread reads its 4 tokens' and 4 outputs' values as one float4
+    __shared__ __align__(16) float sx[TILE_K][TILE_TOK + 4], sw[TILE_K][TILE_OUT + 4];
+    const int t0 = blockIdx.x * TILE_TOK, o0 = blockIdx.y * TILE_OUT;
+    const int to = 4 * (threadIdx.x / (TILE_OUT / 4)), oo = 4 * (threadIdx.x % (TILE_OUT / 4));
+    float acc[4][4];
+#pragma unroll
+    for (int i = 0; i < 4; ++i)
+#pragma unroll
+        for (int j = 0; j < 4; ++j) acc[i][j] = 0.0f;
+    for (int k0 = 0; k0 < n_in; k0 += TILE_K) {
+        for (int i = threadIdx.x; i < TILE_TOK * TILE_K; i += THREADS) {
+            const int t = t0 + i / TILE_K, k = k0 + i % TILE_K;
+            sx[i % TILE_K][i / TILE_K] = t < rows && k < n_in ? x[size_t(t) * n_in + k] : 0.0f;
+        }
+        for (int i = threadIdx.x; i < TILE_OUT * TILE_K; i += THREADS) {
+            const int o = o0 + i / TILE_K, k = k0 + i % TILE_K;
+            sw[i % TILE_K][i / TILE_K] = o < n_out && k < n_in ? w[size_t(o) * n_in + k] : 0.0f;
+        }
+        __syncthreads();
+#pragma unroll 8
+        for (int c = 0; c < TILE_K; ++c) {
+            const float4 a = *reinterpret_cast<const float4*>(&sx[c][to]);
+            const float4 b = *reinterpret_cast<const float4*>(&sw[c][oo]);
+            const float av[4] = {a.x, a.y, a.z, a.w}, bv[4] = {b.x, b.y, b.z, b.w};
+#pragma unroll
+            for (int i = 0; i < 4; ++i)
+#pragma unroll
+                for (int j = 0; j < 4; ++j) acc[i][j] = fmaf(av[i], bv[j], acc[i][j]);
+        }
+        __syncthreads();
+    }
+#pragma unroll
+    for (int i = 0; i < 4; ++i)
+#pragma unroll
+        for (int j = 0; j < 4; ++j) {
+            const int t = t0 + to + i, o = o0 + oo + j;
+            if (t < rows && o < n_out) y[size_t(t) * n_out + o] = acc[i][j];
+        }
+}
+
 // Where a row's Q8_1 blocks would keep a sum past the halves' range: a power of two to divide the row by, 1 for
 // most.  The test is on runs of 16 (Q2_K's blocks keep sums of 16, the others of 32) against a quarter of 65504,
 // so a block of 32 stays under half of it, and on the largest value, whose block delta is a half too.
@@ -2427,8 +2477,12 @@ void gemm_f32(void* blas, const float* w, const float* x, float* y, int n_in, in
     if (groups == 1 && n_out <= 8 * SMALL_OUT) {
         cudaStream_t stream = nullptr;
         blas_ck(cublasGetStream(h, &stream), "cublasGetStream");
-        gemm_small_kernel<<<dim3((rows + SMALL_TOK - 1) / SMALL_TOK, (n_out + SMALL_OUT - 1) / SMALL_OUT),
-                            SMALL_TOK * WARP, 0, stream>>>(w, x, y, n_in, n_out, rows);
+        if (n_out > 2 * SMALL_OUT)
+            gemm_tile_kernel<<<dim3((rows + TILE_TOK - 1) / TILE_TOK, (n_out + TILE_OUT - 1) / TILE_OUT),
+                               TILE_TOK * TILE_OUT / 16, 0, stream>>>(w, x, y, n_in, n_out, rows);
+        else
+            gemm_small_kernel<<<dim3((rows + SMALL_TOK - 1) / SMALL_TOK, (n_out + SMALL_OUT - 1) / SMALL_OUT),
+                                SMALL_TOK * WARP, 0, stream>>>(w, x, y, n_in, n_out, rows);
         return;
     }
     if (groups == 1) {
