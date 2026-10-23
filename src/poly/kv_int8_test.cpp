@@ -778,8 +778,8 @@ int main() {
     }
     // n_kv = 2 and head_dim = 256 are Qwen3.6's; 256/32 tells how many blocks a head has
     const int n_kv = 2, head_dim = 256;
-#ifndef STRATA_USE_HIP   // no int8 mma tier on HIP: attend_int8 never takes it there (tensor_cores())
-    check(probe_mma_layout(), "the m16n8k32 fragment layout is what I think it is");
+#ifndef STRATA_USE_HIP   // no int8 mma tier on HIP or before Ampere: attend_int8 never takes it there
+    if (int8_tensor_cores()) check(probe_mma_layout(), "the m16n8k32 fragment layout is what I think it is");
 #endif
     // FIRST, while the card still has room for anything: attend() and attend_int8() against attend_batch, which is
     // the attention the engine uses for every call of kStageRows (32) rows or more - a prompt chunk and, with
@@ -799,7 +799,7 @@ int main() {
     case_attend_rows_batch("rows  1, window 256 of a 1024 ring", 256, 16, 8, 1024, 1, 256, 1024);
     case_attend_rows_batch("rows  8, window 256 of a 1024 ring", 256, 16, 8, 1024, 8, 256, 1024);
 #ifndef STRATA_USE_HIP
-    {
+    if (int8_tensor_cores()) {
         double tm = 0.0, td = 0.0;
         probe_mma_speed(&tm, &td);
         std::printf("  one 16x8x256 product x20000 x384 warps: mma %.1f ms, dp4a %.1f ms -> mma is %.1fx\n",

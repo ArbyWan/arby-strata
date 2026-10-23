@@ -92,9 +92,13 @@ void dequant_int8_to_f16(const int8_t* code, const uint16_t* delta, uint16_t* ou
 
 /// A runtime capability probe for the int8 tensor-core path: it runs one m16n8k32 on this card and checks the
 /// result against the same product computed on the host, so a kernel can be dispatched on the answer rather than
-/// on an assumed architecture.  True on sm_75 and up; a backend whose int8 mma is not there (HIP without
-/// mfma_i32_16x16x32_i8, older CUDA) answers false and the caller keeps dp4a.
+/// on an assumed architecture.  True on sm_80 and up; a backend whose int8 mma is not there (HIP without
+/// mfma_i32_16x16x32_i8, a card before Ampere) answers false and the caller keeps dp4a.
 bool probe_mma_layout();
+
+/// Whether attend_int8 can take its tensor-core tier here: the m16n8k32 int8 step needs Ampere (sm_80), where the
+/// fp16 tensor-core kernels need only Turing.  False under HIP, before Ampere, and on an older card's PTX.
+bool int8_tensor_cores();
 
 /// A study, not part of the engine: the same 16x8x256 product through the tensor cores and through dp4a, in ms.
 void probe_mma_speed(double* mma_ms, double* dp4a_ms);

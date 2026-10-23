@@ -1646,9 +1646,9 @@ __global__ void attn_scale_kernel(float* out, const float* __restrict__ factor, 
 // One m16n8k32 on the int8 tensor cores: A is [16][32] row-major (a query's codes), B is [8][32] (a key's codes,
 // and that is the column-major 32x8 the instruction asks for), C comes back as a 16x8 block of int32 in four
 // registers.  Both caches already lie in exactly these shapes, so nothing has to be shuffled into fragments.
-#if defined(__HIPCC__)
-// ROCm has no mma.sync.aligned.m16n8k32.s8: this build never launches the tensor-core tier
-// (attend_int8 gates it on tensor_cores(), which is false under HIP), so the body is never referenced.
+#if defined(__HIPCC__) || (defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800)
+// ROCm and cards before Ampere have no mma.sync.aligned.m16n8k32.s8 (ptxas refuses it below sm_80): attend_int8
+// never launches the tensor-core tier there (int8_tensor_cores()), so the body is never run.
 __device__ __forceinline__ void mma_s8(int&, int&, int&, int&, unsigned, unsigned, unsigned,
                                        unsigned, unsigned, unsigned) {}
 #else
@@ -2167,16 +2167,20 @@ __global__ void gdn_out_kernel(float* __restrict__ out, const float* __restrict_
 inline cudaStream_t cs(void* stream) { return (cudaStream_t) stream; }
 inline int grid(size_t n, int block) { return int((n + block - 1) / block); }
 
-// Whether the tensor-core kernels run as such here: built for Turing or newer (STRATA_POLY_MMA), and not from a PTX
-// of an older card compiled for this one.
-bool tensor_cores() {
+// The PTX version the kernels run from here, 0 under HIP: a card running an older card's PTX has only that card's
+// instructions.
+int kernels_ptx() {
 #if defined(__HIPCC__)
-    return false;
+    return 0;
 #else
     cudaFuncAttributes a{};
-    return cudaFuncGetAttributes(&a, attn_flash64_kernel) == cudaSuccess && a.ptxVersion >= 75;
+    return cudaFuncGetAttributes(&a, attn_flash64_kernel) == cudaSuccess ? a.ptxVersion : 0;
 #endif
 }
+
+// Whether the tensor-core kernels run as such here: built for Turing or newer (STRATA_POLY_MMA), and not from a PTX
+// of an older card compiled for this one.
+bool tensor_cores() { return kernels_ptx() >= 75; }
 
 void blas_ck(cublasStatus_t s, const char* what) {
     if (s != CUBLAS_STATUS_SUCCESS)
@@ -3076,9 +3080,9 @@ void attend_int8(const float* q, KvInt8 q8, KvInt8 k, KvInt8 v, int64_t pos, int
             // instead, once that is wired in.
             static const char* mma_env = std::getenv("STRATA_KV_MMA");
             const int mma_choice = mma_env ? std::atoi(mma_env) : -1;
-            // a card without the int8 mma steps (HIP, or a PTX version below 7.5) takes the dp4a tiers instead:
+            // a card without the int8 mma steps (HIP, or a PTX version below 8.0) takes the dp4a tiers instead:
             // STRATA_KV_MMA cannot force it there, since the kernel would not load
-            const bool use_mma = tensor_cores() && dim == 256 && mma_choice != 0 &&
+            const bool use_mma = int8_tensor_cores() && dim == 256 && mma_choice != 0 &&
                                      (mma_choice > 0 || keys <= 16384);
             const auto mgo = [&](auto kernel) {
                 const unsigned warps =
@@ -3158,9 +3162,9 @@ void attend_int8_mixed(const float* q, KvInt8 q8, KvInt8 k, const uint16_t* v_h,
             // instead, once that is wired in.
             static const char* mma_env = std::getenv("STRATA_KV_MMA");
             const int mma_choice = mma_env ? std::atoi(mma_env) : -1;
-            // a card without the int8 mma steps (HIP, or a PTX version below 7.5) takes the dp4a tiers instead:
+            // a card without the int8 mma steps (HIP, or a PTX version below 8.0) takes the dp4a tiers instead:
             // STRATA_KV_MMA cannot force it there, since the kernel would not load
-            const bool use_mma = tensor_cores() && dim == 256 && mma_choice != 0 &&
+            const bool use_mma = int8_tensor_cores() && dim == 256 && mma_choice != 0 &&
                                      (mma_choice > 0 || keys <= 16384);
             const auto mgo = [&](auto kernel) {
                 const unsigned warps =
@@ -3214,6 +3218,8 @@ __global__ void mma_probe_kernel(const int8_t* __restrict__ A, const int8_t* __r
 }
 
 }  // namespace
+
+bool int8_tensor_cores() { return kernels_ptx() >= 80; }
 
 bool probe_mma_layout() {
     int8_t A[16 * 32], B[8 * 32];
