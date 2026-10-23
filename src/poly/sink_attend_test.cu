@@ -1,9 +1,10 @@
 // src/poly/sink_attend_test.cu - attend_batch() against attend() for Flint's attention: heads of 128 values in
-// groups of 8, a learned sink a head, and a window layer's ring as well as a full layer's rows.  attend() is what a
-// few tokens take and what was checked against llama.cpp; attend_batch() reads the cache with cuBLAS, so the two
-// differ in the third or fourth digit.
+// groups of 8, a learned sink a head, and a window layer's ring as well as a full layer's rows.  attend()'s plain
+// kernels are what was checked against llama.cpp; attend_batch() rounds the queries and the weights to halves on the
+// tensor cores, so the two differ in the third or fourth digit.  A full layer's rows are also read by attend()'s
+// blocks of rows (score_floats), which differ from its plain kernels in the last bits only.
 //
-// usage: poly_sink_attend_test   (exit 0: every case within 4e-3, and no NaN)
+// usage: poly_sink_attend_test   (exit 0: every case within 4e-3, the blocks of rows within 1e-4, and no NaN)
 #include "strata/poly/kernels.hpp"
 
 #include <cublas_v2.h>
@@ -66,9 +67,24 @@ int check(const Buffers& b, long long pos, int rows, int window, const char* wha
         most = std::max(most, std::fabs(batch[i] - ref[i]));
         big = std::max(big, std::fabs(ref[i]));
     }
-    const bool ok = nan_at < 0 && most <= 4e-3f;
+    // a full layer: attend() with room for its blocks of rows takes attn_split_kernel and attn_join_kernel
+    float split = 0.f;
+    if (window == 0)
+        for (int first = 0; first < rows; first += kChunk) {
+            const int c = std::min(kChunk, rows - first);
+            const size_t o = size_t(first) * kHeads * kDim;
+            attend(b.q + o, b.k, b.v, pos + first, c, b.score, kChunk, b.out, kDim, kHeads, kKvHeads, scale, nullptr,
+                   0, 0, false, nullptr, 0, b.score_n, {}, {}, b.sinks);
+            const std::vector<float> got = download(b.out, size_t(c) * kHeads * kDim);
+            for (size_t i = 0; i < got.size(); ++i) {
+                if (std::isnan(got[i]) && nan_at < 0) nan_at = (long long) (o + i);
+                split = std::max(split, std::fabs(got[i] - ref[o + i]));
+            }
+        }
+    const bool ok = nan_at < 0 && most <= 4e-3f && split <= 1e-4f;
     std::printf("%s %s pos %5lld rows %4d: %.2e from attend() (results up to %.2f)", ok ? "ok  " : "FAIL", what, pos,
                 rows, most, big);
+    if (window == 0) std::printf(", blocks of rows %.2e", split);
     if (nan_at >= 0)
         std::printf(", first NaN at token %lld head %lld", nan_at / (kHeads * kDim), nan_at / kDim % kHeads);
     std::printf("\n");

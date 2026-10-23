@@ -140,7 +140,8 @@ void Flint::assign_scratch() {
     k_ = fbuf(kv);
     v_ = fbuf(kv);
     att_ = fbuf(heads);
-    score_ = fbuf((size_t) chunk_ * n_head_ * opt_.max_context);
+    score_n_ = (size_t) chunk_ * n_head_ * opt_.max_context;
+    score_ = fbuf(score_n_);
     if (rows_ >= kStageRows) awork_ = fbuf(heads + heads / 2 + 1 + 3 * n * n_head_);   // a prompt batch's attention
 }
 
@@ -265,14 +266,15 @@ void Flint::attn(Block& B, int64_t pos, int n) {
     store(v_, B, pos, n, true);
     const float scale = 1.f / std::sqrt((float) head_dim_);
     const int window = B.swa ? window_ : 0, ring = B.swa ? ring_ : 0;
-    // a prompt batch through cuBLAS; a few tokens with the kernels that give a token the same bits in any company
+    // a prompt batch with attend_batch()'s kernels; a few tokens with the ones that give a token the same bits in any
+    // company
     if (n >= kStageRows)
-        attend_batch(blas_, q_, B.keys, B.vals, pos, n, score_, (size_t) chunk_ * n_head_ * opt_.max_context, awork_,
+        attend_batch(blas_, q_, B.keys, B.vals, pos, n, score_, score_n_, awork_,
                      att_, head_dim_, n_head_, n_kv_, scale, st_, window, ring, false, {}, {}, nullptr, nullptr, 0,
                      fp(B.sinks));
     else
         attend(q_, B.keys, B.vals, pos, n, score_, chunk_, att_, head_dim_, n_head_, n_kv_, scale, st_, window, ring,
-               false, at, !at ? 0 : B.swa ? std::min(window_ + n - 1, opt_.max_context) : room(n), 0, {}, {},
+               false, at, !at ? 0 : B.swa ? std::min(window_ + n - 1, opt_.max_context) : room(n), score_n_, {}, {},
                fp(B.sinks));
     lin(B.wo, att_, ao_, n);
 }
@@ -303,7 +305,7 @@ void Flint::attn_rows(Block& B, int n) {
         const int sized = B.swa ? std::min(window_, opt_.max_context) : room(1);
         pos_ = keep;
         attend(q_ + i * hq, kc, vc, r.pos, 1, score_, chunk_, att_ + i * hq, head_dim_, n_head_, n_kv_, scale, st_,
-               window, ring, false, ai, sized, 0, {}, {}, fp(B.sinks));
+               window, ring, false, ai, sized, score_n_, {}, {}, fp(B.sinks));
     }
     lin(B.wo, att_, ao_, n);
 }

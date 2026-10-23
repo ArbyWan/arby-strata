@@ -240,15 +240,15 @@ struct Kvq8 {
 /// window - 1 + rows of them.
 /// With `at`, the tokens start at the position the card holds there; the launches are sized for `room` rows,
 /// which must be no fewer than a launch's tokens attend between them, and score has room for them.
-/// score_floats: the floats score holds, when more than the above.  Heads of 64 values in groups of 4 over the
-/// whole conversation then take a launch block each block of rows, where score has room for those blocks' sums
-/// of chunk tokens at the longest the call can attend (attend_split_floats()); the results differ from the other
-/// kernels' in the last bits.
+/// score_floats: the floats score holds, when more than the above.  Heads of 64 values in groups of 4, or of 128 in
+/// groups of 8, over the whole conversation then take a launch block each block of rows, a launch as many tokens as
+/// score has room for those blocks' sums of at the longest the call can attend (attend_split_floats() for chunk of
+/// them); the results differ from the other kernels' in the last bits.
 /// With `kq8` or `vq8` (codes not null) that cache is read as Q8_0 rather than fp16: its codes/scale pointers
 /// follow the same row and head index the fp16 cache would, and a block of 32 values dequantizes as
 /// `(float)codes[..] * __half2float(scales[..])`.  The fp16 path is unchanged where they are left null.
 /// With `sinks` (n_head floats on the card, flint's), each head's softmax has one more logit, its sink, which
-/// weighs no value: it only takes weight from the rows.  The heads of 64 values then take the plain kernels.
+/// weighs no value: it only takes weight from the rows.
 void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows, float* score,
             int chunk, float* out, int dim, int n_head, int kv_heads, float scale, void* stream, int window = 0,
             int ring = 0, bool whole = false, const long long* at = nullptr, int room = 0, size_t score_floats = 0,
@@ -265,7 +265,9 @@ size_t attend_split_floats(int chunk, int n_head, int max_rows, int dim);
 /// must hold 2 * n_head floats.  work: rows * n_head * (dim + dim / 2 + 3) + 1 floats.  Throws
 /// std::runtime_error.
 /// Heads of 64 values in groups of 4 over the whole conversation take one kernel instead, which keeps the scores in
-/// registers, on NVIDIA cards from Turing on; it uses neither blas, score nor work.
+/// registers, on NVIDIA cards from Turing on; it uses neither blas, score nor work.  So do heads of 128 values in
+/// groups of 8, with a window, a ring and sinks too, from Ampere on; a token's keys go in blocks of 64 counted from
+/// the cache's first row, so its result is the same whatever tokens the call has beside it.
 /// With `kq8` or `vq8` (codes not null) that cache is read as Q8_0 like attend(): before each block of `m` keys
 /// the product reads, its rows are dequantized into the fp16 workspace `kwork` / `vwork`, and the products then
 /// read that exactly as they read an fp16 cache, so the results match attend()'s q8 read.  Each workspace holds

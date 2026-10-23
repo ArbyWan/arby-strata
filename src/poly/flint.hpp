@@ -71,6 +71,7 @@ private:
     // device scratch
     float *qraw_ = nullptr, *q_ = nullptr, *kraw_ = nullptr, *k_ = nullptr, *v_ = nullptr, *att_ = nullptr,
           *score_ = nullptr;
+    size_t score_n_ = 0;       ///< the floats of score_
     float* awork_ = nullptr;   ///< a prompt batch's attention (attend_batch)
 };
 
