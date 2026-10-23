@@ -105,6 +105,18 @@ On the workstation, UD-Q4_K_XL with a context of 131,072 read and answered the 1
 server in 20.4 s and found all three facts (39.6 s before 372f4ece). Flint always thinks, and its thinking quoted
 the three sentences before it answered; it wrote 170 tokens in all.
 
+On the 8 GB laptop, PolyStrata's benchmark with the context raised in setup's run config, twice each:
+
+| Size | Context | Prompt | First token, s | Reads, tokens/s | Writes after it |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| UD-Q3_K_XL | 65,536 | 62,744 tokens | 39.7 to 40.2 | 1,567 to 1,585 | 37 to 38 |
+| UD-Q3_K_XL | 131,072 | 126,188 tokens | 118 to 128 | 987 to 1,069 | 23.5 to 24.7 |
+| UD-Q4_K_XL | 65,536 | 62,744 tokens | 47.3 to 47.5 | 1,326 to 1,332 | 21 to 28 |
+| UD-Q4_K_XL | 131,072 | 126,188 tokens | 126 to 133 | 953 to 1,007 | 17 to 21 |
+
+A 128K context takes 3.5 GiB of the card's 8 for its rows, so nearly every expert runs on the CPU there; UD-Q4_K_XL's
+file also does not stay in RAM. Setup's context menu shows UD-Q3_K_XL's numbers.
+
 ## How it was checked
 
 - The tokenizer gives the same ids as llama.cpp's `llama-tokenize` on 195,861 tokens: three READMEs (English,
@@ -190,4 +202,3 @@ several conversations in RAM, downloads the file, checks its SHA-256, writes the
 - Pictures: the model reads text only.
 - A draft model. Recursive publishes none.
 - Contexts past 128K in setup, although the model card gives 262,144: not tried here.
-- The laptop's writing speed after a prompt that fills a 64K or 128K context: not measured, and setup says so.
