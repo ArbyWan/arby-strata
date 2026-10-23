@@ -236,10 +236,12 @@ struct Kvq8 {
 /// With `kq8` or `vq8` (codes not null) that cache is read as Q8_0 rather than fp16: its codes/scale pointers
 /// follow the same row and head index the fp16 cache would, and a block of 32 values dequantizes as
 /// `(float)codes[..] * __half2float(scales[..])`.  The fp16 path is unchanged where they are left null.
+/// With `sinks` (n_head floats on the card, flint's), each head's softmax has one more logit, its sink, which
+/// weighs no value: it only takes weight from the rows.  The heads of 64 values then take the plain kernels.
 void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows, float* score,
             int chunk, float* out, int dim, int n_head, int kv_heads, float scale, void* stream, int window = 0,
             int ring = 0, bool whole = false, const long long* at = nullptr, int room = 0, size_t score_floats = 0,
-            Kvq8 kq8 = {}, Kvq8 vq8 = {});
+            Kvq8 kq8 = {}, Kvq8 vq8 = {}, const float* sinks = nullptr);
 /// The floats of score that attend()'s blocks of rows take for calls of up to chunk tokens attending up to max_rows
 /// rows (score_floats): with that much a model's every call takes them.
 size_t attend_split_floats(int chunk, int n_head, int max_rows, int dim);
@@ -258,10 +260,12 @@ size_t attend_split_floats(int chunk, int n_head, int max_rows, int dim);
 /// read that exactly as they read an fp16 cache, so the results match attend()'s q8 read.  Each workspace holds
 /// work_halves halves, `work_halves / (kv_heads * dim)` rows at most: a block of keys larger than that is split,
 /// taking more products.  The fp16 path (both null) is unchanged and reads the caches where they lie.
+/// `sinks` as attend()'s: the sink joins each token's sum after the last block of rows.
 void attend_batch(void* blas, const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows,
                   float* score, size_t score_floats, float* work, float* out, int dim, int n_head, int kv_heads,
                   float scale, void* stream, int window = 0, int ring = 0, bool whole = false, Kvq8 kq8 = {},
-                  Kvq8 vq8 = {}, uint16_t* kwork = nullptr, uint16_t* vwork = nullptr, size_t work_halves = 0);
+                  Kvq8 vq8 = {}, uint16_t* kwork = nullptr, uint16_t* vwork = nullptr, size_t work_halves = 0,
+                  const float* sinks = nullptr);
 /// attend() over int8 caches (store_int8): the same attention, the same order of products and sums.  `q8` is scratch
 /// in the same form for this call's queries (rows * n_head * dim / kQ8_0Values blocks of codes, and as many
 /// deltas).  A score is a dp4a of a lane's own run of codes - the query's against the key's, both 4-aligned - and

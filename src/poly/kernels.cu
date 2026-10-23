@@ -1225,7 +1225,7 @@ attn_score_reg_kernel(const float* __restrict__ q, const half* __restrict__ kcac
 // a block of the group's queries side by side (per: the group's heads).
 __global__ void attn_softmax_kernel(float* score, int n_keys, long long pos, int first, int tokens, int window,
                                     long long last, const long long* __restrict__ at, float* __restrict__ wt,
-                                    int per) {
+                                    int per, const float* __restrict__ sinks) {
     __shared__ float part[8];
     const long long p = (at ? *at : pos) + first;
     long long lo, lo0;
@@ -1236,12 +1236,15 @@ __global__ void attn_softmax_kernel(float* score, int n_keys, long long pos, int
     float mx = -INFINITY;
     for (int j = threadIdx.x; j < n; j += blockDim.x) mx = fmaxf(mx, row[j]);
     mx = block_max(mx, part);
+    if (sinks) mx = fmaxf(mx, sinks[blockIdx.x]);
     float sum = 0.0f;
     for (int j = threadIdx.x; j < n; j += blockDim.x) {
         row[j] = expf(row[j] - mx);
         sum += row[j];
     }
-    const float inv = 1.0f / block_sum(sum, part);
+    sum = block_sum(sum, part);
+    if (sinks) sum += expf(sinks[blockIdx.x] - mx);
+    const float inv = 1.0f / sum;
     if (!wt) {
         for (int j = threadIdx.x; j < n; j += blockDim.x) row[j] *= inv;
         for (int j = threadIdx.x; j < own; j += blockDim.x) all[j] = 0.0f;
@@ -1631,6 +1634,15 @@ __global__ void attn_softmax_block_kernel(const float* __restrict__ score, half*
     top[blockIdx.x] = now;
     sum[blockIdx.x] = (fresh ? 0.0f : sum[blockIdx.x] * f) + s;
     shrink[blockIdx.x] = f;
+}
+
+// A head's sink in a token's softmax sum, against the top its rows reached: a logit with no value of its own, which
+// only takes weight from the rows.  b counts as attn_softmax_block_kernel's blocks do, a group's columns together.
+__global__ void attn_sink_sum_kernel(float* sum, const float* __restrict__ top, const float* __restrict__ sinks,
+                                     int n, int per, int cols) {
+    const int b = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b >= n) return;
+    sum[b] += expf(sinks[(b / cols) * per + b % per] - top[b]);
 }
 
 // A chunk's results in the order of the groups, `dim` values a token and head: times its factor, or divided by it.
@@ -2570,7 +2582,8 @@ void head_norm_rope(const float* x, int x_stride, const float* w, float* y, int 
 
 void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows, float* score,
             int chunk, float* out, int dim, int n_head, int kv_heads, float scale, void* stream, int window,
-            int ring, bool whole, const long long* at, int room, size_t score_floats, Kvq8 kq8, Kvq8 vq8) {
+            int ring, bool whole, const long long* at, int room, size_t score_floats, Kvq8 kq8, Kvq8 vq8,
+            const float* sinks) {
     if (at && (whole || room < 1)) throw std::invalid_argument("attend: a position on the card needs its room");
     if (dim % SCORE_VALUES || uintptr_t(q) % (SCORE_VALUES * sizeof(float)) || uintptr_t(kcache) % (SCORE_VALUES * 2))
         throw std::invalid_argument("attend: queries and keys are read four values at a time");
@@ -2579,7 +2592,7 @@ void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int6
     const bool kq = kq8.codes != nullptr, vq = vq8.codes != nullptr;
     // attn_split_kernel, where score has room for every block's sums at the longest the call can attend
     const int most = grid(size_t(at ? room : pos + rows), SPLIT_KEYS);
-    if (dim == 64 && per == 4 && window == 0 && ring == 0 && !whole && !kq && !vq &&
+    if (dim == 64 && per == 4 && window == 0 && ring == 0 && !whole && !kq && !vq && !sinks &&
         size_t(chunk) * n_head * most * (dim + 2) <= score_floats) {
         for (int first = 0; first < rows; first += chunk) {
             const int c = std::min(chunk, rows - first);
@@ -2633,7 +2646,7 @@ void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int6
         float* wt = per >= 4 && size_t(kv_heads) * blocks * VALUE_QUERIES <= size_t(chunk - c) * n_head
                         ? score + size_t(c) * n_head * keys : nullptr;
         attn_softmax_kernel<<<dim3(n_head, c), 256, 0, cs(stream)>>>(score, keys, (long long) pos, first, c, window,
-                                                                    last, at, wt, per);
+                                                                    last, at, wt, per, sinks);
         // Two blocks of queries a launch block read the values half as often, where the launch still has
         // blocks for most of the card's 36 multiprocessors: for Qwen3.6's two tokens they are half as many and
         // slower, for three or four tokens and for Gemma 4's full layers faster.
@@ -3107,7 +3120,7 @@ void attend_int8(const float* q, KvInt8 q8, KvInt8 k, KvInt8 v, int64_t pos, int
         }
         // the weights in place: attn_value_int8_kernel reads them from the scores' buffer, so no transposed copy
         attn_softmax_kernel<<<dim3(n_head, c), 256, 0, cs(stream)>>>(score, keys, (long long) pos, first, c,
-                                                                     window, last, at, nullptr, per);
+                                                                     window, last, at, nullptr, per, nullptr);
         {
             const int dims = grid(dim, VALUE_DIMS), blocks = grid(c * per, VALUE_QUERIES);
             attn_value_int8_kernel<<<dim3(kv_heads * dims, blocks), VALUE_DIMS * VALUE_SHARES, 0, cs(stream)>>>(
@@ -3189,7 +3202,7 @@ void attend_int8_mixed(const float* q, KvInt8 q8, KvInt8 k, const uint16_t* v_h,
         }
         // the weights in place: attn_value_kernel reads them from the scores' buffer, so no transposed copy
         attn_softmax_kernel<<<dim3(n_head, c), 256, 0, cs(stream)>>>(score, keys, (long long) pos, first, c,
-                                                                     window, last, at, nullptr, per);
+                                                                     window, last, at, nullptr, per, nullptr);
         {
             const int dims = grid(dim, VALUE_DIMS), blocks = grid(c * per, VALUE_QUERIES);
             attn_value_kernel<<<dim3(kv_heads * dims, blocks), VALUE_DIMS * VALUE_SHARES, 0, cs(stream)>>>(
@@ -3328,11 +3341,12 @@ void probe_mma_speed(double* mma_ms, double* dp4a_ms) {
 void attend_batch(void* blas, const float* q, const uint16_t* kcache, const uint16_t* vcache, int64_t pos, int rows,
                   float* score, size_t score_floats, float* work, float* out, int dim, int n_head, int kv_heads,
                   float scale, void* stream, int window, int ring, bool whole, Kvq8 kq8, Kvq8 vq8, uint16_t* kwork,
-                  uint16_t* vwork, size_t work_halves) {
+                  uint16_t* vwork, size_t work_halves, const float* sinks) {
     const int per = n_head / kv_heads, width = kv_heads * dim;
     // The fp16-only dim==64 fast path reads the fp16 caches, which are null under q8 (a q8 cache is load-restricted
     // to qwen35moe's head_dim 128, so it never reaches here); guard explicitly so it is provably not taken for q8.
-    if (dim == 64 && per == 4 && window == 0 && ring == 0 && !whole && kq8.codes == nullptr && vq8.codes == nullptr &&
+    if (dim == 64 && per == 4 && window == 0 && ring == 0 && !whole && !sinks && kq8.codes == nullptr &&
+        vq8.codes == nullptr &&
         tensor_cores()) {
         attn_flash64_kernel<<<dim3(grid(rows, FLASH_TOKENS), kv_heads), 4 * WARP, 0, cs(stream)>>>(
             q, (const half*) kcache, (const half*) vcache, out, rows, n_head, kv_heads, (long long) pos,
@@ -3410,6 +3424,9 @@ void attend_batch(void* blas, const float* q, const uint16_t* kcache, const uint
                                                CUBLAS_GEMM_DEFAULT_TENSOR_OP),
                     "attention values");
         }
+        if (sinks)
+            attn_sink_sum_kernel<<<grid(c * n_head, 256), 256, 0, cs(stream)>>>(sum, top, sinks, c * n_head, per,
+                                                                              int(cols));
         attn_scale_kernel<<<dim3(grid(dim, 256), c * n_head), 256, 0, cs(stream)>>>(og, sum, dim, true);
         attn_ungroup_kernel<<<dim3(grid(dim, 256), c * n_head), 256, 0, cs(stream)>>>(
             og, out + size_t(first) * n_head * dim, dim, n_head, kv_heads, c);
