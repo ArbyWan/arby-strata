@@ -4431,12 +4431,33 @@ def install_build_tools(gpu, yes):
     return nvcc, find_vcvars(cuda_v) if WIN else None
 
 
+def cached_compiler(bdir, defs):
+    """defs with -DCMAKE_CUDA_COMPILER spelled as bdir's CMake cache has it, when the two name the same file.  CMake
+    compares the strings: nvcc.exe against nvcc.EXE (find_nvcc() takes either, by PATH or CUDA_PATH) deletes the cache
+    and configures again without this command's other -D options, so STRATA_ENABLE_CUDA is off and there is no
+    strata-poly target to build."""
+    cache = Path(bdir) / "CMakeCache.txt"
+    m = re.search(r"^CMAKE_CUDA_COMPILER:\w+=(.+)$", cache.read_text(errors="replace"), re.M) if cache.is_file() else None
+    if not m:
+        return defs
+    flag, old, out = "-DCMAKE_CUDA_COMPILER=", m.group(1).strip(), []
+    for d in defs:
+        new = d[len(flag):] if d.startswith(flag) else None
+        try:
+            if new and new != old and os.path.samefile(new, old):
+                d = flag + old
+        except OSError:
+            pass
+        out.append(d)
+    return out
+
+
 def cmake_build(src, bdir, target, defs, vcvars, bat_name):
     cmake, ninja = find_tool("cmake"), find_tool("ninja")
     if cmake is None or ninja is None:
         fail("cmake / ninja not found after installing them", "run: .venv python -m pip install cmake ninja")
     conf = [cmake, "-G", "Ninja", f"-DCMAKE_MAKE_PROGRAM={ninja}", "-S", str(src), "-B", str(bdir),
-            "-DCMAKE_BUILD_TYPE=Release", *defs]
+            "-DCMAKE_BUILD_TYPE=Release", *cached_compiler(bdir, defs)]
     build = [cmake, "--build", str(bdir), "--target", target, "-j", str(max(2, (os.cpu_count() or 4) // 2))]
     # A failed build is tried once more: CUDA 13.0's ptxas now and then fails to parse a PTX file it just wrote, and
     # the same command then gets past it (issue #45); a second attempt only compiles what is still missing.
