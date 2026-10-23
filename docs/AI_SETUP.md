@@ -93,6 +93,12 @@ on a PC with too little RAM for it; QAD-Q4_0, UD-Q6_K_XL and Q8_0 are by name. I
 only to companies with less than 10 million US dollars of yearly revenue. Take it only when the user asks for it,
 and read [LFM.md](LFM.md) first.
 
+`--family flint` (Flint 40B-A2.5B, by Recursive) runs on that engine as well, experimental: Linux or Windows, one
+NVIDIA card, an 18 to 42 GB download, about 22 to 46 GB of RAM beside an 8 GB card by setup's estimate, no images.
+Leave `--model` out: setup takes UD-Q4_K_XL where the PC has about 15 GB of RAM past that estimate (40 GB beside an
+8 GB card), else UD-Q3_K_XL; UD-Q6_K_XL and Q8_0 are by name. Its license is Apache 2.0. Take it only when the user
+asks for it, and read [FLINT.md](FLINT.md) first.
+
 `--family qwen36`, `--family ornith` and `--family gemma4` (Qwen3.6-35B-A3B, Ornith 1.5, Gemma 4 26B-A4B) are
 smaller models on GLM's engine, and experimental too: Linux or Windows, one NVIDIA card, an 11 to 24 GB download,
 about 15 to 28 GB of RAM beside an 8 GB card by setup's estimate, by size. On Windows setup compiles the engine

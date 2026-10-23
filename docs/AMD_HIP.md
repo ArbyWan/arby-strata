@@ -467,7 +467,7 @@ Windows wheels in `.rocm-win` (the private venv `tools\hip\build_windows.bat` us
 build tools. The Windows path has run one model on one card (Tiel Coder 35B-A3B below); every other one there is
 unreported, so setup warns before it installs a model.
 
-- Install as for NVIDIA: `./setup.sh --family qwen36` (or `lfm25`, `ornith`, `gemma4`, `tiel`, `glm`, `deepseek`).
+- Install as for NVIDIA: `./setup.sh --family qwen36` (or `lfm25`, `flint`, `ornith`, `gemma4`, `tiel`, `glm`, `deepseek`).
   Setup compiles the engine for the card into `engine-poly/` (`build_engine_poly_hip`; on Windows
   `build_engine_poly_hip_win`), with ROCm from a system install or AMD's wheels in `.venv` on Linux and from
   `.rocm-win` on Windows, as for the main engine, and compiles again after a `git pull` that changed the
