@@ -566,7 +566,7 @@ FAMILIES = {
               "hf": hf("unsloth/flint-GGUF"), "file": "flint-{q}.gguf", "shards": 1,
               "tag": "flint-", "name": "flint-40b-a2.5b", "engine": "poly", "vision": False, "experimental": True,
               "windows": True, "ran_on_gb": 8, "row_bytes": 28672, "batch_gb": 0.4, "batch_from_gb": 7.5,
-              "laptop_tps": {32768: "46-50"},
+              "laptop_tps": {32768: "49", 65536: "37-38", 131072: "23-25"},   # UD-Q3_K_XL's, the 32 GB laptop's size
               "models": {"UD-Q4_K_XL": {"about": "4- and 5-bit experts (Unsloth Dynamic)",
                                         "download_gb": 25.1, "ram_gb": 29, "arena_gb": 23.1, "vram_beside_gb": 4.0,
                                         "pick_extra_gb": 15},

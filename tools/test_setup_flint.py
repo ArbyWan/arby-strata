@@ -81,12 +81,13 @@ class Main(unittest.TestCase):
                 self.assertTrue((self.t / f"strata-flint-{size.lower()}.json").is_file(), out)
 
     def test_the_contexts_show_its_own_laptop_speed(self):
-        # measured after a 29K prompt on the 8 GB laptop; 64K and 128K were not run there
+        # UD-Q3_K_XL on the 8 GB laptop after prompts of 29K, 63K and 126K tokens
         code, out, _ = self.main(family="flint", model="UD-Q3_K_XL", ram=64.0, vram=8.0)
         self.assertEqual(code, 0, out)
-        self.assertIn("8 GB card: 46-50 tokens/s after a full prompt", out)
+        for tps in ("49", "37-38", "23-25"):
+            self.assertIn(f"8 GB card: {tps} tokens/s after a full prompt", out)
         self.assertNotIn("52-58", out)
-        self.assertIn("no long prompt run", out)
+        self.assertNotIn("no long prompt run", out)
 
     def test_windows_is_not_asked(self):
         code, out, cfg = self.main(win=True, family="flint", ram=32.0, vram=8.0)
