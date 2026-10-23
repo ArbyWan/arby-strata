@@ -3498,8 +3498,9 @@ def rocm_root(archs):
             run(pip + ["--force-reinstall", "--no-deps", f"rocm=={wheel}"])
         run(pip + [f"rocm[libraries,devel]=={wheel}"])
         stamp.write_text(json.dumps({"version": wheel, "index": index}))
-    sdk = Path(sys.executable).parent / "rocm-sdk"
-    root = Path(out([str(sdk), "path", "--root"]).strip())
+    # the module, not .venv/bin/rocm-sdk: pip's script names this venv's Python by its path, and stops working when the
+    # PolyStrata folder is moved (issue 78's cmake); the venv's Python itself still runs
+    root = Path(out([sys.executable, "-m", "rocm_sdk", "path", "--root"]).strip())
     if not (root / "llvm" / "bin" / "clang++").exists():
         fail(f"ROCm was installed but its compiler is missing ({root})",
              f"remove {stamp} and run this again; or install ROCm 7 system-wide")
@@ -3534,12 +3535,15 @@ def rocm_win_root(archs):
     archs = [archs] if isinstance(archs, str) else list(archs)
     venv = ROOT / ROCM_WIN_VENV
     py, sdk = venv / "Scripts" / "python.exe", venv / "Scripts" / "rocm-sdk.exe"
+    # rocm-sdk.exe is pip's launcher, which names the venv's python.exe by its path and does not start once the folder
+    # is moved (issue 78's cmake.exe); the venv's python.exe does, so the module is run through it
+    rocm_sdk = [str(py), "-m", "rocm_sdk"]
     if not py.exists():
         say(f"  Installing ROCm into {ROCM_WIN_VENV} (AMD's TheRock wheels for Windows, ~7 GB) ...")
         run([sys.executable, "-m", "venv", str(venv)])
     root = None
     if sdk.exists():
-        got = out([str(sdk), "path", "--root"]).strip()
+        got = out(rocm_sdk + ["path", "--root"]).strip()
         root = Path(got) if got else None
     have = rocm_win_version(venv)
     other = have is not None and have != ROCM_WIN_VERSION
@@ -3556,8 +3560,8 @@ def rocm_win_root(archs):
         say(f"  Installing ROCm {ROCM_WIN_VERSION} for AMD GPUs into {ROCM_WIN_VENV} (AMD's TheRock wheels, ~7 GB) ...")
         run([str(py), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--index-url", ROCM_WIN_INDEX,
              f"rocm[{extras}]=={ROCM_WIN_VERSION}"])
-        run([str(sdk), "init"])
-        got = out([str(sdk), "path", "--root"]).strip()
+        run(rocm_sdk + ["init"])
+        got = out(rocm_sdk + ["path", "--root"]).strip()
         root = Path(got) if got else None
     if root is None or not (root / "lib" / "llvm" / "bin" / "clang++.exe").exists():
         fail(f"ROCm was installed but its compiler is missing ({root})",

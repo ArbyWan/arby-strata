@@ -586,11 +586,14 @@ class PolyHipWindows(unittest.TestCase):
             venv.mkdir(parents=True)
             (venv / "python.exe").write_text("x")
             (venv / "rocm-sdk.exe").write_text("x")
+            asked = []
             with mock.patch.object(setup, "ROOT", Path(t)), \
-                    mock.patch.object(setup, "out", lambda cmd: str(root) + "\n"), \
+                    mock.patch.object(setup, "out", lambda cmd: asked.append(cmd) or str(root) + "\n"), \
                     mock.patch.object(setup, "run", mock.Mock(side_effect=AssertionError("installed"))):
                 got, dirs = setup.rocm_win_root(["gfx1201"])
             self.assertEqual((got, dirs), (root, [str(root / "bin")]))
+            # through the venv's python.exe: rocm-sdk.exe names the folder's old place once it is moved (issue 78)
+            self.assertEqual(asked, [[str(venv / "python.exe"), "-m", "rocm_sdk", "path", "--root"]])
 
     @staticmethod
     def rocm_win_tree(t):
@@ -616,10 +619,10 @@ class PolyHipWindows(unittest.TestCase):
                     mock.patch.object(setup, "run", lambda cmd: ran.append(cmd)):
                 got, dirs = setup.rocm_win_root(["gfx1201"])
             self.assertEqual((got, dirs), (root, [str(root / "bin")]))
-            pip = [c for c in ran if "-m" in c]
+            pip = [c for c in ran if "pip" in c]
             self.assertEqual(len(pip), 1, ran)                       # exactly one install, and it is the wanted version
             self.assertIn(f"rocm[libraries,devel,device-gfx1201]=={setup.ROCM_WIN_VERSION}", pip[0])
-            self.assertIn([str(venv / "Scripts" / "rocm-sdk.exe"), "init"], ran)
+            self.assertIn([str(venv / "Scripts" / "python.exe"), "-m", "rocm_sdk", "init"], ran)
 
     def test_a_venv_that_does_not_say_its_version_is_kept(self):
         with tempfile.TemporaryDirectory() as t:
