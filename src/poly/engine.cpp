@@ -1851,6 +1851,7 @@ void Engine::shared_scratch() {
         gu_ = fbuf(rr * 2 * n_ff_exp_);
         hx_ = fbuf(rr * n_ff_exp_);
         dx_ = fbuf(rr * n_embd_);
+        hf_ = fbuf(rr);
     }
 }
 
@@ -2164,8 +2165,16 @@ void Engine::lin(const Dev& w, const float* x, float* y, int n, const void* xq, 
     }
     // a prompt batch: llama.cpp's matrix-matrix kernels read the weights once for all the tokens
     if (mmq_ && n >= kStageRows && Mmq::fits((int) w.type, w.n_out, w.n_in)) {
+        // A row too large for the halves its blocks keep their sums in goes in divided by a power of two, and x is
+        // left as it was for whatever reads it next (both exact): its product comes out divided by the same.
+        const bool guard = half_sum_guard_ && Mmq::half_sums((int) w.type);
+        float* xs = const_cast<float*>(x);
+        if (guard) guard_half_sums(xs, w.n_in, w.n_in, n, hf_, st_);
         Mmq::quantize(x, nullptr, mqx_, (int) w.type, w.n_in, w.n_in, n, st_);
-        return mmq_->mul(w.p, (int) w.type, w.n_out, w.n_in, 0, 1, mqx_, nullptr, nullptr, n, n, y, w.n_out, st_);
+        if (guard) scale_rows(xs, w.n_in, w.n_in, n, nullptr, hf_, false, st_);
+        mmq_->mul(w.p, (int) w.type, w.n_out, w.n_in, 0, 1, mqx_, nullptr, nullptr, n, n, y, w.n_out, st_);
+        if (guard) scale_rows(y, w.n_out, w.n_out, n, nullptr, hf_, false, st_);
+        return;
     }
     if (!xq) {
         // the tokens' blocks are back to back, so they quantize as one long vector
@@ -2593,6 +2602,7 @@ void Engine::moe_rows(Layer& L, int il, int n) {
 
     const float limit = clamp_exp_[(size_t) il];
     const int gt = (int) L.gu_type, dt = (int) L.d_type;
+    const bool guard = half_sum_guard_ && Mmq::half_sums(dt);   // the down rows keep their sums in halves
     const int64_t ff = n_ff_exp_, ff2 = 2 * ff;
     int holds = -1;   // the round in the buffer when this call is done
     // The card's part.  With the CPU's beside it, the rows of its experts' places are left at nothing.
@@ -2623,11 +2633,13 @@ void Engine::moe_rows(Layer& L, int il, int n) {
         if (rc > 0) {
             if (gelu_) geglu_rows(gu_, hx_, n_ff_exp_, rc, st_);
             else swiglu_clamp_rows(gu_, hx_, n_ff_exp_, rc, limit, st_);
+            if (guard) guard_half_sums(hx_, ff, n_ff_exp_, rc, hf_, st_);
             Mmq::quantize(hx_, nullptr, mq2_, dt, ff, ff, rc, st_);
         }
         for (const Run& r : runs_)
             mmq_->mul(slot_of(r.j) + gu2, dt, n_embd_, ff, L.slot_bytes, r.m, mq2_, d_cb + (size_t) r.c * cb_row + r.j,
                       d_place, rc, r.most, dx_, n_embd_, st_);
+        if (guard && rc > 0) scale_rows(dx_, n_embd_, n_embd_, rc, d_place, hf_, false, st_);
 
         // The round the buffer holds goes first and is not copied.  If it holds none of this call's, the experts
         // that go ahead are copied last, so the next call finds them.  The order does not change a round's launches.
@@ -2657,9 +2669,11 @@ void Engine::moe_rows(Layer& L, int il, int n) {
             mmq_->mul(stage_, gt, ff2, n_embd_, gu2, m, mq_, d_bounds + g0, iota_, rg, most, gu_, ff2, st_);
             if (gelu_) geglu_rows(gu_ + (size_t) r0 * ff2, hx_ + (size_t) r0 * ff, n_ff_exp_, rows, st_);
             else swiglu_clamp_rows(gu_ + (size_t) r0 * ff2, hx_ + (size_t) r0 * ff, n_ff_exp_, rows, limit, st_);
+            if (guard) guard_half_sums(hx_ + (size_t) r0 * ff, ff, n_ff_exp_, rows, hf_ + r0, st_);
             Mmq::quantize(hx_ + (size_t) r0 * ff, nullptr, mq2_, dt, ff, ff, rows, st_);
             mmq_->mul(stage_ + down_at, dt, n_embd_, ff, L.d_bytes, m, mq2_, d_rel + (g0 - n_cached + r), d_place + r0,
                       rows, most, dx_, n_embd_, st_);
+            if (guard) scale_rows(dx_, n_embd_, n_embd_, rows, d_place + r0, hf_ + r0, false, st_);
         }
         ck(cudaEventRecord((cudaEvent_t) ev_free_, cs(st_)), "expert staging");
     };

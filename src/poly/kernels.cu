@@ -156,6 +156,41 @@ gemm_small_kernel(const float* __restrict__ w, const float* __restrict__ x, floa
     if (t < rows && o < n_out) y[size_t(t) * n_out + o] = acc;
 }
 
+// Where a row's Q8_1 blocks would keep a sum past the halves' range: a power of two to divide the row by, 1 for
+// most.  The test is on runs of 16 (Q2_K's blocks keep sums of 16, the others of 32) against a quarter of 65504,
+// so a block of 32 stays under half of it, and on the largest value, whose block delta is a half too.
+__global__ void guard_half_sums_kernel(float* x, size_t ld, int width, float* __restrict__ factor) {
+    __shared__ float part[8];
+    float* row = x + size_t(blockIdx.x) * ld;
+    float most = 0.0f;
+    for (int g = threadIdx.x; g < width / 16; g += blockDim.x) {
+        float s = 0.0f, big = 0.0f;
+#pragma unroll
+        for (int j = 0; j < 16; ++j) {
+            const float v = row[g * 16 + j];
+            s += v;
+            big = fmaxf(big, fabsf(v));
+        }
+        most = fmaxf(most, fmaxf(2.0f * fabsf(s), big / 64.0f));
+    }
+    most = block_max(most, part);
+    const int k = most > 32768.0f ? (int) ceilf(log2f(most / 32768.0f)) : 0;
+    if (threadIdx.x == 0) factor[blockIdx.x] = ldexpf(1.0f, k);
+    if (k == 0) return;
+    for (int i = threadIdx.x; i < width; i += blockDim.x) row[i] = ldexpf(row[i], -k);
+}
+
+// Rows of y (row r at place[r] when place is given) times their factor, or divided by it.
+__global__ void scale_rows_kernel(float* y, size_t ld, int width, const int32_t* __restrict__ place,
+                                  const float* __restrict__ factor, bool divide) {
+    const float f = factor[blockIdx.y];
+    if (f == 1.0f) return;
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= width) return;
+    float* row = y + size_t(place ? place[blockIdx.y] : blockIdx.y) * ld;
+    row[i] = divide ? row[i] / f : row[i] * f;
+}
+
 __global__ void bf16_to_f32_kernel(const uint16_t* __restrict__ w, float* __restrict__ out, size_t n) {
     const size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
     if (i < n) out[i] = ldw(w, i);
@@ -2262,6 +2297,17 @@ void gemm_f32(void* blas, const float* w, const float* x, float* y, int n_in, in
                                       (long long) rows_per_x * n_in, x, groups * n_in, n_in, &zero, y, n_out,
                                       rows_per_x, groups),
             "a batch's projections");
+}
+
+void guard_half_sums(float* x, int64_t ld, int width, int rows, float* factor, void* stream) {
+    if (rows > 0) guard_half_sums_kernel<<<rows, 256, 0, cs(stream)>>>(x, size_t(ld), width, factor);
+}
+
+void scale_rows(float* y, int64_t ld, int width, int rows, const int32_t* place, const float* factor, bool divide,
+                void* stream) {
+    for (int r = 0; r < rows; r += 65535)   // a grid has at most 65535 rows
+        scale_rows_kernel<<<dim3(grid(width, 256), std::min(65535, rows - r)), 256, 0, cs(stream)>>>(
+            place ? y : y + size_t(r) * ld, size_t(ld), width, place ? place + r : nullptr, factor + r, divide);
 }
 
 void bf16_to_f32(const uint16_t* w, float* out, size_t n, void* stream) {

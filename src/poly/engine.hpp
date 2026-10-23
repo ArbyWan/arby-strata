@@ -588,6 +588,9 @@ protected:
     float rms_eps_ = 0;
     bool gelu_ = false;       ///< the routed experts' activation: GELU of the gate, else SiLU within the layer's limits
     std::vector<float> clamp_exp_, clamp_shexp_;   ///< a layer's SwiGLU limits: the routed experts', the shared one's
+    /// a prompt batch's products go through guard_half_sums(): the model's activations can sum past a half's range
+    /// in a block.  Off for the models whose sums stay in range: it cost LFM2.5 4% of a 30K prompt's read on a 5090.
+    bool half_sum_guard_ = false;
 
     std::vector<Layer> layers_;   ///< the model's, and after them the draft block
     Dev out_norm_, output_;
@@ -696,6 +699,7 @@ protected:
     // A prompt batch's MoE (moe_rows).  A row is a token and one of the experts it routes to.
     std::unique_ptr<Mmq> mmq_;   ///< null when the card has no MMQ tile for the experts' types
     float *gu_ = nullptr, *hx_ = nullptr, *dx_ = nullptr;   ///< the rows' gate|up, hidden and down values
+    float* hf_ = nullptr;   ///< the power of two a row was divided by for its half sums (guard_half_sums())
     void *mq_ = nullptr, *mq2_ = nullptr;                   ///< the rows quantized for the two products
     void* mqx_ = nullptr;                                   ///< lin()'s tokens quantized for a product
     int32_t *tab_ = nullptr, *h_tab_ = nullptr;   ///< a layer's row tables, in VRAM and pinned

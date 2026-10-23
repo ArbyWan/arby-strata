@@ -25,6 +25,17 @@ void gemv_bf16(const uint16_t* w, const float* x, float* y, int n_in, int n_out,
 void gemm_f32(void* blas, const float* w, const float* x, float* y, int n_in, int n_out, int rows_per_x, int rows);
 /// n BF16 values as floats, for gemm_f32.
 void bf16_to_f32(const uint16_t* w, float* out, size_t n, void* stream);
+/// Before a Q8_1 quantization whose blocks keep their sums in halves (llama.cpp's MMQ for Q4_K, Q5_K, Q2_K, Q4_1,
+/// Q5_1 and IQ1_S rows; Mmq::half_sums()): each of the rows of x (ld floats apart, width values) whose sums or
+/// values would leave a half's range is divided by a power of two, and factor[r] holds it (1 for the others).  A
+/// SwiGLU's output can be that large: Flint's reaches 45,000, and a block of 32 summed past 65,504 is infinite.
+/// The products of the divided rows are the true ones divided by the same power, to the bit: scale_rows() puts
+/// them back.
+void guard_half_sums(float* x, int64_t ld, int width, int rows, float* factor, void* stream);
+/// The rows of y (ld floats apart, row r at row place[r] when place is given) multiplied by factor[r], or divided
+/// by it; a row whose factor is 1 is not touched.
+void scale_rows(float* y, int64_t ld, int width, int rows, const int32_t* place, const float* factor, bool divide,
+                void* stream);
 
 /// RMS norm over each of `rows` groups of n values: y = x / sqrt(mean(x^2) + eps) * w.  `w` (n values, shared by the
 /// rows) may be null.  A row of y starts y_stride values after the one before it (0: n), so two calls can fill
