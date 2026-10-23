@@ -42,7 +42,10 @@ gives the two speeds the README uses ([what it sends and prints](BACKENDS.md#ben
 
 An upstream-suite report from an [RX 6700 XT 12 GB, Ryzen 5 3600 and 32 GB RAM](../bench/results/2026-10-19-community-rx6700xt-polystrata/README.md)
 includes Qwen3.6, Ornith, Tiel Coder, Gemma 4, MiniCPM-V and LFM2.5 at 32K and 64K,
-with per-request data, exact settings and a separate Qwen UD-Q4_K_M speed control.
+with per-request data, exact settings and a separate Qwen UD-Q4_K_M speed control. A second one from an
+[RX 6700 XT 12 GB, Ryzen 5 5600X and 32 GB RAM](../bench/results/2026-10-22-community-rx6700xt-5600x-polystrata/README.md)
+has Qwen3.6, LFM2.5, Tiel Coder and Gemma 4 QAT at 32K and 64K, a rerun of Qwen on a newer commit and a Gemma
+draft A/B; its Qwen3.6 and LFM2.5 rows land within a few percent of the first.
 
 ### Comparing with llama.cpp
 
