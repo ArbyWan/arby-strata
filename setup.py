@@ -795,7 +795,7 @@ GLM_ROW_BYTES = 28160           # VRAM per context token: a row in each of the 1
 GLM_VRAM_BESIDE_GB = 12         # what is not expert cache on a 32 GB card at 32K (weights, caches, buffers, reserve):
                                 # the 3.0BIT file's; a size with other dense weights has its own "vram_beside_gb"
 POLY_RAM_BESIDE_GB = 10          # RAM beside the experts in the file cache: the OS, the server, the engine's buffers
-POLY_CONV_CACHE_MIB = 8192       # --conversation-cache-mib when setup turns it on
+POLY_CONV_CACHE_MIB = 8192       # the most the engine's "auto" conversation cache takes (engine: auto_conversation_cache_mib)
 # MODEL-UPDATE Phase 1: the K-quant prompt kernels (Unsloth's UD-Q4/Q5/Q6_K_XL experts) are a library next to the CUDA
 # engine, opened only for those models; an engine without it runs them on the FP16 prompt path
 KQ_LIB = "strata_kq.dll" if WIN else "libstrata_kq.so"
@@ -6213,9 +6213,9 @@ def poly_verdict(d, ram, vram_gb, hip, windows=False) -> str:
         f"wants ~{need:.0f} GB of RAM on this card: with {ram:.0f} its experts are read from the SSD")
 
 
-def poly_saved_conv(paths) -> int | None:
-    """--conversation-cache-mib of an earlier run config of this model (the first of `paths` there is), 0 when that
-    config has none; None without an earlier config: setup then asks."""
+def poly_saved_conv(paths) -> int | str | None:
+    """--conversation-cache-mib of an earlier run config of this model (the first of `paths` there is): MiB, or "auto";
+    0 when that config has none; None without an earlier config: setup then asks."""
     for p in paths:
         if p is None or not p.is_file():
             continue
@@ -6225,7 +6225,7 @@ def poly_saved_conv(paths) -> int | None:
             continue
         if isinstance(args, list):
             v = str(args[args.index("--conversation-cache-mib") + 1]) if "--conversation-cache-mib" in args[:-1] else ""
-            return int(v) if v.isdigit() else 0
+            return int(v) if v.isdigit() else "auto" if v == "auto" else 0
     return None
 
 
@@ -6679,11 +6679,15 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         say()
         say("  Conversation cache: a coding agent sends several conversations in turn (the main one, its subagents,")
         say("  short side requests). With the cache, one that makes room for another is kept in RAM and comes back")
-        say(f"  without being read again. It takes what it holds, up to {POLY_CONV_CACHE_MIB // 1024} GB of RAM.")
+        say(f"  without being read again. It takes what it holds, up to {POLY_CONV_CACHE_MIB // 1024} GB of RAM, and")
+        say("  less when little RAM is left free once the model is loaded.")
         room = ram >= need_ram + POLY_CONV_CACHE_MIB / 1024
-        conv = POLY_CONV_CACHE_MIB if ask("Keep several conversations in RAM?", ["y", "n"], "y" if room else "n",
-                                         a.yes) == "y" else 0
-    ok("conversation cache: " + (f"up to {conv} MiB of RAM" if conv else "off (the last conversation is kept)"))
+        conv = "auto" if ask("Keep several conversations in RAM?", ["y", "n"], "y" if room else "n",
+                             a.yes) == "y" else 0
+    if conv == "auto":
+        ok(f"conversation cache: 40% of the RAM free once the model is loaded, up to {POLY_CONV_CACHE_MIB} MiB")
+    else:
+        ok("conversation cache: " + (f"up to {conv} MiB of RAM" if conv else "off (the last conversation is kept)"))
 
     # one file, or the numbered files of a split GGUF: the engine is given the first and finds the others by name
     models_dir = Path(a.gguf_dir) if a.gguf_dir else Path(a.models_dir) / tag
