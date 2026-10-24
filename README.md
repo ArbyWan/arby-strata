@@ -178,8 +178,8 @@ Measured the same way as LFM2.5-24B-A2B above, on the same two PCs, with a promp
 | --- | ---: | ---: |
 | **UD-Q4_K_XL** | 20-29 tokens/s | 1,310-1,420 tokens/s |
 | **UD-Q3_K_XL** | 61-63 tokens/s | 2,000-2,010 tokens/s |
-| **UD-Q6_K_XL** | 6-7 tokens/s | 830-950 tokens/s |
-| **Q8_0** | 3-4 tokens/s | 770-790 tokens/s |
+| **UD-Q6_K_XL** | Does Not Fit | Does Not Fit |
+| **Q8_0** | Does Not Fit | Does Not Fit |
 
 </td><td>
 

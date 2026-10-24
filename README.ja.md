@@ -173,8 +173,8 @@ PolyStrata は 452 と 387 です。
 | --- | ---: | ---: |
 | **UD-Q4_K_XL** | 20-29 tokens/s | 1,310-1,420 tokens/s |
 | **UD-Q3_K_XL** | 61-63 tokens/s | 2,000-2,010 tokens/s |
-| **UD-Q6_K_XL** | 6-7 tokens/s | 830-950 tokens/s |
-| **Q8_0** | 3-4 tokens/s | 770-790 tokens/s |
+| **UD-Q6_K_XL** | 収まらない | 収まらない |
+| **Q8_0** | 収まらない | 収まらない |
 
 </td><td>
 
