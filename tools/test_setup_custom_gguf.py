@@ -1,10 +1,10 @@
-"""Tests for resolve_self_gguf (--self-gguf PATH) in setup.py.
+"""Tests for resolve_custom_gguf (--custom-gguf PATH) in setup.py.
 
-strata_inspect is imported inside resolve_self_gguf via `from strata_inspect import ...`,
+strata_inspect is imported inside resolve_custom_gguf via `from strata_inspect import ...`,
 so it is not a top-level attribute of setup. We patch it through sys.modules, injected
 before the function runs so its inline import picks up our stubs.
 
-Run: python tools/test_setup_self_gguf.py  (no GPU or server needed)
+Run: python tools/test_setup_custom_gguf.py  (no GPU or server needed)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _write_gguf(path: Path) -> None:
     path.write_bytes(b"GGUF" + b"\x00\x01\x00\x00")
 
 
-class SelfGgufTests(unittest.TestCase):
+class CustomGgufTests(unittest.TestCase):
 
     def _make_stub(self, fp_dict: dict, kind: str, table: dict | None = None):
         """Build a stub module for sys.modules['strata_inspect'].
@@ -65,7 +65,7 @@ class SelfGgufTests(unittest.TestCase):
             stub = self._make_stub(fp_dict=first_entry, kind="known")
             with ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
-                family, model, shards = setup.resolve_self_gguf(str(p))
+                family, model, shards = setup.resolve_custom_gguf(str(p))
 
         fam_model = first_key.split("/")
         self.assertEqual(family, fam_model[0])
@@ -88,7 +88,7 @@ class SelfGgufTests(unittest.TestCase):
             with ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
                 try:
-                    setup.resolve_self_gguf(str(p))
+                    setup.resolve_custom_gguf(str(p))
                 except SystemExit:
                     pass  # expected: fail() exits with code 1
                 else:
@@ -108,7 +108,7 @@ class SelfGgufTests(unittest.TestCase):
             with ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
                 try:
-                    setup.resolve_self_gguf(str(p))
+                    setup.resolve_custom_gguf(str(p))
                 except SystemExit:
                     pass  # expected
                 else:
@@ -117,7 +117,7 @@ class SelfGgufTests(unittest.TestCase):
     def test_missing_file_fails(self):
         """A .gguf path that does not exist → SystemExit with 'does not exist'."""
         try:
-            setup.resolve_self_gguf(str(Path("/nonexistent_dir_nope/nope.gguf")))
+            setup.resolve_custom_gguf(str(Path("/nonexistent_dir_nope/nope.gguf")))
         except SystemExit:
             pass  # expected
         else:
@@ -144,7 +144,7 @@ class SelfGgufTests(unittest.TestCase):
             stub = self._make_stub(fp_dict=first_entry, kind="known")
             with ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
-                family, model, shards = setup.resolve_self_gguf(str(d))
+                family, model, shards = setup.resolve_custom_gguf(str(d))
 
         fam_model = first_key.split("/")
         self.assertEqual(family, fam_model[0])
@@ -161,7 +161,7 @@ class SelfGgufTests(unittest.TestCase):
             d = Path(tmp)
             (d / "readme.txt").write_text("hello")
             try:
-                setup.resolve_self_gguf(str(d))
+                setup.resolve_custom_gguf(str(d))
             except SystemExit:
                 pass  # expected
             else:
@@ -176,7 +176,7 @@ class SelfGgufTests(unittest.TestCase):
             _write_gguf(a1)
             _write_gguf(b1)
             try:
-                setup.resolve_self_gguf(str(d))
+                setup.resolve_custom_gguf(str(d))
             except SystemExit:
                 pass  # expected
             else:
@@ -199,7 +199,7 @@ class SelfGgufTests(unittest.TestCase):
 
             with ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
-                family, model, shards = setup.resolve_self_gguf(str(p))
+                family, model, shards = setup.resolve_custom_gguf(str(p))
 
         # FAMILIES["qwen36"] has title "Qwen 3.6" (verify) and models dict with sizes
         self.assertTrue(family in setup.FAMILIES)
@@ -222,14 +222,14 @@ class SelfGgufTests(unittest.TestCase):
 
             with ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
-                family, model, shards = setup.resolve_self_gguf(str(d))
+                family, model, shards = setup.resolve_custom_gguf(str(d))
 
         self.assertEqual(family, "ornith")
         self.assertEqual(model, "APEX-I-COMPACT")
         self.assertEqual(len(shards), 2)
 
     def test_conflicting_flags_fail(self):
-        """main() with --self-gguf + conflicting --family/--model → SystemExit (fail)."""
+        """main() with --custom-gguf + conflicting --family/--model → SystemExit (fail)."""
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "test.gguf"
             _write_gguf(p)
@@ -244,7 +244,7 @@ class SelfGgufTests(unittest.TestCase):
             with ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
                 # --family swift conflicts with resolved "qwen" → fail before GPU detection
-                argv = ["setup.py", "--self-gguf", str(p), "--family", "swift", "--model", "IQ3_S"]
+                argv = ["setup.py", "--custom-gguf", str(p), "--family", "swift", "--model", "IQ3_S"]
                 stack.enter_context(mock.patch.object(sys, "argv", argv))
                 try:
                     setup.main()
@@ -254,7 +254,7 @@ class SelfGgufTests(unittest.TestCase):
                     self.fail("expected SystemExit on conflicting flags")
 
     def test_resolved_pair_not_in_models_fails(self):
-        """main() with --self-gguf resolving to a model not in the target family's size list → fail."""
+        """main() with --custom-gguf resolving to a model not in the target family's size list → fail."""
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "test.gguf"
             _write_gguf(p)
@@ -269,7 +269,7 @@ class SelfGgufTests(unittest.TestCase):
                 stack.enter_context(mock.patch.dict(sys.modules, {"strata_inspect": stub}))
                 # No --family/--model flags → resolved (swift, FAKE_SIZE) must pass validation.
                 # FAKE_SIZE is NOT in family_models("swift") → fail before GPU detection.
-                argv = ["setup.py", "--self-gguf", str(p)]
+                argv = ["setup.py", "--custom-gguf", str(p)]
                 stack.enter_context(mock.patch.object(sys, "argv", argv))
                 try:
                     setup.main()
@@ -281,4 +281,3 @@ class SelfGgufTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-

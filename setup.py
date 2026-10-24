@@ -2094,8 +2094,8 @@ def whole_shard(s: Path) -> bool:
 SHARD_NAME = re.compile(r"-(\d{5})-of-(\d{5})\.gguf$")
 
 
-def self_gguf_tag(shards: list[Path] | None, model: str) -> str:
-    """Name for the config, start script and data folders: with --self-gguf the GGUF's base name (shard suffix and
+def custom_gguf_tag(shards: list[Path] | None, model: str) -> str:
+    """Name for the config, start script and data folders: with --custom-gguf the GGUF's base name (shard suffix and
     extension stripped) so it won't collide with existing installs; otherwise the size name."""
     return Path(SHARD_NAME.sub("", shards[0].name)).stem if shards else model
 
@@ -6559,7 +6559,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     """Steps 2 to 7 for a model of strata-poly (docs/GLM.md, docs/BACKENDS.md): its questions, the Python
     packages, the engine (ready-made or compiled here), the model file, its tokenizer and expert profile, the run
     config and the start script."""
-    _sg = getattr(a, "_self_gguf_shards", None)
+    _sg = getattr(a, "_custom_gguf_shards", None)
     fam = FAMILIES[family]
     title = fam["title"]
     if hip and WIN:   # the engine is compiled here from AMD's ROCm Windows wheels (rocm_win_root)
@@ -6656,7 +6656,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
                      f"--family {family} --model {model} --yes installs it anyway")
         warn(f"going on with {ram:.0f} GB of RAM, as you chose")
     ok(f"size: {model}")
-    tag = fam["tag"] + self_gguf_tag(_sg, model)
+    tag = fam["tag"] + custom_gguf_tag(_sg, model)
 
     if a.context:
         ctx = a.context
@@ -6845,8 +6845,10 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         args += ["--threads", str(threads)]
         ok(f"hybrid CPU ({cores[0]} performance + {cores[1]} efficiency cores): {threads} CPU threads for the experts "
            "outside VRAM (--threads in the config)")
+    base = custom_gguf_tag(_sg, model) if _sg else None
     cfg = {"exe": str(eng / POLY_EXE), "args": args, "cwd": str(ROOT), "tokenizer": str(pack / "tokenizer"),
-           "model_name": f"{fam['name']}-{model.lower()}", "display_name": f"{title} {model}",
+           "model_name": base.lower() if base else f"{fam['name']}-{model.lower()}",
+           "display_name": base if base else f"{title} {model}",
            "log": str(ROOT / f"strata-{tag.lower()}.log"), "lib_dirs": lib_dirs, "port": port}
     if multi:                                          # the server passes --layer-split and orders the cards
         cfg["gpu"], cfg["gpus_asked"] = multi, True
@@ -7109,7 +7111,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
     engine, the GGUF (pinned revision, size and SHA-256), the tokenizer from the GGUF, the config and the start
     script.  The engine places the experts itself (every one in VRAM when they fit, else the most-used ones there and
     the rest on the CPU), so there is no pack, profile or RAM budget to choose."""
-    _sg = getattr(a, "_self_gguf_shards", None)   # self-gguf shards, or None if not using a user-supplied file
+    _sg = getattr(a, "_custom_gguf_shards", None)   # custom-gguf shards, or None if not using a user-supplied file
     fam = OWN_PATH_FAMILIES[family]
     say()
     say(f"  {fam['title']} - {fam['by']}: {fam['about']}")
@@ -7139,7 +7141,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
                      f"choose a smaller size, or --model {model} --yes to install it anyway", "  Install it anyway?")
         warn(f"installing {model} with {ram:.0f} GB of RAM, as you chose")
     ok(f"size: {model}")
-    tag = fam["tag"] + self_gguf_tag(_sg, model)
+    tag = fam["tag"] + custom_gguf_tag(_sg, model)
     rec_ctx = own_path_context(fam, gpu.get("vram_gb", 0.0))
     if a.context:
         ctx = a.context
@@ -7339,8 +7341,8 @@ def preview_family(a) -> int:
     return 0
 
 
-def resolve_self_gguf(path_str: str) -> tuple[str, str, list[Path]]:
-    """--self-gguf PATH: inspect the GGUF header, match it to a family/model,
+def resolve_custom_gguf(path_str: str) -> tuple[str, str, list[Path]]:
+    """--custom-gguf PATH: inspect the GGUF header, match it to a family/model,
     and return (family, model, [shard paths])."""
     _tools = str(ROOT / "tools")
     if _tools not in sys.path:
@@ -7413,7 +7415,7 @@ def resolve_self_gguf(path_str: str) -> tuple[str, str, list[Path]]:
                 break
         if not fam:
             say(f"Strata: {sentence}")
-            fail("cannot install this GGUF with --self-gguf",
+            fail("cannot install this GGUF with --custom-gguf",
                  "use --inspect to read the full explanation, or give it to --gguf-dir")
         # derive the size from the filename's quant token (e.g. "Q4_K_M" in "...-Q4_K_M.gguf")
         m_q = GGUF_QUANT.search(files[0].name)
@@ -7428,7 +7430,7 @@ def resolve_self_gguf(path_str: str) -> tuple[str, str, list[Path]]:
         return fam, model, files
 
     say(f"Strata: {sentence}")
-    fail("cannot install this GGUF with --self-gguf",
+    fail("cannot install this GGUF with --custom-gguf",
          "use --inspect to read the full explanation, or give it to --gguf-dir")
 
 
@@ -7518,7 +7520,7 @@ def main() -> int:
     ap.add_argument("--inspect", nargs="+", metavar=("SOURCE", "VARIANT"),
                     help="what a GGUF is and whether PolyStrata runs it, from its headers only (no download): a file, a "
                          "folder, a URL, ms:owner/repo (ModelScope) or hf:owner/repo, and optionally a variant name")
-    ap.add_argument("--self-gguf", metavar="PATH",
+    ap.add_argument("--custom-gguf", metavar="PATH",
                     help="a .gguf file or folder of shards you already have: setup inspects it, matches it to a family "
                          "and size, and installs without downloading the model")
     ap.add_argument("--cuda", choices=["12", "13", "auto"], default=os.environ.get("STRATA_CUDA") or None,
@@ -7562,7 +7564,7 @@ def main() -> int:
                          "sycl = Intel Arc, EXPERIMENTAL: Linux, built from source (docs/INTEL_ARC.md)")
     ap.add_argument("--skip-build", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
-    a._self_gguf_shards = None                        # set by --self-gguf; None means "not using your own file"
+    a._custom_gguf_shards = None                      # set by --custom-gguf; None means "not using your own file"
     # a strata-poly family's own size (FAMILIES[f]["models"]) is checked by poly_setup, which names the family
     if a.model and a.model not in MODELS and a.family not in PREVIEW_FAMILIES and             not any(a.model in d.get("models", {}) for d in FAMILIES.values()):
         ap.error(f"--model {a.model} is a size of " + ", ".join(f"--family {f}" for f, d in PREVIEW_FAMILIES.items()
@@ -7571,15 +7573,15 @@ def main() -> int:
         os.environ["STRATA_SOURCE"] = a.source
     if a.inspect:                                      # headers only: nothing is installed
         sys.exit(subprocess.run([sys.executable, str(ROOT / "tools" / "strata_inspect.py"), *a.inspect[:2]]).returncode)
-    if a.self_gguf:                                     # your own GGUF: inspect it, match it, skip download
-        _fam, _model, a._self_gguf_shards = resolve_self_gguf(a.self_gguf)
-        p = Path(a.self_gguf)
+    if a.custom_gguf:                                   # your own GGUF: inspect it, match it, skip download
+        _fam, _model, a._custom_gguf_shards = resolve_custom_gguf(a.custom_gguf)
+        p = Path(a.custom_gguf)
         if (a.family and a.family != _fam) or (a.model and a.model != _model):
-            fail(f"--self-gguf resolves to --family {_fam} --model {_model}, "
+            fail(f"--custom-gguf resolves to --family {_fam} --model {_model}, "
                  f"but you chose --family {a.family} --model {a.model}",
-                 f"--self-gguf files pick their own family and model: drop the conflicting flags, or use a GGUF of your chosen size")
-        if a.gguf_dir:                                  # explicit --gguf-dir conflicts with self-gguf (no download)
-            warn(f"--gguf-dir {a.gguf_dir} is ignored: --self-gguf files are not downloaded")
+                 f"--custom-gguf files pick their own family and model: drop the conflicting flags, or use a GGUF of your chosen size")
+        if a.gguf_dir:                                  # explicit --gguf-dir conflicts with custom-gguf (no download)
+            warn(f"--gguf-dir {a.gguf_dir} is ignored: --custom-gguf files are not downloaded")
         a.gguf_dir = str(p) if p.is_dir() else str(p.parent)
         a.family, a.model = _fam, _model
         # validate the resolved pair: this engine path must be able to install that size
@@ -7591,7 +7593,7 @@ def main() -> int:
             ok_models = family_models(_fam)
         if a.model not in ok_models:
             avail = sorted(ok_models)
-            fail(f"--self-gguf matched --family {_fam} --model {_model}, but {a.family}'s engine path cannot install it",
+            fail(f"--custom-gguf matched --family {_fam} --model {_model}, but {a.family}'s engine path cannot install it",
                  f"available sizes for {a.family}: {', '.join(avail)}")
     if a.backend == "sycl":                            # Intel Arc: the SYCL port's own setup (sycl/setup_intel.py)
         return sycl_setup(sys.argv[1:])
@@ -7920,9 +7922,9 @@ def main() -> int:
         # not a risk the user could take: the HIP engine has no NVFP4 expert kernels at all, so it would not start
         fail(f"{fam['title']} runs on NVIDIA cards only: the AMD engine has no NVFP4 kernels",
              "UD-IQ4_XS is about the same size and runs on AMD: --family unsloth --model UD-IQ4_XS")
-    if fam.get("ready") and a._self_gguf_shards:
-        fail(f"--self-gguf does not apply to {fam['title']}: its files are ready-made packs, not GGUF shards",
-             "drop --self-gguf; setup downloads the pack for you")
+    if fam.get("ready") and a._custom_gguf_shards:
+        fail(f"--custom-gguf does not apply to {fam['title']}: its files are ready-made packs, not GGUF shards",
+             "drop --custom-gguf; setup downloads the pack for you")
     elif fam.get("ready") and a.gguf_dir:
         warn(f"--gguf-dir does not apply to {fam['title']}: its files are ready-made packs, not GGUF shards")
         a.gguf_dir = None
@@ -8016,7 +8018,7 @@ def main() -> int:
     ok(f"size: {model}")
     if MODELS[model].get("license"):                   # the ready-made packs: each size has its own license
         say(f"  Its license: {MODELS[model]['license']}")
-    tag = fam["tag"] + self_gguf_tag(a._self_gguf_shards, model)
+    tag = fam["tag"] + custom_gguf_tag(a._custom_gguf_shards, model)
     small = min(x["vram_gb"] for x in chosen)         # each card keeps its layers' KV of the whole context
     rec_ctx = 32768 if small < 14 else 65536 if small < 20 else 131072
     if budget is not None:                             # UD-Q4_K_XL: every GB of KV is a GB fewer of cached experts
@@ -8176,7 +8178,7 @@ def main() -> int:
         shards = [ready_where(models_dir, f) for f in ready_files(model)]
     else:
         models_dir = Path(a.gguf_dir) if a.gguf_dir else Path(a.models_dir) / tag
-        shards = (a._self_gguf_shards if a._self_gguf_shards
+        shards = (a._custom_gguf_shards if a._custom_gguf_shards
                   else gguf_dir_shards(models_dir, fam, model)) if a.gguf_dir else \
             [models_dir / model_file(fam, model, i) for i in range(1, model_shards(fam, model) + 1)]
     problem = gguf_dir_problem(models_dir, shards[0], fam, model) if a.gguf_dir else None
