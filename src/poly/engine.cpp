@@ -38,6 +38,12 @@
 #include <sched.h>
 #include <unistd.h>
 #endif
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace strata::poly {
 namespace {
@@ -154,13 +160,55 @@ int stay_near(const std::vector<std::pair<const uint8_t*, size_t>>& spans, const
 #endif
 }
 
+#ifdef _WIN32
+// The spans' bytes read through the file cache, 16 MiB a request, into a buffer that is thrown away.  A span that
+// is not in the model's files (a draft's own file) or a read that fails is left to map_pages()'s faults.
+void read_cached(const std::vector<std::pair<const uint8_t*, size_t>>& spans, const Shards& model,
+                 const std::atomic<bool>& quit) {
+    constexpr size_t kPiece = size_t(1) << 24;
+    std::vector<HANDLE> files(model.paths().size(), INVALID_HANDLE_VALUE);
+    std::vector<uint8_t> buf(kPiece);
+    for (const auto& s : spans) {
+        const auto [file, off] = model.place(s.first);
+        if (file < 0) continue;
+        HANDLE& h = files[(size_t) file];
+        if (h == INVALID_HANDLE_VALUE)
+            h = CreateFileA(model.paths()[(size_t) file].c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                            OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        for (size_t at = 0; at < s.second && !quit.load(std::memory_order_relaxed); at += kPiece) {
+            OVERLAPPED o{};
+            o.Offset = (DWORD) (off + at);
+            o.OffsetHigh = (DWORD) ((off + at) >> 32);
+            DWORD got = 0;
+            if (!ReadFile(h, buf.data(), (DWORD) std::min(kPiece, s.second - at), &got, &o)) break;
+        }
+    }
+    for (HANDLE h : files)
+        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+}
+#endif
+
 // The mapped file's pages come into this process's page table as they are first read, a fault every few pages,
 // and an expert read through those faults arrives at half the speed: 21.0 against 11.0 ms a token for GLM 5.3
 // Flash's CPU experts on the two-socket Xeon, while every expert a token meets is new to the process.  So one
 // thread reads a byte of every page of the experts, once, beside whatever the engine is doing: the 100 GiB of a
 // model that the file cache holds take it 4 s.  What the cache does not hold is read from the disk here, not
 // while a token waits.
-void map_pages(const std::vector<std::pair<const uint8_t*, size_t>>& spans, const std::atomic<bool>& quit) {
+//
+// On Windows a fault reads only a few pages from the disk: 1.3 GB/s from a laptop's SSD, so the 10 GiB of experts
+// the file cache did not hold took 10 s, and an answer asked meanwhile came at half speed.  The same bytes read
+// through the file cache come at 3.2 GB/s (it reads ahead in large requests), and the mapping shares the cache's
+// pages, so a second thread reads the spans from the file (read_cached()) while this one touches them: from an
+// empty cache it runs ahead and the touches find the pages in memory.  When the cache holds them it only copies
+// what it reads, beside the touches.  PrefetchVirtualMemory() returns at once and brings nothing in.
+void map_pages(const std::vector<std::pair<const uint8_t*, size_t>>& spans, const Shards& model,
+               const std::atomic<bool>& quit) {
+#ifdef _WIN32
+    std::jthread reader(read_cached, std::cref(spans), std::cref(model), std::cref(quit));
+#else
+    (void) model;
+#endif
     constexpr size_t kPage = 4096, kLook = size_t(1) << 24;   // `quit` is looked at every 16 MiB
     volatile uint8_t seen = 0;
     for (const auto& s : spans) {
@@ -1814,7 +1862,7 @@ void Engine::load(const Options& o) {
     reset();
     // nothing is read from the files when every expert is in VRAM
     if (!all_cached())
-        mapper_ = std::thread([this, spans = std::move(spans)] { map_pages(spans, map_quit_); });
+        mapper_ = std::thread([this, spans = std::move(spans)] { map_pages(spans, *gg_, map_quit_); });
 }
 
 void Engine::load_drafter() {
