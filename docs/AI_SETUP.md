@@ -129,6 +129,9 @@ The flags (all of them: `START-HERE.bat --help`):
 | `--gpu N` / `--gpus 0,1` / `--gpus all` | one card, or several sharing the model (default: the card with the most VRAM) |
 | `--backend cuda\|hip` | NVIDIA or AMD engine; chosen by itself on a PC with only one kind of card |
 | `--data-dir PATH` | where the 70-120 GB of model files go |
+| `--self-gguf PATH` | install one self-made GGUF; setup reads the header and picks family/size. Not for nvfp4 packs |
+| `--gguf-dir PATH` | run GGUFs you already have by name; strata-poly also accepts same-arch fine-tunes. Not for nvfp4 packs |
+| `--inspect` | print what setup would read from a GGUF; no install |
 | `--port N` | the server port (default 8080) |
 | `--host H --api-key K` | listen beyond this PC; **only together with a key** |
 | `--no-start` | install only, do not start the server |
