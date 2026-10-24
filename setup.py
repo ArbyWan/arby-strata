@@ -7402,8 +7402,8 @@ def resolve_custom_gguf(path_str: str) -> tuple[str, str, list[Path]]:
 
     if kind == "family":
         # prefer the strata-poly engine (FAMILIES) over the Strata project's own path (OWN_PATH_FAMILIES)
-        from strata_inspect import PREVIEW_ARCHS
-        title = PREVIEW_ARCHS.get(fp["arch"], "")
+        from strata_inspect import PREVIEW_ARCHS, POLY_ARCHS
+        title = PREVIEW_ARCHS.get(fp["arch"], "") or POLY_ARCHS.get(fp["arch"], "")
         fam, models_dict = None, None
         for table in (FAMILIES, OWN_PATH_FAMILIES):
             for k, v in table.items():
@@ -7423,10 +7423,10 @@ def resolve_custom_gguf(path_str: str) -> tuple[str, str, list[Path]]:
         model = next((m for m in models_dict if quant.lower().replace("_", "") in m.replace("_", "").lower()
                       or m.lower().endswith(quant.lower())), None)
         if not model:
-            say(f"Strata: {sentence}")
-            fail(f"cannot tell which size your file is: the filename has '{quant}' but {fam['title']} offers "
-                 f"{', '.join(sorted(models_dict))}",
-                 f"use --model {sorted(models_dict)[0]} to pick one, or rename the file to end in a matching quant")
+            model = sorted(models_dict)[0]
+            warn(f"Strata: {sentence}\n  your file's quant '{quant}' is not one setup offers "
+                 f"{', '.join(sorted(models_dict))}: it will run as-is; the RAM and VRAM estimates are for "
+                 f"{FAMILIES[fam]['title']}'s --model {model}")
         return fam, model, files
 
     say(f"Strata: {sentence}")
