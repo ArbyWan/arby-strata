@@ -27,23 +27,23 @@ Les neuf autres tournent sur un moteur écrit pour PolyStrata, avec une carte NV
 les sept plus petits aussi sous Windows. Ils sont expérimentaux : ils n'ont tourné que sur un seul PC avec une carte
 de 32 Go, et les sept plus petits en plus sur un portable avec une carte de 8 Go.
 
-- **[GLM 5.3 Flash](docs/GLM.md)**, le plus grand : un fichier de 79 à 114 Go, dont la plus grande part reste en RAM.
-- **[DeepSeek V4 Flash](docs/DEEPSEEK.md)**, un fichier de 91 Go, dont la plus grande part reste aussi en RAM. Sa
+- **[GLM 5.3 Flash](docs/models/glm.fr.md)**, le plus grand : un fichier de 79 à 114 Go, dont la plus grande part reste en RAM.
+- **[DeepSeek V4 Flash](docs/models/deepseek.fr.md)**, un fichier de 91 Go, dont la plus grande part reste aussi en RAM. Sa
   mémoire d'une discussion est petite : un contexte de 128K ne prend que 0,7 Go de VRAM de plus que 32K.
-- **[LFM2.5-24B-A2B](docs/LFM.md)** de Liquid AI, un fichier de 11 à 25 Go. La plupart de ses couches n'ont pas
+- **[LFM2.5-24B-A2B](docs/models/lfm25.fr.md)** de Liquid AI, un fichier de 11 à 25 Go. La plupart de ses couches n'ont pas
   d'attention, si bien qu'une longue discussion prend peu de VRAM : un contexte de 128K ne prend que 2 Go de plus
   que 32K. Sa licence n'autorise l'usage commercial qu'aux entreprises de moins de 10 millions de dollars de chiffre
   d'affaires annuel.
-- **[Flint 40B-A2.5B](docs/FLINT.md)** de Recursive, fait pour les agents de code : un fichier de 18 à 42 Go. La
+- **[Flint 40B-A2.5B](docs/models/flint.fr.md)** de Recursive, fait pour les agents de code : un fichier de 18 à 42 Go. La
   plupart de ses couches ne regardent que 513 tokens en arrière, si bien qu'une longue discussion prend peu de VRAM :
   un contexte de 128K ne prend que 2,6 Go de plus que 32K.
-- **[Qwen3.6-35B-A3B](docs/BACKENDS.md)**, un fichier de 13 à 23 Go. Il lit aussi les images.
-- **[Ornith 1.5](docs/BACKENDS.md)**, qui a l'architecture de Qwen3.6-35B-A3B et d'autres poids : un fichier de 14 à 24 Go.
+- **[Qwen3.6-35B-A3B](docs/models/qwen36.fr.md)**, un fichier de 13 à 23 Go. Il lit aussi les images.
+- **[Ornith 1.5](docs/models/ornith.fr.md)**, qui a l'architecture de Qwen3.6-35B-A3B et d'autres poids : un fichier de 14 à 24 Go.
   Il lit aussi les images.
-- **[Gemma 4 26B-A4B](docs/BACKENDS.md)**, un fichier de 11 à 17 Go. Il lit aussi les images.
-- **[Tiel Coder 35B-A3B](docs/BACKENDS.md)**, Ornith 1.5 quantifié par peculiar-ragdoll pour les agents de code :
+- **[Gemma 4 26B-A4B](docs/models/gemma4.fr.md)**, un fichier de 11 à 17 Go. Il lit aussi les images.
+- **[Tiel Coder 35B-A3B](docs/models/tiel.fr.md)**, Ornith 1.5 quantifié par peculiar-ragdoll pour les agents de code :
   un fichier de 14 à 23 Go. Il lit aussi les images.
-- **[MiniCPM-V 4.7 35B-A3B](docs/BACKENDS.md)** d'OpenBMB, avec l'architecture de Qwen3.6-35B-A3B et ses propres
+- **[MiniCPM-V 4.7 35B-A3B](docs/models/minicpmv.fr.md)** d'OpenBMB, avec l'architecture de Qwen3.6-35B-A3B et ses propres
   poids, fait pour lire les images : un fichier de 16 à 29 Go.
 
 Le serveur peut passer d'un modèle installé à un autre pendant qu'il tourne
@@ -59,295 +59,23 @@ Un token correspond à environ ¾ d'un mot.
 - **Écrit les réponses :** la vitesse à laquelle la réponse s'affiche dans une courte discussion. 60 tokens par seconde, c'est plus rapide que votre lecture.
 - **Lit votre prompt :** la vitesse à laquelle il absorbe ce que vous envoyez (ici un document, du code ou un historique de discussion de 32K tokens).
 
-### Qwen3.8-Flash-Next
-
-Mesuré par [Strata](https://github.com/Niko1221/Strata) sur deux PC de jeu ordinaires, avec un prompt de 32K tokens.
-
-<table>
-<tr><th>NVIDIA : RTX 5070 (12 Go), Ryzen 5 7600, 64 Go de RAM</th><th>AMD : RX 9070 XT (16 Go), Ryzen 9 3900X, 47 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **Q2_0** | 94 tokens/s | 2,650 tokens/s |
-| **IQ2_XS** | 79 tokens/s | 2,090 tokens/s |
-| **IQ3_XXS** | 62 tokens/s | 1,750 tokens/s |
-| **IQ3_S** | 53 tokens/s | 1,620 tokens/s |
-| **Coder** | 55 tokens/s | 2,180 tokens/s |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **Q2_0** | 60 tokens/s | 1,160 tokens/s |
-| **IQ2_XS** | 52 tokens/s | 1,110 tokens/s |
-| **Coder** | 44 tokens/s | 1,420 tokens/s |
-
-</td></tr>
-</table>
-
-NVIDIA : Q2_0 avec le moteur 0.1.36, les autres lignes avec 0.1.26 (réponses de 4K, prompts de 32K). Les tableaux
-complets sont dans [DETAILS.md](docs/DETAILS.md#speed-measured). Une carte avec plus de VRAM va plus vite : une
-RTX 3090 (24 Go) devrait écrire environ 100-140 tokens par seconde. Longues discussions et autres cartes :
-[vitesse de chaque modèle](docs/MODELS.md#how-fast-is-each-size), [résultats de la communauté](docs/COMMUNITY_BENCHMARKS.md).
-
-### GLM 5.3 Flash
-
-Mesuré pour PolyStrata sur une station de travail, avec une courte discussion et un prompt de 29K tokens.
-
-<table>
-<tr><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **3.0BIT** | 59-66 tokens/s | 820 tokens/s |
-| **UD-IQ2_XXS** | 50-52 tokens/s | 1,060-1,080 tokens/s |
-| **REAP50-Q3_K_M** | 59-66 tokens/s | 1,300-1,310 tokens/s |
-
-</td></tr>
-</table>
-
-GLM 5.3 Flash est un modèle bien plus grand que les autres, et seul un cinquième environ de ses experts tient dans les 32 Go de cette carte :
-il écrit donc plus lentement. Ce qui a été mesuré et comment : [docs/GLM.md](docs/GLM.md#what-it-was-measured-on) (en anglais).
-
-### DeepSeek V4 Flash
-
-Mesuré pour PolyStrata sur la même station de travail, avec une courte discussion et un prompt de 30K tokens.
-
-<table>
-<tr><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-IQ2_XXS** | 56 tokens/s | 1,040 tokens/s |
-
-</td></tr>
-</table>
-
-Sur le même PC, llama.cpp écrivait 25 à 28 tokens par seconde et lisait un prompt de 3,384 tokens à 96. Un prompt de
-116,473 tokens, dans un contexte de 128K, a été lu et a reçu sa réponse en 174 secondes, un de 487,529 tokens, dans
-un contexte de 512K, en 32 minutes, et les deux fois les trois faits cachés dedans ont été retrouvés. Ce qui a été mesuré et comment : [docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-it-was-measured-on) (en anglais).
-
-### LFM2.5-24B-A2B
-
-Mesuré comme Qwen3.6-35B-A3B ci-dessous, sur les deux mêmes PC, avec un prompt d'environ 30,000 tokens.
-
-<table>
-<tr><th>NVIDIA : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM</th><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q4_K_XL** | 70-73 tokens/s | 3,590-3,620 tokens/s |
-| **UD-Q3_K_XL** | 88 tokens/s | 3,760-3,810 tokens/s |
-| **QAD-Q4_0** | 77-78 tokens/s | 3,720-3,730 tokens/s |
-| **UD-Q6_K_XL** | 42-43 tokens/s | 3,030-3,120 tokens/s |
-| **Q8_0** | 23-34 tokens/s | 2,950-3,040 tokens/s |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q4_K_XL** | 480-485 tokens/s | 23,390-23,460 tokens/s |
-| **UD-Q3_K_XL** | 490-497 tokens/s | 22,920-23,400 tokens/s |
-| **QAD-Q4_0** | 498 tokens/s | 23,880-23,900 tokens/s |
-| **UD-Q6_K_XL** | 423-426 tokens/s | 21,250-21,270 tokens/s |
-| **Q8_0** | 376 tokens/s | 23,270-23,350 tokens/s |
-
-</td></tr>
-</table>
-
-Sur le portable, Q8_0 remplit les 32 Go de RAM, d'où sa lenteur ; la station de travail contient chaque taille en
-entier.
-
-Sur le portable, llama.cpp b11540 avec `--n-cpu-moe 25`, le meilleur des réglages essayés là, a lu un prompt de 32,000
-tokens à 530 tokens/s et a écrit ensuite à 53 ; PolyStrata l'a lu à 3,540 et a écrit à 71-73. Sur la station de
-travail, llama-bench a lu 29,816 tokens à 13,300 tokens/s avec le lot par défaut de llama.cpp, 512, et à 23,600 avec
-2,048, aussi vite que PolyStrata, et a écrit token par token à 455 tokens/s, et à 369 après ce prompt ; PolyStrata
-écrit à 452 et 387. Un prompt d'environ 124,000 tokens dans un contexte de 128K a été lu et a reçu sa réponse en 8,7
-secondes sur la station de travail ; le portable l'a lu en 45 secondes.
-
-### Flint 40B-A2.5B
-
-Mesuré comme LFM2.5-24B-A2B ci-dessus, sur les deux mêmes PC, avec un prompt d'environ 29,000 tokens.
-
-<table>
-<tr><th>NVIDIA : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM</th><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 90 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q4_K_XL** | 20-29 tokens/s | 1,310-1,420 tokens/s |
-| **UD-Q3_K_XL** | 61-63 tokens/s | 2,000-2,010 tokens/s |
-| **UD-Q6_K_XL** | Ne tient pas | Ne tient pas |
-| **Q8_0** | Ne tient pas | Ne tient pas |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q4_K_XL** | 251-252 tokens/s | 12,900 tokens/s |
-| **UD-Q3_K_XL** | 260-264 tokens/s | 13,080-13,200 tokens/s |
-| **Q8_0** | 158-160 tokens/s | 6,740-6,970 tokens/s |
-
-</td></tr>
-</table>
-
-Sur le portable, seule UD-Q3_K_XL reste dans les 32 Go de RAM à côté des programmes du bureau. Les plus grandes
-tailles relisent sans cesse leurs experts sur le SSD, d'où leur lenteur là, et l'installeur y prend UD-Q3_K_XL. La
-carte de la station de travail contient UD-Q4_K_XL et UD-Q3_K_XL en entier ; UD-Q6_K_XL n'y a pas tourné.
-
-Sur le portable, llama.cpp avec `--fit on`, le plus rapide des réglages essayés là, a lu un prompt de 29,442 tokens
-à 390 tokens/s et a écrit ensuite à 35 ; PolyStrata l'a lu à 1,950-2,010 et a écrit à 49-52
-([les mesures](bench/results/2026-10-24-laptop-flint-llamacpp-a37cc46/README.md)).
-
-Sur la station de travail, llama-bench de llama.cpp a lu 29,816 tokens à 7,790 tokens/s avec son lot par défaut de
-512 et à 12,470 avec 2,048, PolyStrata à 12,910-12,940 ; token par token, llama.cpp a écrit à 222 tokens/s et à 188 après
-ce prompt, PolyStrata à 249-256 et 212-213. Un prompt de 124,122 tokens dans un contexte de 128K a été lu et a reçu sa
-réponse en 20 secondes, et les trois faits cachés dedans ont été trouvés.
-
-### Qwen3.6-35B-A3B
-
-Mesuré par PolyStrata sur deux PC, avec une courte discussion et un prompt de 30,000 à 32,000 tokens : à gauche un
-portable dont la carte a 8 Go, où le processeur calcule les experts que la carte ne peut pas contenir, à droite une
-station de travail dont la carte contient le modèle entier.
-
-<table>
-<tr><th>NVIDIA : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM</th><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q3_K_M** | 94-100 tokens/s | 1,690 tokens/s |
-| **UD-Q2_K_XL** | 123-124 tokens/s | 1,590 tokens/s |
-| **UD-Q4_K_M** | 82-86 tokens/s | 1,560-1,570 tokens/s |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q3_K_M** | 394-395 tokens/s | 7,800-7,810 tokens/s |
-| **UD-Q2_K_XL** | 450 tokens/s | 7,720-7,740 tokens/s |
-| **UD-Q4_K_M** | 395-396 tokens/s | 8,070-8,080 tokens/s |
-
-</td></tr>
-</table>
-
-Un prompt de 10,000 tokens est lu à 1,660 tokens/s sur le portable et à 6,300 sur la station de travail.
-Les chiffres de la carte de la
-station limitée à 8 Go, un substitut d'avant la mesure sur le portable, sont dans
-[docs/BACKENDS.md](docs/BACKENDS.md#with-8-gb-of-vram) (en anglais).
-
-### Ornith 1.5
-
-Mesuré de la même façon, sur les deux mêmes PC.
-
-<table>
-<tr><th>NVIDIA : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM</th><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **APEX-I-COMPACT** | 76-82 tokens/s | 1,620 tokens/s |
-| **APEX-I-MINI** | 80-86 tokens/s | 1,550-1,560 tokens/s |
-| **APEX-I-QUALITY** | 59-63 tokens/s | 1,570-1,580 tokens/s |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **APEX-I-COMPACT** | 316-319 tokens/s | 8,040-8,110 tokens/s |
-| **APEX-I-MINI** | 289-300 tokens/s | 7,710-7,740 tokens/s |
-| **APEX-I-QUALITY** | 297-302 tokens/s | 7,860-7,880 tokens/s |
-
-</td></tr>
-</table>
-
-Un prompt de 10,000 tokens est lu à 1,590 tokens/s sur le portable et à 6,400 sur la station de travail.
-
-### Gemma 4 26B-A4B
-
-Mesuré de la même façon, sur les deux mêmes PC.
-
-<table>
-<tr><th>NVIDIA : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM</th><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q3_K_M** | 92-93 tokens/s | 2,240 tokens/s |
-| **UD-Q2_K_XL** | 101-104 tokens/s | 2,150-2,160 tokens/s |
-| **UD-Q4_K_M** | 85 tokens/s | 2,150 tokens/s |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q3_K_M** | 353-356 tokens/s | 8,420-8,480 tokens/s |
-| **UD-Q2_K_XL** | 332-338 tokens/s | 7,940-7,970 tokens/s |
-| **UD-Q4_K_M** | 335-346 tokens/s | 8,320-8,390 tokens/s |
-
-</td></tr>
-</table>
-
-Un prompt de 10,000 tokens est lu à 2,130 tokens/s sur le portable et à 6,800 sur la station de travail.
-
-### Tiel Coder 35B-A3B
-
-Mesuré de la même façon, sur les deux mêmes PC.
-
-<table>
-<tr><th>NVIDIA : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM</th><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q3_K_XL** | 83 tokens/s | 1,700 tokens/s |
-| **UD-IQ3_XXS** | 96-97 tokens/s | 1,610 tokens/s |
-| **UD-Q4_K_XL** | 74-79 tokens/s | 1,660-1,670 tokens/s |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **UD-Q3_K_XL** | 337-345 tokens/s | 8,080-8,110 tokens/s |
-| **UD-IQ3_XXS** | 352 tokens/s | 7,520 tokens/s |
-| **UD-Q4_K_XL** | 316-322 tokens/s | 7,750-7,970 tokens/s |
-
-</td></tr>
-</table>
-
-Un prompt de 10,000 tokens est lu à 1,670 tokens/s sur le portable et à 6,300 sur la station de travail.
-
-### MiniCPM-V 4.7 35B-A3B
-
-Mesuré de la même façon, sur les deux mêmes PC. Son fichier n'a pas de bloc brouillon : il écrit un token à la fois.
-
-<table>
-<tr><th>NVIDIA : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM</th><th>NVIDIA : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 120 Go de RAM</th></tr>
-<tr><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **Q4_K_M** | 64 tokens/s | 1,150 tokens/s |
-| **mix_q3gud_im** | 59 tokens/s | 1,130-1,150 tokens/s |
-| **Q6_K** | 40 tokens/s | 960-980 tokens/s |
-
-</td><td>
-
-| Taille | Écrit les réponses | Lit votre prompt |
-| --- | ---: | ---: |
-| **Q4_K_M** | 308-311 tokens/s | 7,910-7,950 tokens/s |
-| **mix_q3gud_im** | 291-293 tokens/s | 7,730-7,740 tokens/s |
-| **Q6_K** | 277-278 tokens/s | 7,290-7,330 tokens/s |
-
-</td></tr>
-</table>
-
-Un prompt de 10,000 tokens est lu à 1,260 tokens/s sur le portable et à 8,790 sur la station de travail. Sur le
-portable, Q6_K remplit les 32 Go de RAM, c'est ce qui le ralentit là.
+Le tableau donne la taille que l'installeur prend pour chaque modèle, en tokens par seconde. Les chiffres de chaque taille, la comparaison avec llama.cpp et la façon de mesurer sont sur la page de chaque modèle.
+
+| Modèle | Portable avec une carte de 8 Go<br>écrit / lit | RTX 5090<br>écrit / lit | Toutes les tailles |
+| --- | ---: | ---: | --- |
+| LFM2.5-24B-A2B | 70-73 / 3,590-3,620 | 480-485 / 23,390-23,460 | [LFM2.5](docs/models/lfm25.fr.md) |
+| Flint 40B-A2.5B | 61-63 / 2,000-2,010 | 251-252 / 12,900 | [Flint](docs/models/flint.fr.md) |
+| Qwen3.6-35B-A3B | 94-100 / 1,690 | 394-395 / 7,800-7,810 | [Qwen3.6](docs/models/qwen36.fr.md) |
+| Ornith 1.5 | 76-82 / 1,620 | 316-319 / 8,040-8,110 | [Ornith](docs/models/ornith.fr.md) |
+| Gemma 4 26B-A4B | 92-93 / 2,240 | 353-356 / 8,420-8,480 | [Gemma 4](docs/models/gemma4.fr.md) |
+| Tiel Coder 35B-A3B | 83 / 1,700 | 337-345 / 8,080-8,110 | [Tiel Coder](docs/models/tiel.fr.md) |
+| MiniCPM-V 4.7 35B-A3B | 64 / 1,150 | 308-311 / 7,910-7,950 | [MiniCPM-V](docs/models/minicpmv.fr.md) |
+| GLM 5.3 Flash | ne tourne pas : il faut une carte de 32 Go | 59-66 / 820 | [GLM](docs/models/glm.fr.md) |
+| DeepSeek V4 Flash | ne tourne pas : il faut une carte de 32 Go | 56 / 1,040 | [DeepSeek](docs/models/deepseek.fr.md) |
+
+Portable : RTX 4070 Laptop (8 Go), Core i7-14700HX, 32 Go de RAM. Station de travail : RTX 5090 (32 Go), Xeon Platinum 8470Q (25 vCPU), 90 à 120 Go de RAM. Flint est en UD-Q3_K_XL sur le portable, la taille que l'installeur prend avec 32 Go de RAM, et en UD-Q4_K_XL sur la station de travail.
+
+Qwen3.8-Flash-Next tourne sur le moteur du projet Strata, qui l'a mesuré sur un PC avec une RTX 5070 (12 Go) et 64 Go de RAM : IQ2_XS écrit à 79 et lit un prompt de 32K à 2,090 ([toutes les tailles](docs/models/qwen38.fr.md)).
 
 Les neuf modèles du moteur propre à PolyStrata ont été mesurés avec son benchmark, que vous pouvez lancer sur votre
 PC : `python polystrata.py benchmark --model <name> --prompt-tokens 24000`
@@ -359,171 +87,22 @@ fois plus vite, avec Qwen3.6 et avec Tiel Coder ([les deux mesures](docs/COMMUNI
 
 ## Ce qu'il vous faut
 
-### Qwen3.8-Flash-Next
+| Modèle | Carte graphique | RAM (taille de l'installeur) | Disque | Système |
+| --- | --- | --- | --- | --- |
+| [Qwen3.8-Flash-Next](docs/models/qwen38.fr.md) | NVIDIA RTX série 20 à 50, ou AMD RX 6800 / 6900, RX 7700 XT / 7800 XT / 7900 XT / XTX, RX 9060 XT / 9070 / 9070 XT, Radeon AI PRO R9700 ; 12 Go ou plus | 32 Go ou plus ; avec 64 Go, toutes les tailles | environ 80 Go | Windows, Linux |
+| [GLM 5.3 Flash](docs/models/glm.fr.md) | NVIDIA RTX série 20 ou plus récente ; seulement essayé sur une carte de 32 Go | 96 Go à côté d'une carte de 32 Go | 79 à 114 Go, sur un SSD | Linux |
+| [DeepSeek V4 Flash](docs/models/deepseek.fr.md) | comme au-dessus | 72 Go à côté d'une carte de 32 Go | 91 Go, sur un SSD | Linux |
+| [LFM2.5-24B-A2B](docs/models/lfm25.fr.md) | NVIDIA RTX série 20 ou plus récente, 8 Go ou plus | environ 20 Go à côté d'une carte de 8 Go | 11 à 25 Go | Windows, Linux |
+| [Flint 40B-A2.5B](docs/models/flint.fr.md) | comme au-dessus | environ 22 Go à côté d'une carte de 8 Go | 18 à 42 Go | Windows, Linux |
+| [Qwen3.6-35B-A3B](docs/models/qwen36.fr.md) | comme au-dessus ; AMD en bêta | environ 21 Go à côté d'une carte de 8 Go | 13 à 23 Go | Windows, Linux |
+| [Ornith 1.5](docs/models/ornith.fr.md) | comme au-dessus ; AMD en bêta | environ 22 Go à côté d'une carte de 8 Go | 14 à 24 Go | Windows, Linux |
+| [Gemma 4 26B-A4B](docs/models/gemma4.fr.md) | comme au-dessus ; AMD en bêta | environ 18 Go à côté d'une carte de 8 Go | 11 à 17 Go | Windows, Linux |
+| [Tiel Coder 35B-A3B](docs/models/tiel.fr.md) | comme au-dessus ; AMD en bêta | environ 21 Go à côté d'une carte de 8 Go | 14 à 23 Go | Windows, Linux |
+| [MiniCPM-V 4.7 35B-A3B](docs/models/minicpmv.fr.md) | comme au-dessus ; AMD en bêta | environ 25 Go à côté d'une carte de 8 Go | 16 à 29 Go | Windows, Linux |
 
-| | |
-| --- | --- |
-| **Carte graphique** | **NVIDIA** GeForce RTX série 20, 30, 40 ou 50, ou **AMD** Radeon RX 7900 XT / XTX, RX 7800 XT / 7700 XT, RX 9060 XT, RX 9070 / 9070 XT, Radeon AI PRO R9700 ou série RX 6800 / 6900. Il faut **12 Go de VRAM ou plus**. |
-| **RAM** | 32 Go ou plus. Votre RAM décide [quel modèle](#quel-modèle-choisir-) tient. Avec 64 Go, toutes les tailles tournent. |
-| **Disque** | Environ 80 Go libres. Prenez un SSD si possible : le premier démarrage est bien plus rapide. |
-| **Système** | Windows 10 / 11 ou Linux, avec un pilote graphique NVIDIA ou AMD à jour. |
+La RAM est l'estimation de l'installeur ; une carte plus grande en demande moins. L'installeur s'occupe de tout le reste : sous Windows, il télécharge le moteur déjà compilé et ne le compile sur votre PC que sur un processeur sans AVX2 ou si le moteur de votre copie est plus récent que la dernière version, en proposant d'installer les outils qui manquent. Deux ou trois cartes peuvent se partager un modèle ([multi-GPU](docs/MULTI_GPU.md)). Cartes graphiques plus anciennes, Intel Arc, Strix Halo et processeurs sans AVX2 : [la liste complète](docs/INSTALL.md#what-you-need). La carte, la RAM et les tailles de chaque modèle en détail sont sur sa page.
 
-L'installateur s'occupe de tout le reste. Deux ou trois cartes peuvent se partager le modèle ([multi-GPU](docs/MULTI_GPU.md)).
-
-Expérimental, écrit et testé par des membres de la communauté sur leurs propres machines :
-
-- **Cartes graphiques plus anciennes** (Tesla P40 / V100, GTX 10, Radeon VII / MI50, RX 6700 XT, RX 5500 XT) : [Older GPUs](docs/OLDER_GPUS.md).
-- **Intel Arc**, compilé depuis les sources sous Linux : [Intel Arc](docs/INTEL_ARC.md).
-- **AMD Ryzen AI Max (Strix Halo)**, compilé depuis les sources sous Linux : [Strix Halo](docs/STRIX_HALO.md).
-- **Processeurs plus anciens sans AVX2** : ça marche, mais lentement. [Older CPUs](docs/INSTALL.md#older-cpus-experimental).
-
-La liste complète : [docs/INSTALL.md](docs/INSTALL.md#what-you-need).
-
-### GLM 5.3 Flash
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente. Il n'a tourné qu'avec **32 Go de VRAM**. Environ 12 Go sont pris avant le premier expert : une carte de 12 Go ne peut donc pas le démarrer. |
-| **RAM** | À côté d'une carte de 32 Go, **96 Go ou plus** pour le modèle entier, 82 Go pour sa taille à 2 bits, 60 Go pour la taille qui garde la moitié des experts. Une carte plus petite demande plus de RAM ([combien](#quel-modèle-choisir-)). Il a tourné avec 120 Go. |
-| **Disque** | 114 Go, 102 Go ou 79 Go pour le fichier du modèle, sur un SSD. |
-| **Système** | Linux, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste. Il compile le moteur sur votre PC et propose d'installer ce qu'il faut pour cela
-(g++ et le CUDA Toolkit). Pas encore : les cartes AMD, deux cartes sous Windows, trois cartes ou plus, les images.
-Un utilisateur le fait tourner sous Windows avec une carte de 24 Go et 128 Go de RAM ([rapport](https://github.com/VecSzn/PolyStrata/issues/10)).
-
-La liste complète : [docs/GLM.md](docs/GLM.md#what-you-need) (en anglais).
-
-### DeepSeek V4 Flash
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente. Il n'a tourné qu'avec **32 Go de VRAM**. Environ 11,5 Go sont pris avant le premier expert : une carte de 12 Go ne peut donc pas le démarrer. |
-| **RAM** | À côté d'une carte de 32 Go, **72 Go ou plus**, selon l'estimation de l'installeur. Une carte plus petite demande plus de RAM ([combien](#quel-modèle-choisir-)). Il a tourné avec 120 Go. |
-| **Disque** | 91 Go pour les trois fichiers du modèle, sur un SSD. |
-| **Système** | Linux, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Pas encore essayé : les cartes AMD, deux
-cartes. Il ne lit que du texte.
-Un utilisateur le fait tourner sous Windows avec une carte de 24 Go et 128 Go de RAM ([rapport](https://github.com/VecSzn/PolyStrata/issues/21)).
-
-La liste complète : [docs/DEEPSEEK.md](docs/DEEPSEEK.md#what-you-need) (en anglais).
-
-### LFM2.5-24B-A2B
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 4 Go sont pris avant le premier expert. Il a tourné sur la carte de 8 Go d'un portable et sur une carte de 32 Go. |
-| **RAM** | Environ **16, 18, 20, 27 ou 31 Go** à côté d'une carte de 8 Go pour UD-Q3_K_XL, QAD-Q4_0, UD-Q4_K_XL, UD-Q6_K_XL et Q8_0, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les trois plus petites. Les cinq tailles ont tourné sur un portable de 32 Go. |
-| **Disque** | 11 à 25 Go pour le fichier du modèle. |
-| **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour Qwen3.6-35B-A3B ci-dessous. Il n'a pas encore été essayé sur une
-carte AMD. Il ne lit que du texte. La licence de Liquid AI n'autorise l'usage commercial qu'aux entreprises de moins
-de 10 millions de dollars de chiffre d'affaires annuel ([LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/main/LICENSE)).
-
-La liste complète : [docs/LFM.md](docs/LFM.md#what-you-need) (en anglais).
-
-### Flint 40B-A2.5B
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 4 Go sont pris avant le premier expert. Il a tourné sur la carte de 8 Go d'un portable et sur une carte de 32 Go. |
-| **RAM** | Environ **22, 29, 40 ou 46 Go** à côté d'une carte de 8 Go pour UD-Q3_K_XL, UD-Q4_K_XL, UD-Q6_K_XL et Q8_0, d'après l'estimation de l'installeur. Sur un portable de 32 Go, seule UD-Q3_K_XL est restée en RAM, donc l'installeur ne prend UD-Q4_K_XL qu'à partir d'environ 40 Go. Une carte de 32 Go contient UD-Q4_K_XL en entier. |
-| **Disque** | 18 à 42 Go pour le fichier du modèle. |
-| **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour Qwen3.6-35B-A3B ci-dessous. Il n'a pas encore été essayé sur une
-carte AMD. Il ne lit que du texte. Sa licence est Apache 2.0.
-
-La liste complète : [docs/FLINT.md](docs/FLINT.md#what-you-need) (en anglais).
-
-### Qwen3.6-35B-A3B
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
-| **RAM** | Environ **17, 21 ou 27 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les deux plus petites. Les trois tailles ont tourné sur un portable de 32 Go. |
-| **Disque** | 13, 17 ou 23 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
-| **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
-de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
-version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : deux cartes sous Windows, trois cartes ou plus. Sur une carte AMD sous Windows, l'installeur
-compile `strata-poly` pour la carte comme sous Linux (les wheels TheRock d'AMD dans `.rocm-win`) et prévient que l'y
-faire tourner est nouveau ([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
-
-Depuis la 0.1.44, le moteur de [Strata](https://github.com/Niko1221/Strata) lui-même fait aussi tourner Qwen3.6, à partir de
-UD-Q4_K_XL (`--family qwen36-strata`, 32 Go de RAM ou plus). Sur une RTX 5090 avec UD-Q4_K_XL, il a lu un prompt de 4K
-1,6 fois plus vite que strata-poly ; sur un prompt de 31K et en écriture, les deux sont à peu près à égalité
-([mesures](docs/BACKENDS.md#qwen36-on-two-engines), en anglais). Les tailles plus petites, pour les cartes de 8 Go, restent sur strata-poly.
-
-### Ornith 1.5
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 4 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
-| **RAM** | Environ **18, 22 ou 28 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les deux plus petites. Les trois tailles ont tourné sur un portable de 32 Go. |
-| **Disque** | 14, 17 ou 24 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
-| **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
-de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
-version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : deux cartes sous Windows, trois cartes ou plus. Sur une carte AMD sous Windows, l'installeur
-compile `strata-poly` pour la carte comme sous Linux (les wheels TheRock d'AMD dans `.rocm-win`) et prévient que l'y
-faire tourner est nouveau ([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
-
-### Gemma 4 26B-A4B
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 6 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
-| **RAM** | Environ **15, 18 ou 21 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. D'après la même estimation, une carte de 16 Go contient en entier les deux plus petites. Les trois tailles ont tourné sur un portable de 32 Go. |
-| **Disque** | 11, 13 ou 17 Go pour le fichier du modèle et son modèle brouillon, 1 Go de plus pour lire les images. |
-| **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
-de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
-version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : deux cartes sous Windows, trois cartes ou plus. Sur une carte AMD sous Windows, l'installeur
-compile `strata-poly` pour la carte comme sous Linux (les wheels TheRock d'AMD dans `.rocm-win`) et prévient que l'y
-faire tourner est nouveau ([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
-
-### Tiel Coder 35B-A3B
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
-| **RAM** | Environ **18, 21 ou 27 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les trois tailles. Les trois tailles ont tourné sur un portable de 32 Go. |
-| **Disque** | 14, 17 ou 23 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
-| **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
-de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
-version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : deux cartes sous Windows, trois cartes ou plus. Sur une carte AMD sous Windows, l'installeur
-compile `strata-poly` pour la carte comme sous Linux (les wheels TheRock d'AMD dans `.rocm-win`) et prévient que l'y
-faire tourner est nouveau ([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
-
-### MiniCPM-V 4.7 35B-A3B
-
-| | |
-| --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 3.5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; il a tourné sur une RX 7600. |
-| **RAM** | Environ **19, 25 ou 31 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 32 Go contient en entier les trois tailles. Les trois tailles ont tourné sur un portable de 32 Go. |
-| **Disque** | 16, 21 ou 29 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
-| **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
-
-L'installeur s'occupe de tout le reste, comme pour GLM 5.3 Flash. Sous Windows, il télécharge le moteur déjà compilé
-de la dernière version publiée. Sur un processeur sans AVX2, ou dans une copie dont le moteur a changé depuis cette
-version, il le compile à la place avec le compilateur 2022 de Visual Studio et le CUDA Toolkit, et propose de les
-installer. Pas encore : deux cartes sous Windows, trois cartes ou plus. Sur une carte AMD sous Windows, l'installeur
-compile `strata-poly` pour la carte comme sous Linux (les wheels TheRock d'AMD dans `.rocm-win`) et prévient que l'y
-faire tourner est nouveau ([AMD_HIP.md](docs/AMD_HIP.md#strata-poly-on-amd-beta)).
-
-Ce qu'il faut à chacun des cinq et comment il a été vérifié : [docs/BACKENDS.md](docs/BACKENDS.md#install) (en anglais).
+Ce qu'il faut à chacun des cinq (Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder et MiniCPM-V) et comment il a été vérifié : [docs/BACKENDS.md](docs/BACKENDS.md#install) (en anglais).
 
 ## Installation
 
@@ -573,167 +152,22 @@ Mises à jour, Docker, plusieurs cartes, emplacement des fichiers et toutes les 
 
 ## Quel modèle choisir ?
 
-### Qwen3.8-Flash-Next
+Le même modèle existe en plusieurs tailles, plus ou moins compressées : les petites sont plus rapides et demandent moins de RAM, les grandes sont plus proches de l'original. L'installeur en prend une pour votre RAM et votre carte si vous appuyez sur Entrée ; pour une autre taille, ajoutez `--model <taille>` à l'installation.
 
-L'installateur en recommande un selon votre RAM. Le même modèle existe en plusieurs tailles, plus ou moins
-compressées. Les petites tailles sont plus rapides. Les grandes sont un peu plus intelligentes.
+| Modèle | L'installeur prend | Avec moins de RAM | Seulement par son nom |
+| --- | --- | --- | --- |
+| [Qwen3.8-Flash-Next](docs/models/qwen38.fr.md) | 32 Go de RAM : Coder ; 48 à 64 Go : IQ2_XS ; 96 Go ou plus : IQ3_S |  | Q2_0, IQ3_XXS, les fichiers 4 à 8 bits d'Unsloth |
+| [GLM 5.3 Flash](docs/models/glm.fr.md) | 3.0BIT | UD-IQ2_XXS, puis REAP50-Q3_K_M |  |
+| [DeepSeek V4 Flash](docs/models/deepseek.fr.md) | UD-IQ2_XXS (la seule taille) |  |  |
+| [LFM2.5-24B-A2B](docs/models/lfm25.fr.md) | UD-Q4_K_XL | UD-Q3_K_XL | QAD-Q4_0, UD-Q6_K_XL, Q8_0 |
+| [Flint 40B-A2.5B](docs/models/flint.fr.md) | UD-Q4_K_XL à partir d'environ 40 Go de RAM | UD-Q3_K_XL | UD-Q6_K_XL, Q8_0 |
+| [Qwen3.6-35B-A3B](docs/models/qwen36.fr.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M |
+| [Ornith 1.5](docs/models/ornith.fr.md) | APEX-I-COMPACT | APEX-I-MINI | APEX-I-QUALITY |
+| [Gemma 4 26B-A4B](docs/models/gemma4.fr.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M |
+| [Tiel Coder 35B-A3B](docs/models/tiel.fr.md) | UD-Q3_K_XL | UD-IQ3_XXS | UD-Q4_K_XL |
+| [MiniCPM-V 4.7 35B-A3B](docs/models/minicpmv.fr.md) | Q4_K_M | mix_q3gud_im | Q6_K |
 
-| Votre RAM | Prenez | Pourquoi |
-| --- | --- | --- |
-| **32 Go** | **Coder** | il tient dans 32 Go et il est fait pour le code (avec une carte de 24 Go, Q2_0 et IQ2_XS tournent aussi) |
-| **48 Go** | **IQ2_XS** (ou Q2_0, le plus rapide) | les plus grandes tailles ne tiennent pas |
-| **64 Go** | **IQ2_XS** (recommandé), ou IQ3_XXS / IQ3_S | toutes les tailles tiennent ; IQ3_S est le meilleur et le plus lent |
-| **96 Go ou plus** | **IQ3_S**, ou l'UD-IQ4_XS d'Unsloth (~4 bits) | de la place pour les plus grandes tailles, avec tout le reste ouvert |
-
-- **[Coder](docs/MODELS.md#coder) :** une version pour le code, avec la moitié des experts en moins. Elle atteint 91 %
-  du score SWE-bench Verified du modèle complet (mesuré par ses auteurs) et tient dans 32 Go de RAM. Elle est moins
-  bonne en dehors du code, y compris pour le chinois et les autres textes CJK (#438). Pour ces cas, prenez Q2_0,
-  IQ2_XS ou IQ3_S, qui gardent tous les experts.
-- **[Swift 1.5](docs/MODELS.md#swift-15) :** un fine-tune qui réfléchit bien moins longtemps avant de répondre. Vous
-  avez la réponse plus tôt, avec à peu près la même qualité.
-- **[Unsloth UD-IQ4_XS](docs/MODELS.md#unsloth-ud-iq4_xs)** : la version ~4 bits d'Unsloth, entre IQ3_S et
-  UD-Q4_K_XL en qualité. Un téléchargement de 94 Go. Avec moins de ~80 Go de RAM, PolyStrata en lit une partie depuis
-  le SSD pendant qu'il répond, il y est donc plus lent (un SSD NVMe aide).
-- **[Unsloth UD-Q4_K_XL, UD-Q5_K_XL, UD-Q6_K_XL et Q8_0](docs/MODELS.md#unsloths-files-ud-iq4_xs-to-q8_0) :** de 4 à 8 bits, plus proches du modèle
-  complet (93-95 % le même token suivant que Q8_0). Rapides quand tous les experts tiennent dans la RAM (~88 Go pour
-  UD-Q4_K_XL jusqu'à ~136 Go pour Q8_0) ; avec moins de RAM, PolyStrata en lit une partie depuis le SSD pendant qu'il
-  répond, ce qui est bien plus lent (7-8.5 tokens/s pour UD-Q4_K_XL sur un PC avec 64 Go).
-- **[OrcaRouter's Uncensored IQ3_XXS](docs/MODELS.md#orcarouter-uncensored-iq3_xxs) :** vous l'installez à la main.
-  Il n'est pas dans le menu de l'installateur.
-
-Tailles, téléchargements et ce qui tient où : [docs/MODELS.md](docs/MODELS.md). Pour ajouter un autre modèle plus
-tard, lancez `SETUP.bat` (Linux : `./setup.sh --setup`).
-
-### GLM 5.3 Flash
-
-Trois tailles pour l'instant. L'installeur prend la première pour laquelle votre RAM suffit.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 32 Go |
-| --- | --- | ---: | ---: |
-| **3.0BIT** | le modèle entier, à environ 3 bits ([neuralll](https://huggingface.co/neuralll/GLM-5.3-Flash-GSQ-RCO-3.0bit-Q4Kattn-GGUF)) | 114 Go | 96 Go |
-| **UD-IQ2_XXS** | le modèle entier, à environ 2 bits ([Unsloth](https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF)) : il lit un prompt plus vite et écrit plus lentement | 102 Go | 82 Go |
-| **REAP50-Q3_K_M** | la moitié des experts routés retirée ([REAP50](https://huggingface.co/patrickbdevaney/GLM-5.3-Flash-REAP50-GGUF) de patrickbdevaney) | 79 Go | 60 Go |
-
-C'est votre carte graphique qui décide de la RAM nécessaire : les experts que la carte ne contient pas doivent rester en RAM.
-
-| Votre carte graphique | 3.0BIT | UD-IQ2_XXS | REAP50-Q3_K_M | |
-| --- | ---: | ---: | ---: | --- |
-| **32 Go** | **96 Go** | **82 Go** | **60 Go** | le PC sur lequel il a tourné (120 Go de RAM) |
-| **24 Go** | environ 104 Go | environ 90 Go | environ 68 Go | pas encore essayé |
-| **16 Go** | environ 113 Go | environ 99 Go | environ 77 Go | pas encore essayé |
-| **12 Go ou moins** | | | | ne démarre pas |
-
-Les chiffres de RAM sont l'estimation de l'installeur, d'après le seul PC où il a tourné. Avec moins de RAM il démarre quand
-même, mais il lit des experts sur le SSD pendant qu'il répond et devient bien plus lent. L'installeur le dit et demande
-d'abord.
-
-Les autres quantifications de GLM 5.3 Flash ne sont pas encore prises en charge : [ce qui manque](docs/GLM.md#what-is-missing) (en anglais).
-
-### DeepSeek V4 Flash
-
-Une seule taille pour l'instant.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 32 Go |
-| --- | --- | ---: | ---: |
-| **UD-IQ2_XXS** | le modèle entier, à environ 2 bits ([Unsloth](https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF)) | 91 Go | 72 Go |
-
-Comme pour GLM 5.3 Flash, les experts que la carte ne garde pas restent en RAM : selon l'estimation de l'installeur,
-environ 80 Go à côté d'une carte de 24 Go et 89 Go à côté d'une carte de 16 Go ; une carte de 12 Go ne peut pas le
-démarrer. Seule la carte de 32 Go a été essayée.
-
-### LFM2.5-24B-A2B
-
-Cinq tailles. L'installeur prend UD-Q4_K_XL, ou UD-Q3_K_XL sur un PC qui a moins de RAM. Les autres se choisissent par leur nom : `--model QAD-Q4_0`.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 8 Go |
-| --- | --- | ---: | ---: |
-| **UD-Q4_K_XL** | le modèle entier avec des experts à 4 bits ([Unsloth](https://huggingface.co/unsloth/LFM2.5-24B-A2B-GGUF)) | 15 Go | environ 20 Go |
-| **UD-Q3_K_XL** | le même avec des experts à 3 bits : celui qui demande le moins de RAM | 11 Go | environ 16 Go |
-| **QAD-Q4_0** | 4 bits, de [Liquid AI](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B-GGUF) même, entraîné pour perdre moins à cette quantification | 14 Go | environ 18 Go |
-| **UD-Q6_K_XL** | des experts à 6 bits | 22 Go | environ 27 Go |
-| **Q8_0** | 8 bits partout, le plus proche du modèle tel qu'entraîné | 25 Go | environ 31 Go |
-
-Comparées à Q8_0, sur cinq prompts de 256 tokens chacun, les autres tailles choisissent le token le plus probable de Q8_0
-à 96,8 % des pas (UD-Q6_K_XL), 95,5 % (UD-Q4_K_XL), 92,7 % (QAD-Q4_0) et 91,6 % (UD-Q3_K_XL).
-
-### Flint 40B-A2.5B
-
-Quatre tailles. À côté d'une carte de 8 Go, l'installeur prend UD-Q4_K_XL à partir d'environ 40 Go de RAM et
-UD-Q3_K_XL en dessous ; à côté d'une carte plus grande, UD-Q4_K_XL demande moins. Les autres se choisissent par leur
-nom : `--model Q8_0`.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 8 Go |
-| --- | --- | ---: | ---: |
-| **UD-Q4_K_XL** | le modèle entier avec des experts à 4 et 5 bits ([Unsloth](https://huggingface.co/unsloth/flint-GGUF)) | 25 Go | environ 29 Go |
-| **UD-Q3_K_XL** | le même avec des experts à 3 bits : le moins de RAM | 18 Go | environ 22 Go |
-| **UD-Q6_K_XL** | experts à 6 bits | 36 Go | environ 40 Go |
-| **Q8_0** | 8 bits partout, le plus proche du modèle tel qu'entraîné | 42 Go | environ 46 Go |
-
-Sur le portable de 32 Go, le fichier d'UD-Q4_K_XL n'est pas resté en RAM : il a écrit une courte discussion à 20-29
-tokens/s, UD-Q3_K_XL à 61-63. Comparées à Q8_0, sur cinq prompts de 256 tokens chacun, les autres tailles choisissent
-le token le plus probable de Q8_0 à 97,8 % des pas (UD-Q6_K_XL), 95,9 % (UD-Q4_K_XL) et 94,0 % (UD-Q3_K_XL).
-
-### Qwen3.6-35B-A3B
-
-Trois tailles pour l'instant. L'installeur prend UD-Q3_K_M, ou UD-Q2_K_XL sur un PC qui a moins de RAM. UD-Q4_K_M se choisit par son nom : `--model UD-Q4_K_M`.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 8 Go |
-| --- | --- | ---: | ---: |
-| **UD-Q3_K_M** | le modèle entier avec des experts à 3 bits ([Unsloth](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF)) | 17 Go | environ 21 Go |
-| **UD-Q2_K_XL** | le même avec des experts à 2 et 3 bits : celui qui demande le moins de RAM | 13 Go | environ 17 Go |
-| **UD-Q4_K_M** | le même avec des experts à 4 bits | 23 Go | environ 27 Go |
-
-Une carte plus grande contient une plus grande part du modèle et demande moins de RAM : avec UD-Q3_K_M, environ 17 Go à côté d'une carte de 12 Go, 13 Go à côté d'une carte de 16 Go, et 10 Go dès que la carte contient tout. Ce sont les estimations
-de l'installeur. Elles n'ont pas été vérifiées sur un tel PC.
-
-### Ornith 1.5
-
-Trois tailles pour l'instant. L'installeur prend APEX-I-COMPACT, ou APEX-I-MINI sur un PC qui a moins de RAM. APEX-I-QUALITY se choisit par son nom : `--model APEX-I-QUALITY`.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 8 Go |
-| --- | --- | ---: | ---: |
-| **APEX-I-COMPACT** | le modèle entier avec des experts à 3 et 4 bits ([APEX](https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF) de mudler) | 17 Go | environ 22 Go |
-| **APEX-I-MINI** | le même avec des experts à 2 et 3 bits : celui qui demande le moins de RAM | 14 Go | environ 18 Go |
-| **APEX-I-QUALITY** | le même avec des experts de 4 à 6 bits | 24 Go | environ 28 Go |
-
-Une carte plus grande contient une plus grande part du modèle et demande moins de RAM : avec APEX-I-COMPACT, environ 17 Go à côté d'une carte de 12 Go, 13 Go à côté d'une carte de 16 Go, et 10 Go dès que la carte contient tout. Ce sont les estimations
-de l'installeur. Elles n'ont pas été vérifiées sur un tel PC.
-
-### Gemma 4 26B-A4B
-
-Trois tailles pour l'instant. L'installeur prend UD-Q3_K_M, ou UD-Q2_K_XL sur un PC qui a moins de RAM. UD-Q4_K_M se choisit par son nom : `--model UD-Q4_K_M`.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 8 Go |
-| --- | --- | ---: | ---: |
-| **UD-Q3_K_M** | le modèle entier avec des experts à 3 bits ([Unsloth](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF)), et le modèle brouillon de Google pour lui | 13 Go | environ 18 Go |
-| **UD-Q2_K_XL** | le même avec des experts à 2 bits : celui qui demande le moins de RAM | 11 Go | environ 15 Go |
-| **UD-Q4_K_M** | le même avec des experts à 4 et 5 bits | 17 Go | environ 21 Go |
-
-Une carte plus grande contient une plus grande part du modèle et demande moins de RAM : avec UD-Q3_K_M, environ 14 Go à côté d'une carte de 12 Go, et 10 Go dès que la carte contient tout. Ce sont les estimations
-de l'installeur. Elles n'ont pas été vérifiées sur un tel PC.
-
-### Tiel Coder 35B-A3B
-
-Trois tailles pour l'instant. L'installeur prend UD-Q3_K_XL, ou UD-IQ3_XXS sur un PC qui a moins de RAM. UD-Q4_K_XL se choisit par son nom : `--model UD-Q4_K_XL`.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 8 Go |
-| --- | --- | ---: | ---: |
-| **UD-Q3_K_XL** | le modèle entier avec des experts à 3 et 4 bits ([peculiar-ragdoll](https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP)) | 17 Go | environ 21 Go |
-| **UD-IQ3_XXS** | le même avec des experts à 2 et 3 bits : celui qui demande le moins de RAM | 14 Go | environ 18 Go |
-| **UD-Q4_K_XL** | le même avec des experts de 4 à 6 bits | 23 Go | environ 27 Go |
-
-Une carte plus grande contient une plus grande part du modèle et demande moins de RAM : avec UD-Q3_K_XL, environ 17 Go à côté d'une carte de 12 Go, 13 Go à côté d'une carte de 16 Go, et 10 Go dès que la carte contient tout. Ce sont les estimations
-de l'installeur. Elles n'ont pas été vérifiées sur un tel PC.
-
-### MiniCPM-V 4.7 35B-A3B
-
-Trois tailles pour l'instant, d'OpenBMB. L'installeur prend Q4_K_M, ou mix_q3gud_im sur un PC qui a moins de RAM. Q6_K se choisit par son nom : `--model Q6_K`.
-
-| Taille | Ce que c'est | Téléchargement | RAM à côté d'une carte de 8 Go |
-| --- | --- | ---: | ---: |
-| **Q4_K_M** | le modèle entier avec des experts à 4 bits ([OpenBMB](https://huggingface.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf)) | 21 Go | environ 25 Go |
-| **mix_q3gud_im** | le même avec des experts à 3 et 4 bits : celui qui demande le moins de RAM | 16 Go | environ 19 Go |
-| **Q6_K** | le même avec des experts à 6 bits | 29 Go | environ 31 Go |
+Ce qu'est chaque taille, son téléchargement, la RAM qu'elle demande à côté d'autres cartes et à quel point elle se rapproche de la plus grande : la page de chaque modèle, liée depuis le tableau de « Quelle est sa vitesse ? ».
 
 ## Utilisation
 
