@@ -1787,7 +1787,7 @@ class OutputParser:
             self.buf = ""
             self._reset_scan()
             return out
-        if self.state == "reasoning" and self.buf == THINK_END:   # the output ends on a held `</think>`: its end
+        if self.state == "reasoning" and self.buf == self.think_end:   # the output ends on a held end: its end
             self.buf, self.state = "", "content"
         if self.buf:
             # an unfinished call inside the reasoning (#804) is reasoning text, never a call
