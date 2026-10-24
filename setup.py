@@ -2094,6 +2094,12 @@ def whole_shard(s: Path) -> bool:
 SHARD_NAME = re.compile(r"-(\d{5})-of-(\d{5})\.gguf$")
 
 
+def custom_gguf_tag(shards: list[Path] | None, model: str) -> str:
+    """Name for the config, start script and data folders: with --custom-gguf the GGUF's base name (shard suffix and
+    extension stripped) so it won't collide with existing installs; otherwise the size name."""
+    return Path(SHARD_NAME.sub("", shards[0].name)).stem if shards else model
+
+
 def gguf_dir_shards(folder: Path, fam: dict, model: str) -> list[Path]:
     """--gguf-dir's shards (#305): every -0000i-of-0000N file of the model, N read from the first shard's name as the
     engine and tools/iq_pack.py do.  The published name first; else the one first shard in the folder whose name has
@@ -6553,6 +6559,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     """Steps 2 to 7 for a model of strata-poly (docs/GLM.md, docs/BACKENDS.md): its questions, the Python
     packages, the engine (ready-made or compiled here), the model file, its tokenizer and expert profile, the run
     config and the start script."""
+    _sg = getattr(a, "_custom_gguf_shards", None)
     fam = FAMILIES[family]
     title = fam["title"]
     if hip and WIN:   # the engine is compiled here from AMD's ROCm Windows wheels (rocm_win_root)
@@ -6649,7 +6656,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
                      f"--family {family} --model {model} --yes installs it anyway")
         warn(f"going on with {ram:.0f} GB of RAM, as you chose")
     ok(f"size: {model}")
-    tag = fam["tag"] + model                           # names of the config, the start script and the data folders
+    tag = fam["tag"] + custom_gguf_tag(_sg, model)
 
     if a.context:
         ctx = a.context
@@ -6691,7 +6698,8 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
 
     # one file, or the numbered files of a split GGUF: the engine is given the first and finds the others by name
     models_dir = Path(a.gguf_dir) if a.gguf_dir else Path(a.models_dir) / tag
-    shards = [models_dir / model_file(fam, model, i) for i in range(1, model_shards(fam, model) + 1)]
+    shards = (_sg if _sg
+              else [models_dir / model_file(fam, model, i) for i in range(1, model_shards(fam, model) + 1)])
     absent = [s.name for s in shards if not s.exists()]
     if a.gguf_dir and absent:
         fail(f"{models_dir} has no {absent[0]}",
@@ -6717,6 +6725,15 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     mmproj = models_dir / fam["mmproj"] if vision != "none" else None
     if mmproj is not None and a.gguf_dir and not mmproj.exists():
         mmproj = Path(a.models_dir) / tag / mmproj.name
+    # user-supplied mmproj: accept any file with "mmproj" in the name
+    if (mmproj is not None and not mmproj.is_file() and _sg):
+        cands = list(models_dir.glob("*mmproj*"))
+        if len(cands) == 1:
+            mmproj = cands[0]
+        elif len(cands) > 1:
+            names = ", ".join(f.name for f in sorted(cands))
+            warn(f"found several files with 'mmproj' in {models_dir}: {names}\n"
+                 f"renaming one to exactly {fam['mmproj']}, or deleting the others")
     have_mmproj = mmproj is None or mmproj.exists() and (done(mmproj) or bool(a.gguf_dir) or whole_shard(mmproj))
     on_disk = sum(f.stat().st_size for s in shards for f in (s, s.with_name(s.name + ".part")) if f.is_file()) / 1e9
     need = (0 if have_model and have_guesser else max(d["download_gb"] - on_disk, 0)) + \
@@ -6752,8 +6769,17 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
                 continue
             download(d.get("hf", fam["hf"]) + s.name, s)
     check_shards(shards)
+
+    def _skip_or_verify(path, sha_key):
+        """Verify a downloaded file's SHA-256; skip for user-supplied files (header-matched, no pinned hash)."""
+        if _sg:                       # header-matched: trust it, the user pointed at this file
+            return
+        verify_sha256(path, *fam["sha256"][sha_key], own=bool(a.gguf_dir) and path.parent == models_dir)
+
     for s in shards:
-        if a.gguf_dir:
+        if _sg:
+            continue                    # user-supplied file: no sha256 to match
+        elif a.gguf_dir:
             verify_poly_own(s, *fam["sha256"][s.name], family)
         else:
             verify_poly_download(s, *fam["sha256"][s.name], family)
@@ -6761,11 +6787,11 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         if not have_guesser:
             say("  Its draft model lets it guess a few words ahead and check them at once (faster answers).")
             download(d.get("hf", fam["hf"]) + d["draft_model"], guesser)
-        verify_sha256(guesser, *fam["sha256"][guesser.name], own=bool(a.gguf_dir) and guesser.parent == models_dir)
+        _skip_or_verify(guesser, guesser.name)
     if mmproj is not None:
         if not have_mmproj:
             download(fam["mmproj_hf"] + fam["mmproj"], mmproj, "vision encoder")
-        verify_sha256(mmproj, *fam["sha256"][mmproj.name], own=bool(a.gguf_dir) and mmproj.parent == models_dir)
+        _skip_or_verify(mmproj, mmproj.name)
         ok(f"vision encoder: {mmproj}")
     ok("model file present")
 
@@ -6819,8 +6845,10 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         args += ["--threads", str(threads)]
         ok(f"hybrid CPU ({cores[0]} performance + {cores[1]} efficiency cores): {threads} CPU threads for the experts "
            "outside VRAM (--threads in the config)")
+    base = custom_gguf_tag(_sg, model) if _sg else None
     cfg = {"exe": str(eng / POLY_EXE), "args": args, "cwd": str(ROOT), "tokenizer": str(pack / "tokenizer"),
-           "model_name": f"{fam['name']}-{model.lower()}", "display_name": f"{title} {model}",
+           "model_name": base.lower() if base else f"{fam['name']}-{model.lower()}",
+           "display_name": base if base else f"{title} {model}",
            "log": str(ROOT / f"strata-{tag.lower()}.log"), "lib_dirs": lib_dirs, "port": port}
     if multi:                                          # the server passes --layer-split and orders the cards
         cfg["gpu"], cfg["gpus_asked"] = multi, True
@@ -7083,6 +7111,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
     engine, the GGUF (pinned revision, size and SHA-256), the tokenizer from the GGUF, the config and the start
     script.  The engine places the experts itself (every one in VRAM when they fit, else the most-used ones there and
     the rest on the CPU), so there is no pack, profile or RAM budget to choose."""
+    _sg = getattr(a, "_custom_gguf_shards", None)   # custom-gguf shards, or None if not using a user-supplied file
     fam = OWN_PATH_FAMILIES[family]
     say()
     say(f"  {fam['title']} - {fam['by']}: {fam['about']}")
@@ -7112,7 +7141,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
                      f"choose a smaller size, or --model {model} --yes to install it anyway", "  Install it anyway?")
         warn(f"installing {model} with {ram:.0f} GB of RAM, as you chose")
     ok(f"size: {model}")
-    tag = fam["tag"] + model
+    tag = fam["tag"] + custom_gguf_tag(_sg, model)
     rec_ctx = own_path_context(fam, gpu.get("vram_gb", 0.0))
     if a.context:
         ctx = a.context
@@ -7147,8 +7176,8 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         warn(f"--rope-scaling / --kv / --resident-budget-gib / --low-ram are Flash-Next settings: {fam['title']} "
              "does not use them")
     folder = Path(a.gguf_dir) if a.gguf_dir else Path(a.models_dir) / tag
-    gguf = folder / fam["file"].format(q=model)
-    size = fam["sha256"][gguf.name][0]
+    gguf = (_sg[0] if _sg else folder / fam["file"].format(q=model))
+    size = fam["sha256"].get(gguf.name, [0])[0]
     part = gguf.with_name(gguf.name + ".part")
     left = 0 if gguf.exists() and done(gguf) else (size - (part.stat().st_size if part.is_file() else 0)) / 1e9
     if left and free_gb(folder) < left + 1:
@@ -7169,23 +7198,33 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
     ok(f"engine: {eng / EXE}")
 
     step(5, f"downloading {fam['title']} {model}")
-    if gguf.exists() and done(gguf):
+    if _sg:                                             # user-supplied file: exists (validated in resolve), no pinned hash
+        ok(f"{gguf.name} present")
+    elif gguf.exists() and done(gguf):
         ok(f"{gguf.name} already downloaded")
+        verify_sha256(gguf, *fam["sha256"][gguf.name], own=bool(a.gguf_dir))
     else:
         if a.gguf_dir:
             fail(f"{gguf} is missing", f"put {gguf.name} in {folder}, or drop --gguf-dir to download it")
         download(fam["hf"] + gguf.name, gguf)
-    verify_sha256(gguf, *fam["sha256"][gguf.name], own=bool(a.gguf_dir))
+        verify_sha256(gguf, *fam["sha256"][gguf.name], own=bool(a.gguf_dir))
     ok(f"model file: {gguf}")
     mmproj = folder / fam["mmproj"]
     if vision != "none":                               # the image encoder: Unsloth's mmproj, pinned, size + SHA-256 checked
-        if mmproj.exists() and done(mmproj):
+        if _sg and not mmproj.is_file():
+            cands = list(folder.glob("*mmproj*"))     # user-supplied: accept any file with "mmproj" in the name
+            if len(cands) == 1:
+                mmproj = cands[0]
+        if _sg and mmproj.is_file():
+            ok(f"{mmproj.name} present")
+        elif mmproj.exists() and done(mmproj):
             ok(f"{mmproj.name} already downloaded")
+            verify_sha256(mmproj, *fam["sha256"][mmproj.name], own=bool(a.gguf_dir))
         else:
             if a.gguf_dir:
                 fail(f"{mmproj} is missing", f"put {mmproj.name} in {folder}, or drop --gguf-dir to download it")
             download(fam["mmproj_hf"] + mmproj.name, mmproj, "vision encoder")
-        verify_sha256(mmproj, *fam["sha256"][mmproj.name], own=bool(a.gguf_dir))
+            verify_sha256(mmproj, *fam["sha256"][mmproj.name], own=bool(a.gguf_dir))
         ok(f"vision encoder: {mmproj}")
 
     step(6, "preparing the model for PolyStrata")
@@ -7302,6 +7341,99 @@ def preview_family(a) -> int:
     return 0
 
 
+def resolve_custom_gguf(path_str: str) -> tuple[str, str, list[Path]]:
+    """--custom-gguf PATH: inspect the GGUF header, match it to a family/model,
+    and return (family, model, [shard paths])."""
+    _tools = str(ROOT / "tools")
+    if _tools not in sys.path:
+        sys.path.insert(0, _tools)
+    from strata_inspect import read_headers, fingerprint, verdict, load_fingerprints
+
+    p = Path(path_str)
+    files: list[Path]
+    if p.is_file() and p.suffix.lower() == ".gguf":
+        files = [p]
+    elif p.is_dir():
+        # group by shard stem so two models in one folder don't corrupt the fingerprint
+        def _shard_idx(f):
+            m = SHARD_NAME.search(f.name)
+            return int(m.group(1)) if m else 0
+
+        stems: dict[str, list[Path]] = {}
+        for f in sorted(p.iterdir(), key=lambda x: (_shard_idx(x), x.name)):
+            if f.suffix.lower() != ".gguf" or "mmproj" in f.name.lower():
+                continue
+            base = SHARD_NAME.search(f.name)
+            key = SHARD_NAME.sub("", f.name) if base else f.stem
+            stems.setdefault(key, []).append(f)
+        if not stems:
+            fail(f"{path_str} has no .gguf files", "point at a .gguf file or a folder containing them")
+        if len(stems) > 1:
+            keys = ", ".join(sorted(stems))
+            fail(f"{path_str} contains shards of several models ({keys})",
+                 "put one model's shards in their own folder, or point at the single .gguf file directly")
+        files = stems[list(stems)[0]]   # exactly one model: use all its shards
+    else:
+        fail(f"{path_str} is neither a .gguf file nor a folder of GGUF shards",
+             "give the path to one .gguf file, or a folder holding all its shards")
+
+    from quantscope import Source
+    sources = [Source(name=f.name, size=f.stat().st_size, path=str(f)) for f in files]
+    arch, tensors = read_headers(sources)
+    fp = fingerprint(arch, tensors)
+    kind, sentence = verdict(fp, load_fingerprints())
+
+    if kind in ("known", "layout"):
+        # parse family/model from the matching key(s) in the table
+        table = load_fingerprints()
+        known = {k: v for k, v in table.items() if not k.startswith("_")}
+        if kind == "known":
+            matches = [k for k, v in known.items()
+                       if v["expert_bytes"] == fp["expert_bytes"] and v["bytes"] == fp["bytes"]
+                       and v["tensors"] == fp["tensors"]]
+        else:  # layout
+            matches = [k for k, v in known.items() if v["expert_bytes"] == fp["expert_bytes"]]
+        if len(matches) > 1:
+            say(f"Strata: {sentence}")
+            fail(f"this GGUF's header matches several entries ({', '.join(sorted(matches))})",
+                 "use --inspect to read the full explanation, then pick explicitly with --family X --model Y")
+        fam_model = matches[0].split("/")
+        return fam_model[0], fam_model[1], files
+
+    if kind == "family":
+        # prefer the strata-poly engine (FAMILIES) over the Strata project's own path (OWN_PATH_FAMILIES)
+        from strata_inspect import PREVIEW_ARCHS, POLY_ARCHS
+        title = PREVIEW_ARCHS.get(fp["arch"], "") or POLY_ARCHS.get(fp["arch"], "")
+        fam, models_dict = None, None
+        for table in (FAMILIES, OWN_PATH_FAMILIES):
+            for k, v in table.items():
+                if v.get("title") == title:
+                    fam = k
+                    models_dict = v["models"]
+                    break
+            if fam:
+                break
+        if not fam:
+            say(f"Strata: {sentence}")
+            fail("cannot install this GGUF with --custom-gguf",
+                 "use --inspect to read the full explanation, or give it to --gguf-dir")
+        # derive the size from the filename's quant token (e.g. "Q4_K_M" in "...-Q4_K_M.gguf")
+        m_q = GGUF_QUANT.search(files[0].name)
+        quant = m_q.group(1) if m_q else Path(SHARD_NAME.sub("", files[0].name)).stem.rsplit("-", 1)[-1]
+        model = next((m for m in models_dict if quant.lower().replace("_", "") in m.replace("_", "").lower()
+                      or m.lower().endswith(quant.lower())), None)
+        if not model:
+            model = sorted(models_dict)[0]
+            warn(f"Strata: {sentence}\n  your file's quant '{quant}' is not one setup offers "
+                 f"{', '.join(sorted(models_dict))}: it will run as-is; the RAM and VRAM estimates are for "
+                 f"{FAMILIES[fam]['title']}'s --model {model}")
+        return fam, model, files
+
+    say(f"Strata: {sentence}")
+    fail("cannot install this GGUF with --custom-gguf",
+         "use --inspect to read the full explanation, or give it to --gguf-dir")
+
+
 def main() -> int:
     if sys.platform == "darwin":                       # a Mac: metal/setup_mac.py (the Metal engine)
         return mac_setup(sys.argv[1:])
@@ -7388,6 +7520,9 @@ def main() -> int:
     ap.add_argument("--inspect", nargs="+", metavar=("SOURCE", "VARIANT"),
                     help="what a GGUF is and whether PolyStrata runs it, from its headers only (no download): a file, a "
                          "folder, a URL, ms:owner/repo (ModelScope) or hf:owner/repo, and optionally a variant name")
+    ap.add_argument("--custom-gguf", metavar="PATH",
+                    help="a .gguf file or folder of shards you already have: setup inspects it, matches it to a family "
+                         "and size, and installs without downloading the model")
     ap.add_argument("--cuda", choices=["12", "13", "auto"], default=os.environ.get("STRATA_CUDA") or None,
                     help="NVIDIA: the CUDA toolkit of this model's engine. auto (default): CUDA 13, the ready-made "
                          "engine; CUDA 12 (experimental) when a chosen card is older than CUDA 13 supports (Pascal, "
@@ -7429,6 +7564,7 @@ def main() -> int:
                          "sycl = Intel Arc, EXPERIMENTAL: Linux, built from source (docs/INTEL_ARC.md)")
     ap.add_argument("--skip-build", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
+    a._custom_gguf_shards = None                      # set by --custom-gguf; None means "not using your own file"
     # a strata-poly family's own size (FAMILIES[f]["models"]) is checked by poly_setup, which names the family
     if a.model and a.model not in MODELS and a.family not in PREVIEW_FAMILIES and             not any(a.model in d.get("models", {}) for d in FAMILIES.values()):
         ap.error(f"--model {a.model} is a size of " + ", ".join(f"--family {f}" for f, d in PREVIEW_FAMILIES.items()
@@ -7437,6 +7573,28 @@ def main() -> int:
         os.environ["STRATA_SOURCE"] = a.source
     if a.inspect:                                      # headers only: nothing is installed
         sys.exit(subprocess.run([sys.executable, str(ROOT / "tools" / "strata_inspect.py"), *a.inspect[:2]]).returncode)
+    if a.custom_gguf:                                   # your own GGUF: inspect it, match it, skip download
+        _fam, _model, a._custom_gguf_shards = resolve_custom_gguf(a.custom_gguf)
+        p = Path(a.custom_gguf)
+        if (a.family and a.family != _fam) or (a.model and a.model != _model):
+            fail(f"--custom-gguf resolves to --family {_fam} --model {_model}, "
+                 f"but you chose --family {a.family} --model {a.model}",
+                 f"--custom-gguf files pick their own family and model: drop the conflicting flags, or use a GGUF of your chosen size")
+        if a.gguf_dir:                                  # explicit --gguf-dir conflicts with custom-gguf (no download)
+            warn(f"--gguf-dir {a.gguf_dir} is ignored: --custom-gguf files are not downloaded")
+        a.gguf_dir = str(p) if p.is_dir() else str(p.parent)
+        a.family, a.model = _fam, _model
+        # validate the resolved pair: this engine path must be able to install that size
+        if _fam in OWN_PATH_FAMILIES:
+            ok_models = OWN_PATH_FAMILIES[_fam]["models"]
+        elif _fam in FAMILIES and "models" in FAMILIES[_fam]:
+            ok_models = FAMILIES[_fam]["models"]
+        else:
+            ok_models = family_models(_fam)
+        if a.model not in ok_models:
+            avail = sorted(ok_models)
+            fail(f"--custom-gguf matched --family {_fam} --model {_model}, but {a.family}'s engine path cannot install it",
+                 f"available sizes for {a.family}: {', '.join(avail)}")
     if a.backend == "sycl":                            # Intel Arc: the SYCL port's own setup (sycl/setup_intel.py)
         return sycl_setup(sys.argv[1:])
     if a.resident_budget_gib is not None and not a.resident_budget_gib > 0:
@@ -7764,7 +7922,10 @@ def main() -> int:
         # not a risk the user could take: the HIP engine has no NVFP4 expert kernels at all, so it would not start
         fail(f"{fam['title']} runs on NVIDIA cards only: the AMD engine has no NVFP4 kernels",
              "UD-IQ4_XS is about the same size and runs on AMD: --family unsloth --model UD-IQ4_XS")
-    if fam.get("ready") and a.gguf_dir:
+    if fam.get("ready") and a._custom_gguf_shards:
+        fail(f"--custom-gguf does not apply to {fam['title']}: its files are ready-made packs, not GGUF shards",
+             "drop --custom-gguf; setup downloads the pack for you")
+    elif fam.get("ready") and a.gguf_dir:
         warn(f"--gguf-dir does not apply to {fam['title']}: its files are ready-made packs, not GGUF shards")
         a.gguf_dir = None
     ok(f"model: {fam['title']}")
@@ -7857,7 +8018,7 @@ def main() -> int:
     ok(f"size: {model}")
     if MODELS[model].get("license"):                   # the ready-made packs: each size has its own license
         say(f"  Its license: {MODELS[model]['license']}")
-    tag = fam["tag"] + model                           # names of the pack, config and start script
+    tag = fam["tag"] + custom_gguf_tag(a._custom_gguf_shards, model)
     small = min(x["vram_gb"] for x in chosen)         # each card keeps its layers' KV of the whole context
     rec_ctx = 32768 if small < 14 else 65536 if small < 20 else 131072
     if budget is not None:                             # UD-Q4_K_XL: every GB of KV is a GB fewer of cached experts
@@ -8017,7 +8178,8 @@ def main() -> int:
         shards = [ready_where(models_dir, f) for f in ready_files(model)]
     else:
         models_dir = Path(a.gguf_dir) if a.gguf_dir else Path(a.models_dir) / tag
-        shards = gguf_dir_shards(models_dir, fam, model) if a.gguf_dir else \
+        shards = (a._custom_gguf_shards if a._custom_gguf_shards
+                  else gguf_dir_shards(models_dir, fam, model)) if a.gguf_dir else \
             [models_dir / model_file(fam, model, i) for i in range(1, model_shards(fam, model) + 1)]
     problem = gguf_dir_problem(models_dir, shards[0], fam, model) if a.gguf_dir else None
     if problem:                                        # #444: files PolyStrata cannot run, or another choice's files
