@@ -3,6 +3,7 @@
 #include "strata/poly/kernels.hpp"
 #ifdef STRATA_POLY_GDN_MMA
 #include "gdn_mma.hpp"
+#include "strata/kernels/dp4a.hpp"
 #include "strata/kernels/gdn_mma_policy.hpp"
 #endif
 
@@ -2999,7 +3000,7 @@ __device__ __forceinline__ void attn_scores_q8(const int8_t* __restrict__ qc, co
 #pragma unroll
     for (int j = 0; j < PER / SCORE_VALUES; ++j)
 #pragma unroll
-        for (int i = 0; i < N; ++i) sumi[i] = __dp4a(q8_pack4(qc + (size_t) i * dim, base + SCORE_VALUES * j),
+        for (int i = 0; i < N; ++i) sumi[i] = STRATA_DP4A(q8_pack4(qc + (size_t) i * dim, base + SCORE_VALUES * j),
                                                      k4[j], sumi[i]);
     float acc[N];
 #pragma unroll
@@ -3053,7 +3054,7 @@ __device__ __forceinline__ void attn_scores_q8_sub(const int8_t* __restrict__ qc
         int sumi = 0;
 #pragma unroll
         for (int j = 0; j < PER / SCORE_VALUES; ++j)
-            sumi = __dp4a(q8_pack4(qch, base + SCORE_VALUES * j), k4[j], sumi);
+            sumi = STRATA_DP4A(q8_pack4(qch, base + SCORE_VALUES * j), k4[j], sumi);
         float acc = (float) sumi * (dk * q8_half(qdh[block]));
 #pragma unroll
         for (int off = LANES / 2; off > 0; off >>= 1) acc += __shfl_xor_sync(0xffffffffu, acc, off);
@@ -3144,7 +3145,7 @@ attn_score_reg_int8_kernel(const KvInt8 q8, const KvInt8 kq, float* __restrict__
             for (int i = 0; i < N; ++i) {
                 int sum = 0;
 #pragma unroll
-                for (int s = 0; s < STEPS; ++s) sum = __dp4a(qcode[i][s], kcode[s], sum);
+                for (int s = 0; s < STEPS; ++s) sum = STRATA_DP4A(qcode[i][s], kcode[s], sum);
                 acc[i] = (float) sum * (dk * qdel[i]);
             }
             int which;
@@ -3546,10 +3547,10 @@ __global__ void dp4a_speed_kernel(const int8_t* __restrict__ A, const int8_t* __
     for (int i = 0; i < iters; ++i) {
 #pragma unroll
         for (int j = 0; j < 64; ++j) {
-            a0 = __dp4a(xa, xb, a0);
-            a1 = __dp4a(xa, xb, a1);
-            a2 = __dp4a(xa, xb, a2);
-            a3 = __dp4a(xa, xb, a3);
+            a0 = STRATA_DP4A(xa, xb, a0);
+            a1 = STRATA_DP4A(xa, xb, a1);
+            a2 = STRATA_DP4A(xa, xb, a2);
+            a3 = STRATA_DP4A(xa, xb, a3);
         }
     }
     C[lane] = (a0 + a1) + (a2 + a3);
