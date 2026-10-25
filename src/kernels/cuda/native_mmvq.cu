@@ -1747,7 +1747,7 @@ __global__ void native_mmvq_slots_kernel(S slots, int n_in, int n_out) {
 // expert's IQ4_XS down projection of 512 values: 2 blocks, 16 lanes): there the other warps only add zeros, so each
 // warp takes rows of its own instead - the same lanes' terms, the same three zero partials and the same warp_sum,
 // bit for bit, with a quarter of the blocks and no shared memory or barrier.  Qwen3.6 UD-Q3_K_M on an RX 7800 XT:
-// the down products were 32% of a decode's GPU time at ~75 GB/s.  STRATA_SLOTS_WARP=0 keeps the block-per-rows kernel.
+// the down products were 32% of a decode's GPU time at ~75 GB/s.  Taken where native_mmvq_slots_wide() says so.
 template<typename F, int ROWS, typename S, int G = 1>
 __launch_bounds__(WARPS * WARP)
 __global__ void native_mmvq_slots_warp_kernel(S slots, int n_in, int n_out) {
@@ -1797,11 +1797,7 @@ __global__ void native_mmvq_slots_warp_kernel(S slots, int n_in, int n_out) {
 template<typename F, typename S>
 void launch_slots(const S& slots, int count, int n_in, int n_out, cudaStream_t s) {
     const dim3 threads(WARP, WARPS);
-    static const bool warp_rows = [] {
-        const char* v = std::getenv("STRATA_SLOTS_WARP");
-        return v == nullptr || v[0] != '0';
-    }();
-    if (warp_rows && n_in / F::DIV * F::T <= WARP && n_in % F::DIV == 0) {
+    if (native_mmvq_slots_wide() && n_in / F::DIV * F::T <= WARP && n_in % F::DIV == 0) {
         constexpr int ROWS = 2;
         if (n_in / F::DIV * F::T <= WARP / 2) {   // a row in half a warp: two rows' groups a warp
             const dim3 blocks(unsigned((std::size_t(n_out) + 2 * ROWS * WARPS - 1) / (2 * ROWS * WARPS)), unsigned(count));
@@ -3242,6 +3238,18 @@ void launch_slots_of(int ggml_type, const S& slots, int count, int n_in, int n_o
 }
 
 }  // namespace
+
+bool native_mmvq_slots_wide() {
+    static const bool on = [] {
+        const char* v = std::getenv("STRATA_SLOTS_WARP");
+#if defined(__HIPCC__)
+        return v == nullptr || v[0] != '0';
+#else
+        return v != nullptr && v[0] == '1';
+#endif
+    }();
+    return on;
+}
 
 bool native_mmvq_slots(int ggml_type, const MmvqSlots& slots, int count, int n_in, int n_out, void* stream) {
     if (!slots_kind(ggml_type)) return false;
