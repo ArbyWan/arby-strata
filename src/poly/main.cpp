@@ -879,7 +879,8 @@ int serve(Session& ss) {
         // drafts go in the tail (the server reads them from that; DONE below is what it uses for its figures).
         const double pp = r.prompt_ms > 0 ? 1000.0 * r.read / r.prompt_ms : 0.0;
         const double tg = r.decode_ms > 0 ? 1000.0 * r.produced / r.decode_ms : 0.0;
-        std::fprintf(stderr, "strata serve: prompt %lld tokens = %lld reused + %lld read in %.0f ms (%.1f tok/s), %lld generated in %.0f ms (%.1f tok/s)", n, r.resume, r.read, r.prompt_ms, pp, r.produced, r.decode_ms, tg);
+        std::fprintf(stderr, "strata serve: prompt %lld tokens = %lld reused + %lld read in %lld ms (%lld tok/s), %lld generated in %lld ms (%.1f tok/s)",
+                     n, r.resume, r.read, (long long)r.prompt_ms, (long long)pp, r.produced, (long long) r.decode_ms, tg);
         if (r.guessed > 0)   // MTP drafts: the ones guessed right of the total guesses made
             std::fprintf(stderr, ", drafts accepted %lld of %lld\n", r.guessed_right, r.guessed);
         else
