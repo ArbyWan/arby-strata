@@ -20,6 +20,19 @@ concerns the HIP reduction gap, not a claim of inventing sequence-split
 attention. The broader method is established by Flash-Decoding and the
 FlashAttention work.
 
+## Applicability to official Qwen3.6-35B-A3B
+
+The measured model is a community derivative. The official Qwen3.6-35B-A3B
+configuration independently matches every shape gate in this kernel:
+`head_dim=256`, 16 query heads, two KV heads (GQA8), and 10 full-attention
+layers among its 40 layers. Its full-attention decode therefore takes the same
+eligible path above 12,288 keys, with no sliding window or ring buffer.
+
+That establishes compatibility, not a measured speedup on the official model.
+Different weights, quantization, routing and CPU/GPU expert placement change
+how much of a generated token is attention. The official Tiel Coder artifact
+has not been run here either.
+
 ## Machine and build
 
 - RX 9070 XT, 16 GiB, gfx1201; PCIe 32 GT/s x16 observed.
@@ -36,7 +49,8 @@ FlashAttention work.
 
 ## Model and method
 
-Cyber-Tiel-Coder-35B-A3B, UD-Q4_K_XL GGUF. Context allocation 163,840;
+Cyber-Tiel-Coder-35B-A3B, UD-Q4_K_XL: a community `qwen35moe` GGUF from the
+same publisher, not PolyStrata's pinned Tiel Coder artifact. Context allocation 163,840;
 Q8_0 KV, whole KV allocation, prompt batch 2,048, reserve 1,536 MiB,
 conversation cache 2,048 MiB, six CPU workers, graphs disabled. Routed expert
 placement starts from one frozen profile; swaps, CPU share and tail skipping
