@@ -1,9 +1,9 @@
 // src/poly/kernels.cu - see the header.  The reference for every formula is llama.cpp's graph of the model and the
 // ggml ops it builds.  Where a kernel takes several tokens, blockIdx.y is the token unless it says otherwise.
 #include "strata/poly/kernels.hpp"
+#include "strata/kernels/dp4a.hpp"
 #ifdef STRATA_POLY_GDN_MMA
 #include "gdn_mma.hpp"
-#include "strata/kernels/dp4a.hpp"
 #include "strata/kernels/gdn_mma_policy.hpp"
 #endif
 
