@@ -9,6 +9,9 @@
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#if defined(STRATA_USE_HIP)
+#include "hip_value_split.cuh"
+#endif
 
 #include <algorithm>
 #include <climits>
@@ -2904,6 +2907,16 @@ void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int6
         // Two blocks of queries a launch block read the values half as often, where the launch still has
         // blocks for most of the card's 36 multiprocessors: for Qwen3.6's two tokens they are half as many and
         // slower, for three or four tokens and for Gemma 4's full layers faster.
+        // The scores are dead after softmax. Reuse them for the partial sums,
+        // leaving the transposed weights behind them intact. Off by default.
+#if defined(STRATA_USE_HIP)
+        if (wt && hip_value_split::requested(std::getenv("STRATA_HIP_VALUE_SPLIT")) &&
+            hip_value_split::fits(dim, n_head, kv_heads, keys, c, window, ring, whole, size_t(wt - score))) {
+            hip_value_split::run(wt, vcache, vq8.codes, vq8.scales, score, out, keys, n_head, kv_heads, first, c,
+                                 (long long) pos, at, (hipStream_t) stream);
+            continue;
+        }
+#endif
         const int dims = grid(dim, VALUE_DIMS);
         if (wt && blocks > 1 && kv_heads * dims * grid(blocks, 2) >= 32) {
             if (vq)
