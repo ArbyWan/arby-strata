@@ -7,6 +7,10 @@ option existed. The format halves the KV cache's VRAM and, on the models tested,
 Gemma 4 has its own two, in the same Q8_0 rule but its own layout: `--kv int8` and `--kv int8k`
 ([the int8 pair, below](#the-int8-pair-for-gemma-4-strata-poly---kv-int8-and---kv-int8k)).
 
+On `kolibri1`, `STRATA_KV_INT8=1` makes both the decode and the prompt read the q8_0 cache with the int8
+reader below (`attend_int8`) instead of the float q8 readers. It is experimental: the queries are quantized
+too, so the answers change slightly, and it is opt-in.
+
 ## What the format is
 
 A cache row holds one value a token for each KV head and each head dimension (`n_kv * head_dim` values).

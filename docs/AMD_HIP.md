@@ -467,7 +467,8 @@ Windows wheels in `.rocm-win` (the private venv `tools\hip\build_windows.bat` us
 build tools. The Windows path has run one model on one card (Tiel Coder 35B-A3B below); every other one there is
 unreported, so setup warns before it installs a model.
 
-- Install as for NVIDIA: `./setup.sh --family qwen36` (or `lfm25`, `flint`, `ornith`, `gemma4`, `tiel`, `glm`, `deepseek`).
+- Install as for NVIDIA: `./setup.sh --family qwen36` (or `lfm25`, `flint`, `ornith`, `gemma4`, `tiel`, `glm`,
+  `deepseek`, `kolibri`).
   Setup compiles the engine for the card into `engine-poly/` (`build_engine_poly_hip`; on Windows
   `build_engine_poly_hip_win`), with ROCm from a system install or AMD's wheels in `.venv` on Linux and from
   `.rocm-win` on Windows, as for the main engine, and compiles again after a `git pull` that changed the
@@ -493,8 +494,8 @@ unreported, so setup warns before it installs a model.
   | Ornith 1.5 APEX-I-Mini | 40 tokens/s | 444 / 43 tokens/s |
 
   The first tokens after a load come slower while the expert cache fills (the port's own steady-state figures
-  were 64 and 35 tokens/s, with 5,125 and 4,517 experts in VRAM). Gemma 4 and GLM have not been tried on an AMD
-  card, and setup warns so.
+  were 64 and 35 tokens/s, with 5,125 and 4,517 experts in VRAM). Gemma 4, GLM and Kolibri 1 have not been tried
+  on an AMD card, and setup warns so.
 - Measured under Windows 11 on an RX 9070 XT (gfx1201, 16 GB; Ryzen 7 7800X3D, 64 GB of RAM), engine 0.1.45
   compiled by setup from AMD's TheRock wheels (ROCm 10.2.0a20260930), Tiel Coder 35B-A3B UD-Q3_K_XL, 32K of
   context, `--kv-whole`, one request at a time: the engine loaded in 8.5 s (15.5 s the first time) with 8,031 of

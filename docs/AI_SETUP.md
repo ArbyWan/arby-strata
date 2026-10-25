@@ -108,6 +108,14 @@ has three sizes. Leave `--model` out: setup takes UD-Q3_K_M (APEX-I-COMPACT for 
 with too little RAM for it. The largest is by name, `--model UD-Q4_K_M` or `--model APEX-I-QUALITY`.
 Take one only when the user asks for it; [BACKENDS.md](BACKENDS.md#install) has what was measured.
 
+`--family kolibri` (Kolibri 1, by Aleph Alpha, in Hob-forge's own GGUF conversion) is a new model on the same
+engine, and experimental: Linux or Windows, one or two NVIDIA cards of 8 GB or more (it has run on one and on two
+32 GB V100s, and on a 12 GB one under Windows), a 29 to 48 GB download, about 33 to 52 GB of RAM beside an 8 GB
+card by setup's estimate and about 16 to 26 GB beside a 32 GB one, no images and no draft model. At 131K context
+one 32 GB V100 wrote 91 tokens/s and read a 32K prompt at 1,017 tokens/s (first token 32.7 s); two with the
+layers split wrote 93 and read it at 2,179 (first token 15.3 s); three runs, the medians above. `--model`
+takes Q4_K_M, Q2_K on a PC with little RAM, or Q3_K_M by name. The support is new, the GGUF independent: ask first.
+
 ## 4. Run setup without questions
 
 From the PolyStrata folder (Windows: in `cmd`, or `cmd /c START-HERE.bat ...` from PowerShell):
