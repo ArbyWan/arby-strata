@@ -2638,7 +2638,9 @@ std::size_t native_q8_1_bytes(int n_in, int ncols) {
 }
 
 void native_quantize_q8_1(const float* x, void* x_q8_1, int n_in, int ncols, void* stream) {
-    validate_shape(n_in, ncols);
+    // one flat vector whatever ncols is (below): up to kMmvqSlotsMax columns, a slots launch's activations
+    validate_shape(n_in, 1);
+    if (ncols < 1 || ncols > kMmvqSlotsMax) throw std::invalid_argument("native_quantize_q8_1 requires 1 <= ncols <= 32");
     validate_pointer(x);
     validate_pointer(x_q8_1);
     validate_stream(stream);
@@ -3224,8 +3226,8 @@ void launch_slots_of(int ggml_type, const S& slots, int count, int n_in, int n_o
 
 bool native_mmvq_slots(int ggml_type, const MmvqSlots& slots, int count, int n_in, int n_out, void* stream) {
     if (!slots_kind(ggml_type)) return false;
-    if (n_out <= 0 || count < 1 || count > MAX_NCOLS)
-        throw std::invalid_argument("native MMVQ requires n_out > 0 and 1 to 8 matrices");
+    if (n_out <= 0 || count < 1 || count > kMmvqSlotsMax)
+        throw std::invalid_argument("native MMVQ requires n_out > 0 and 1 to 32 matrices");
     for (int i = 0; i < count; ++i) {
         validate_pointer(slots.w[i]);
         validate_pointer(slots.x[i]);

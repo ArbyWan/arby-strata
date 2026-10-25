@@ -22,7 +22,8 @@ namespace strata::poly {
 constexpr uint32_t kTypeF32 = 0, kTypeBF16 = 30;
 constexpr int kMaxUsed = 32;
 constexpr int kSumRows = 32;        // routed experts one launch adds into their tokens' rows (ScaledRows)
-constexpr int kSlots = 8;           // cached experts one launch multiplies (kernels::MmvqSlots)
+constexpr int kSlots = 32;          // cached experts one launch multiplies (kernels::MmvqSlots; 8 until 2026-10-25:
+                                    // = kSumRows, so a launch's down rows are the ones one add_scaled sums, as before)
 constexpr int kCpuRows = 8;         // tokens whose CPU experts one call computes; a window has no more
 // From this many tokens, a call runs its routed experts on the GPU alone and copies the ones that are not cached
 // through VRAM.  Below it, that copy costs more than the CPU takes to compute the few experts.
