@@ -602,9 +602,11 @@ def echo_requests(log_path: str, offset: int) -> None:
             m = ENGINE_REQUEST.search(line)
             if m:
                 read_ms, gen_ms = float(m["read"]), float(m["gen_ms"])
-                print("[strata] request prompt %s cached %s output %s prompt_read %.0f ms total %.0f ms prefill %s "
-                      "tok/s decode %s tok/s" % (m["prompt"], m["reused"], m["gen"], read_ms, read_ms + gen_ms, m["pp"],
-                                                 m["tg"]), flush=True)
+                drafts = ""
+                if m["drafts_accepted"]:                       # the engine had MTP drafts on this request
+                    drafts = f", drafts accepted {m["drafts_accepted"]} of {m["drafts_offered"]}"
+                print(f"[strata] request prompt {m["prompt"]} cached {m["reused"]} output {m["gen"]} prompt_read {read_ms:.0f} ms "
+                      f"total {(read_ms + gen_ms):.0f} ms prefill {m["pp"]} tok/s decode {m["tg"]} tok/s{drafts}", flush=True)
 
 
 def experts_loading_words(args: list, size: str) -> str:
