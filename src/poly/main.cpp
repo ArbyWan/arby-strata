@@ -874,6 +874,16 @@ int serve(Session& ss) {
             std::fflush(stdout);
             continue;
         }
+        // STRATA_REQUEST_LINES=1: one stdout line per finished request, like Strata's own engine (the same summary, to
+        // the log on stderr so echo_requests picks it up): prompts, cached, fresh tokens read, and both rates.  Any
+        // drafts go in the tail (the server reads them from that; DONE below is what it uses for its figures).
+        const double pp = r.prompt_ms > 0 ? 1000.0 * r.read / r.prompt_ms : 0.0;
+        const double tg = r.decode_ms > 0 ? 1000.0 * r.produced / r.decode_ms : 0.0;
+        std::fprintf(stderr, "strata serve: prompt %lld tokens = %lld reused + %lld read in %.0f ms (%.1f tok/s), %lld generated in %.0f ms (%.1f tok/s)", n, r.resume, r.read, r.prompt_ms, pp, r.produced, r.decode_ms, tg);
+        if (r.guessed > 0)   // MTP drafts: the ones guessed right of the total guesses made
+            std::fprintf(stderr, ", drafts accepted %lld of %lld\n", r.guessed_right, r.guessed);
+        else
+            std::fprintf(stderr, "\n");
         // DONE <generated> <prompt> <prompt ms> <decode ms> <finish> <drafts accepted> <drafts offered> <reused>
         //      <experts from VRAM> <experts> <RAM blobs> <file blobs> <file MB> <prompt tokens read> <offloaded>
         const strata::poly::Stats& now = engine.stats();
