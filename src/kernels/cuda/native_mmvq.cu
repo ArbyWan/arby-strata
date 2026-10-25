@@ -1743,9 +1743,56 @@ __global__ void native_mmvq_slots_kernel(S slots, int n_in, int n_out) {
     }
 }
 
+// native_mmvq_slots_kernel when a row's blocks all fall to the first warp's lanes (blocks_per_row * T <= WARP, e.g. an
+// expert's IQ4_XS down projection of 512 values: 2 blocks, 16 lanes): there the other warps only add zeros, so each
+// warp takes rows of its own instead - the same lanes' terms, the same three zero partials and the same warp_sum,
+// bit for bit, with a quarter of the blocks and no shared memory or barrier.  Qwen3.6 UD-Q3_K_M on an RX 7800 XT:
+// the down products were 32% of a decode's GPU time at ~75 GB/s.  STRATA_SLOTS_WARP=0 keeps the block-per-rows kernel.
+template<typename F, int ROWS, typename S>
+__launch_bounds__(WARPS * WARP)
+__global__ void native_mmvq_slots_warp_kernel(S slots, int n_in, int n_out) {
+    const SlotPtrs at = slot_ptrs(slots, int(blockIdx.y));
+    const auto* w = static_cast<const typename F::Block*>(at.w);
+    const auto* x = static_cast<const Q81Block*>(at.x);
+    float* y = at.y;
+    const int lane = int(threadIdx.x);
+    const int row0 = ROWS * (int(blockIdx.x) * WARPS + int(threadIdx.y));
+    if (row0 >= n_out) return;   // whole warps: no barrier below
+    const int blocks_per_row = n_in / F::DIV;
+    float tmp[ROWS] = {};
+    for (int kbx = lane / F::T; kbx < blocks_per_row; kbx += F::BPI) {
+        const int kby = kbx * F::KBY;
+        const int kqs = F::kqs(lane);
+#pragma unroll
+        for (int i = 0; i < ROWS; ++i) {
+            if (row0 + i < n_out) {
+                const std::size_t block = std::size_t(row0 + i) * blocks_per_row + kbx;
+                tmp[i] += F::apply(F::load(w + block, kqs), x + kby, kqs);
+            }
+        }
+    }
+#pragma unroll
+    for (int i = 0; i < ROWS; ++i) {
+#pragma unroll
+        for (int l = 0; l < WARPS - 1; ++l) tmp[i] += 0.0f;   // the block kernel's partials of the other warps
+        tmp[i] = warp_sum(tmp[i]);
+        if (lane == i && row0 + i < n_out) y[row0 + i] = tmp[i];
+    }
+}
+
 template<typename F, typename S>
 void launch_slots(const S& slots, int count, int n_in, int n_out, cudaStream_t s) {
     const dim3 threads(WARP, WARPS);
+    static const bool warp_rows = [] {
+        const char* v = std::getenv("STRATA_SLOTS_WARP");
+        return v == nullptr || v[0] != '0';
+    }();
+    if (warp_rows && n_in / F::DIV * F::T <= WARP && n_in % F::DIV == 0) {
+        constexpr int ROWS = 2;
+        const dim3 blocks(unsigned((std::size_t(n_out) + ROWS * WARPS - 1) / (ROWS * WARPS)), unsigned(count));
+        native_mmvq_slots_warp_kernel<F, ROWS, S><<<blocks, threads, 0, s>>>(slots, n_in, n_out);
+        return;
+    }
     if (n_in / F::DIV < F::BPI) {
         constexpr int ROWS = 2;
         const dim3 blocks(unsigned((std::size_t(n_out) + ROWS - 1) / ROWS), unsigned(count));
