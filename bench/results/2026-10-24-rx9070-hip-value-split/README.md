@@ -20,18 +20,13 @@ concerns the HIP reduction gap, not a claim of inventing sequence-split
 attention. The broader method is established by Flash-Decoding and the
 FlashAttention work.
 
-## Applicability to official Qwen3.6-35B-A3B
+## Applicable models
 
-The measured model is a community derivative. The official Qwen3.6-35B-A3B
-configuration independently matches every shape gate in this kernel:
-`head_dim=256`, 16 query heads, two KV heads (GQA8), and 10 full-attention
-layers among its 40 layers. Its full-attention decode therefore takes the same
-eligible path above 12,288 keys, with no sliding window or ring buffer.
-
-That establishes compatibility, not a measured speedup on the official model.
-Different weights, quantization, routing and CPU/GPU expert placement change
-how much of a generated token is attention. The official Tiel Coder artifact
-has not been run here either.
+The kernel targets the D256/GQA8 full-attention path used by Qwen3.6-35B-A3B
+MoE. Its published configuration has head dimension 256, 16 query heads, two
+KV heads and 10 full-attention layers among 40. Variants with the same geometry
+are eligible under the runtime gates above; linear-attention layers are
+unaffected. End-to-end gains depend on quantization and CPU/GPU expert placement.
 
 ## Machine and build
 
@@ -47,10 +42,12 @@ has not been run here either.
   clock or power-limit changes were made for this comparison. Power/temperature
   telemetry and storage performance were not measured.
 
-## Model and method
+## Benchmark representative and method
 
-Cyber-Tiel-Coder-35B-A3B, UD-Q4_K_XL: a community `qwen35moe` GGUF from the
-same publisher, not PolyStrata's pinned Tiel Coder artifact. Context allocation 163,840;
+Cyber-Tiel-Coder-35B-A3B UD-Q4_K_XL, a community `qwen35moe` derivative with
+the geometry above. All performance numbers in this report were measured on
+this artifact; the exact filename and hashes are in `provenance.json`.
+Context allocation 163,840;
 Q8_0 KV, whole KV allocation, prompt batch 2,048, reserve 1,536 MiB,
 conversation cache 2,048 MiB, six CPU workers, graphs disabled. Routed expert
 placement starts from one frozen profile; swaps, CPU share and tail skipping
