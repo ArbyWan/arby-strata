@@ -916,12 +916,21 @@ captured HIP graph retains the path selected at capture time.
 
 The enabled reduction changes FP32 addition order, so its output need not be
 bitwise identical to the default. This is a targeted long-context decode
-optimization, not a new prefill implementation. On an RX 9070 XT with
-Cyber-Tiel-Coder 35B-A3B UD-Q4_K_XL and Q8_0 KV, three restarted pairs measured
-58.5 -> 59.8 tokens/s at 12K, 48.5 -> 52.3 at 32K and 36.5 -> 44.6 at 98K;
-prompt processing stayed within 3.8%. A separate results-only submission will
-carry the raw runs, reproduction commands and limitations. The engine logs
-whether this option can run once the model geometry is known.
+optimization, not a new prefill implementation. On an RX 9070 XT with a
+community Cyber-Tiel-Coder 35B-A3B UD-Q4_K_XL GGUF and Q8_0 KV, three restarted
+pairs measured 58.5 -> 59.8 tokens/s at 12K, 48.5 -> 52.3 at 32K and 36.5 ->
+44.6 at 98K; prompt processing stayed within 3.8%. Cyber-Tiel is a community
+`qwen35moe` derivative, not the project-pinned official Tiel Coder artifact. A
+separate results-only submission carries the raw runs, reproduction commands
+and limitations. The engine logs whether this option can run once the model
+geometry is known.
+
+The geometry also matches official Qwen3.6-35B-A3B: its published text config
+has head dimension 256, 16 query heads and two KV heads (GQA8), and 10 of its
+40 layers use full attention. The new path is therefore eligible for its
+long-context full-attention decode. Its speedup has not been measured here;
+different weights, quantization and CPU/GPU expert placement can change the
+amount of attention time in a token.
 
 The project's existing `STRATA_FDEC` path (PR #51) also splits decode
 attention into 1,024-key parts and merges them, but uses CUDA tensor cores and
