@@ -914,23 +914,26 @@ space are unavailable. Only the literal value `1` enables it; unset, `0`, and
 other values retain the default path. Set it before starting the engine: a
 captured HIP graph retains the path selected at capture time.
 
-The enabled reduction changes FP32 addition order, so its output need not be
-bitwise identical to the default. This is a targeted long-context decode
-optimization, not a new prefill implementation. On an RX 9070 XT with a
-community Cyber-Tiel-Coder 35B-A3B UD-Q4_K_XL GGUF and Q8_0 KV, three restarted
-pairs measured 58.5 -> 59.8 tokens/s at 12K, 48.5 -> 52.3 at 32K and 36.5 ->
-44.6 at 98K; prompt processing stayed within 3.8%. Cyber-Tiel is a community
-`qwen35moe` derivative, not the project-pinned official Tiel Coder artifact. A
-separate results-only submission carries the raw runs, reproduction commands
-and limitations. The engine logs whether this option can run once the model
-geometry is known.
+This targets the D256/GQA8 full-attention path used by Qwen3.6-35B-A3B:
+its published configuration has 16 query heads, two KV heads and 10
+full-attention layers among 40. Variants with the same geometry are eligible
+under the runtime gates above; linear-attention layers are unaffected.
+The engine logs availability once the model geometry is known.
 
-The geometry also matches official Qwen3.6-35B-A3B: its published text config
-has head dimension 256, 16 query heads and two KV heads (GQA8), and 10 of its
-40 layers use full attention. The new path is therefore eligible for its
-long-context full-attention decode. Its speedup has not been measured here;
-different weights, quantization and CPU/GPU expert placement can change the
-amount of attention time in a token.
+On the tested RX 9070 XT configuration, three restarted runs per flag measured
+58.5 -> 59.8 tokens/s at 12K, 48.5 -> 52.3 at 32K and 36.5 -> 44.6 at 98K.
+The 12K ranges overlap; the repeatable gains are +7.8% at 32K and +22.2% at 98K.
+Prompt processing stayed within 3.8%, and peak sampled VRAM was unchanged.
+
+Benchmark representative: Cyber-Tiel-Coder-35B-A3B UD-Q4_K_XL, a community
+`qwen35moe` derivative with this geometry, using Q8_0 KV. These numbers are
+measured on that artifact. End-to-end gains on other compatible variants
+depend on quantization and CPU/GPU expert placement. The separate results
+submission records exact artifacts, hashes, raw runs and reproduction commands.
+
+The enabled reduction changes FP32 addition order, so its output need not be
+bitwise identical to the default. The option targets long-context decode;
+it leaves prefill unchanged.
 
 The project's existing `STRATA_FDEC` path (PR #51) also splits decode
 attention into 1,024-key parts and merges them, but uses CUDA tensor cores and
