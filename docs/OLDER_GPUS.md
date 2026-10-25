@@ -161,6 +161,29 @@ Two things to know when measuring on such a card:
   of several (`native_gu_mt_min`), and how many drafts a window holds depends on timing. Add `STRATA_IQ_MT_MIN=1`
   (and `STRATA_PREFILL_CPU_SHARE=0`, `STRATA_ROUTE_TAIL_SKIP=0`) to compare two builds' answers byte for byte.
 
+### Tesla P100 (sm_60): building it again, and what ran (October 2026)
+
+Since 91fe6531 the `--kv int8` readers in `src/poly/kernels.cu` called `__dp4a`, which compute capability 6.0 does not
+have, so a build with `60` in `CMAKE_CUDA_ARCHITECTURES` stopped at `identifier "__dp4a" is undefined`. They now use
+`STRATA_DP4A` from `strata/kernels/dp4a.hpp`, as the i-quant kernels do; every other card compiles to `__dp4a` as
+before. The poly path's three cuBLAS calls use `CUBLAS_GEMM_DEFAULT`, as the Strata engine does, instead of the
+tensor-op hint (the P100 has no tensor cores).
+
+Built with CUDA 12.8 and gcc 14, `-DSTRATA_EXPERIMENTAL_SM60=ON`, `CMAKE_CUDA_ARCHITECTURES="60;61;75"`, with today's
+block sizes and launch bounds unchanged:
+
+- One Tesla P100-PCIE-16GB (driver 580.178.04) in a host with a Xeon E5-2450 v2 (AVX, no AVX2 or FMA) and 46 GB of
+  RAM. The default build stops there with SIGILL; `-DSTRATA_ISA_FLOOR=avx` ([Older CPUs](INSTALL.md#older-cpus-experimental))
+  runs. Tiel Coder 35B-A3B UD-Q5_K_XL, `--max-context 16384`: 5,341 of 10,240 routed experts in VRAM; a 6,085-token
+  prompt in 80 s, then 40 tokens at 27.7 tok/s; a 205-token prompt, then 128 tokens at 39.4 tok/s.
+- One Tesla P100-PCIE-16GB in a host with two Xeon Gold 6148 and 117 GB of RAM. GLM-5.3 Flash REAP50 Q3_K_M with its
+  expert profile, `--max-context 8192 --layer-split auto`: 616 of 6,192 routed experts in VRAM; a 4,768-token prompt
+  in 80 s, then 40 tokens at 1.4 tok/s; a 28-token prompt, then 128 tokens at 3.7 tok/s. Most experts run on the CPU
+  here, which sets that speed.
+
+Neither engine log shows a CUDA error, and both answers read correctly. One card each, so these are single-machine
+numbers, not a support claim.
+
 ### Quadro RTX 8000: measurements of existing switches
 
 The Quadro RTX 8000 is Turing (sm_75): it has FP16 tensor cores, but no native BF16 or TF32 tensor cores. Two
