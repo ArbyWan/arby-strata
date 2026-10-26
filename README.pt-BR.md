@@ -162,7 +162,7 @@ O mesmo modelo vem em v√°rios tamanhos, mais ou menos comprimidos: os menores s√
 | [Flint 40B-A2.5B](docs/models/flint.pt-BR.md) | UD-Q4_K_XL a partir de cerca de 40 GB de RAM | UD-Q3_K_XL | UD-Q6_K_XL, Q8_0 |
 | [Qwen3.6-35B-A3B](docs/models/qwen36.pt-BR.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M |
 | [Ornith 1.5](docs/models/ornith.pt-BR.md) | APEX-I-COMPACT | APEX-I-MINI | APEX-I-QUALITY |
-| [Gemma 4 26B-A4B](docs/models/gemma4.pt-BR.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M |
+| [Gemma 4 26B-A4B](docs/models/gemma4.pt-BR.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M, QAT-UD-Q4_K_XL |
 | [Tiel Coder 35B-A3B](docs/models/tiel.pt-BR.md) | UD-Q3_K_XL | UD-IQ3_XXS | UD-Q4_K_XL |
 | [MiniCPM-V 4.7 35B-A3B](docs/models/minicpmv.pt-BR.md) | Q4_K_M | mix_q3gud_im | Q6_K |
 

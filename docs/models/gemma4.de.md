@@ -25,19 +25,20 @@ Gemessen wie [Qwen3.6-35B-A3B](qwen36.de.md), auf denselben zwei PCs.
 | **UD-Q3_K_M** | 353-356 Tokens/s | 8,420-8,480 Tokens/s |
 | **UD-Q2_K_XL** | 332-338 Tokens/s | 7,940-7,970 Tokens/s |
 | **UD-Q4_K_M** | 335-346 Tokens/s | 8,320-8,390 Tokens/s |
+| **QAT-UD-Q4_K_XL** | 356-371 Tokens/s | 8,460-8,680 Tokens/s |
 
 </td></tr>
 </table>
 
-Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 2,130 Tokens/s gelesen und auf der Workstation mit 6,800.
+Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 2,130 Tokens/s gelesen und auf der Workstation mit 6,800. QAT-UD-Q4_K_XL wurde später mit der Engine von v0.1.45-poly.4 gemessen; UD-Q4_K_M, daneben mit dieser Engine gemessen, schrieb 333-353 Tokens/s und las 8,510-8,570. Auf dem Laptop noch nicht gemessen.
 
 ## Was du brauchst
 
 | | |
 | --- | --- |
 | **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 6 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Auf einer AMD-Karte läuft es als Beta unter Linux und unter Windows: Setup kompiliert die Engine auf deinem PC; bisher nur mit Qwen3.6 und Ornith auf einer RX 7600 getestet. |
-| **RAM** | Etwa **15, 18 oder 21 GB** neben einer 8-GB-Karte für die drei Größen, nach der Schätzung des Installers. Nach derselben Schätzung hält eine Karte mit 16 GB die beiden kleineren Größen ganz. Alle drei Größen liefen auf einem Laptop mit 32 GB. |
-| **Festplatte** | 11, 13 oder 17 GB für die Modelldatei und ihr Entwurfsmodell, 1 GB mehr, um Bilder zu lesen. |
+| **RAM** | Etwa **15, 18, 19 oder 21 GB** neben einer 8-GB-Karte für die vier Größen, nach der Schätzung des Installers. Nach derselben Schätzung hält eine Karte mit 16 GB die beiden kleineren Größen und die QAT-Datei ganz. Die drei Unsloth-Größen liefen auf einem Laptop mit 32 GB, die QAT-Datei auf der RTX 5090. |
+| **Festplatte** | 11, 13, 15 oder 17 GB für die Modelldatei und ihr Entwurfsmodell, 1 GB mehr, um Bilder zu lesen. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |
 
 Alles andere richtet der Installer ein, wie bei GLM 5.3 Flash. Unter Windows lädt er die Engine fertig aus dem
@@ -49,13 +50,14 @@ Läufe dort neu sind ([AMD_HIP.md](../AMD_HIP.md#strata-poly-on-amd-beta)).
 
 ## Welches Modell soll ich nehmen?
 
-Bisher drei Größen. Der Installer nimmt UD-Q3_K_M, auf einem PC mit weniger RAM UD-Q2_K_XL. UD-Q4_K_M wählt man mit Namen: `--model UD-Q4_K_M`.
+Bisher vier Größen. Der Installer nimmt UD-Q3_K_M, auf einem PC mit weniger RAM UD-Q2_K_XL. Die anderen beiden wählt man mit Namen: `--model UD-Q4_K_M`, `--model QAT-UD-Q4_K_XL`.
 
 | Größe | Was es ist | Download | RAM neben einer 8-GB-Karte |
 | --- | --- | ---: | ---: |
 | **UD-Q3_K_M** | das ganze Modell mit 3-Bit-Experten ([Unsloth](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF)) und Googles Entwurfsmodell dafür | 13 GB | etwa 18 GB |
 | **UD-Q2_K_XL** | dasselbe mit 2-Bit-Experten: am wenigsten RAM | 11 GB | etwa 15 GB |
 | **UD-Q4_K_M** | dasselbe mit 4- und 5-Bit-Experten | 17 GB | etwa 21 GB |
+| **QAT-UD-Q4_K_XL** | Googles quantisierungsbewusst trainierte Gewichte mit 4 Bit ([Unsloth](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF)), mit eigenem Entwurfsmodell | 15 GB | etwa 19 GB |
 
 Eine größere Karte hält mehr vom Modell und braucht weniger RAM: mit UD-Q3_K_M etwa 14 GB neben einer 12-GB-Karte und 10 GB, sobald die Karte alles hält. Das sind Schätzungen des Installers. Auf einem
 solchen PC wurden sie nicht geprüft.

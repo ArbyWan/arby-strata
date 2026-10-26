@@ -25,19 +25,20 @@ Medido como o [Qwen3.6-35B-A3B](qwen36.pt-BR.md), nos mesmos dois PCs.
 | **UD-Q3_K_M** | 353-356 tokens/s | 8,420-8,480 tokens/s |
 | **UD-Q2_K_XL** | 332-338 tokens/s | 7,940-7,970 tokens/s |
 | **UD-Q4_K_M** | 335-346 tokens/s | 8,320-8,390 tokens/s |
+| **QAT-UD-Q4_K_XL** | 356-371 tokens/s | 8,460-8,680 tokens/s |
 
 </td></tr>
 </table>
 
-Um prompt de 10,000 tokens é lido a 2,130 tokens/s no notebook e a 6,800 na estação de trabalho.
+Um prompt de 10,000 tokens é lido a 2,130 tokens/s no notebook e a 6,800 na estação de trabalho. QAT-UD-Q4_K_XL foi medido depois, com o motor da v0.1.45-poly.4; o UD-Q4_K_M, medido ao lado com esse motor, escreveu 333-353 tokens/s e leu 8,510-8,570. Ainda não medido no notebook.
 
 ## Do que você precisa
 
 | | |
 | --- | --- |
 | **Placa de vídeo** | Uma placa **NVIDIA** GeForce RTX série 20 ou mais nova com **8 GB de VRAM ou mais**. Cerca de 6 GB são ocupados antes do primeiro expert. Ele rodou numa placa de 32 GB, nessa placa limitada a 8 GB e na placa de 8 GB de um notebook. Em uma placa AMD ele também roda, em beta, no Linux e no Windows: o instalador compila o motor no seu PC; testado até agora com Qwen3.6 e Ornith em uma RX 7600. |
-| **RAM** | Cerca de **15, 18 ou 21 GB** ao lado de uma placa de 8 GB para os três tamanhos, pela estimativa do instalador. Pela mesma estimativa, uma placa de 16 GB guarda inteiros os dois tamanhos menores. Os três tamanhos rodaram em um notebook com 32 GB. |
-| **Disco** | 11, 13 ou 17 GB para o arquivo do modelo e o modelo de rascunho dele, 1 GB a mais para ler imagens. |
+| **RAM** | Cerca de **15, 18, 19 ou 21 GB** ao lado de uma placa de 8 GB para os quatro tamanhos, pela estimativa do instalador. Pela mesma estimativa, uma placa de 16 GB guarda inteiros os dois tamanhos menores e o arquivo QAT. Os três tamanhos da Unsloth rodaram em um notebook com 32 GB, o arquivo QAT na RTX 5090. |
+| **Disco** | 11, 13, 15 ou 17 GB para o arquivo do modelo e o modelo de rascunho dele, 1 GB a mais para ler imagens. |
 | **Sistema** | Linux ou Windows 10 / 11, e um driver NVIDIA atual. |
 
 O instalador cuida de todo o resto, como faz com o GLM 5.3 Flash. No Windows ele baixa o motor já compilado da
@@ -49,13 +50,14 @@ placa, como no Linux (as wheels TheRock da AMD em `.rocm-win`), e avisa que roda
 
 ## Qual modelo devo escolher?
 
-Três tamanhos por enquanto. O instalador escolhe UD-Q3_K_M, ou UD-Q2_K_XL num PC com menos RAM. UD-Q4_K_M é escolhido pelo nome: `--model UD-Q4_K_M`.
+Quatro tamanhos por enquanto. O instalador escolhe UD-Q3_K_M, ou UD-Q2_K_XL num PC com menos RAM. Os outros dois são escolhidos pelo nome: `--model UD-Q4_K_M`, `--model QAT-UD-Q4_K_XL`.
 
 | Tamanho | O que é | Download | RAM ao lado de uma placa de 8 GB |
 | --- | --- | ---: | ---: |
 | **UD-Q3_K_M** | o modelo inteiro com experts de 3 bits ([Unsloth](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF)), e o modelo de rascunho do Google para ele | 13 GB | cerca de 18 GB |
 | **UD-Q2_K_XL** | o mesmo com experts de 2 bits: o que pede menos RAM | 11 GB | cerca de 15 GB |
 | **UD-Q4_K_M** | o mesmo com experts de 4 e 5 bits | 17 GB | cerca de 21 GB |
+| **QAT-UD-Q4_K_XL** | os pesos do Google treinados com quantização (QAT), em 4 bits ([Unsloth](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF)), com o próprio modelo de rascunho | 15 GB | cerca de 19 GB |
 
 Uma placa maior guarda mais do modelo e precisa de menos RAM: com UD-Q3_K_M, cerca de 14 GB ao lado de uma placa de 12 GB e 10 GB quando a placa guarda tudo. São estimativas do instalador. Elas não foram
 conferidas num PC assim.

@@ -149,7 +149,7 @@ PolyStrata 的 [MCP 服务器](docs/MCP_SERVER.md)来安装、启动和停止 Po
 | [Flint 40B-A2.5B](docs/models/flint.zh-CN.md) | 内存约 40 GB 起 UD-Q4_K_XL | UD-Q3_K_XL | UD-Q6_K_XL, Q8_0 |
 | [Qwen3.6-35B-A3B](docs/models/qwen36.zh-CN.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M |
 | [Ornith 1.5](docs/models/ornith.zh-CN.md) | APEX-I-COMPACT | APEX-I-MINI | APEX-I-QUALITY |
-| [Gemma 4 26B-A4B](docs/models/gemma4.zh-CN.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M |
+| [Gemma 4 26B-A4B](docs/models/gemma4.zh-CN.md) | UD-Q3_K_M | UD-Q2_K_XL | UD-Q4_K_M, QAT-UD-Q4_K_XL |
 | [Tiel Coder 35B-A3B](docs/models/tiel.zh-CN.md) | UD-Q3_K_XL | UD-IQ3_XXS | UD-Q4_K_XL |
 | [MiniCPM-V 4.7 35B-A3B](docs/models/minicpmv.zh-CN.md) | Q4_K_M | mix_q3gud_im | Q6_K |
 
