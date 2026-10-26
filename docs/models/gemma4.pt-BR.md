@@ -30,14 +30,14 @@ Medido como o [Qwen3.6-35B-A3B](qwen36.pt-BR.md), nos mesmos dois PCs.
 </td></tr>
 </table>
 
-Um prompt de 10,000 tokens é lido a 2,130 tokens/s no notebook e a 6,800 na estação de trabalho. QAT-UD-Q4_K_XL foi medido depois, com o motor da v0.1.45-poly.4; o UD-Q4_K_M, medido ao lado com esse motor, escreveu 333-353 tokens/s e leu 8,510-8,570. Ainda não medido no notebook.
+Um prompt de 10,000 tokens é lido a 2,130 tokens/s no notebook e a 6,800 na estação de trabalho. QAT-UD-Q4_K_XL foi medido depois, com o motor da v0.1.45-poly.4; o UD-Q4_K_M, medido ao lado com esse motor, escreveu 333-353 tokens/s e leu 8,510-8,570. No notebook, com outros programas abertos e pouca RAM, ele rodou alternado com o UD-Q4_K_M: escreveu 50-62 tokens/s num chat contra 47-48, leu o prompt longo a 1,680-1,730 contra 1,660-1,670 e escreveu depois 65-68 contra 48-49.
 
 ## Do que você precisa
 
 | | |
 | --- | --- |
 | **Placa de vídeo** | Uma placa **NVIDIA** GeForce RTX série 20 ou mais nova com **8 GB de VRAM ou mais**. Cerca de 6 GB são ocupados antes do primeiro expert. Ele rodou numa placa de 32 GB, nessa placa limitada a 8 GB e na placa de 8 GB de um notebook. Em uma placa AMD ele também roda, em beta, no Linux e no Windows: o instalador compila o motor no seu PC; testado até agora com Qwen3.6 e Ornith em uma RX 7600. |
-| **RAM** | Cerca de **15, 18, 19 ou 21 GB** ao lado de uma placa de 8 GB para os quatro tamanhos, pela estimativa do instalador. Pela mesma estimativa, uma placa de 16 GB guarda inteiros os dois tamanhos menores e o arquivo QAT. Os três tamanhos da Unsloth rodaram em um notebook com 32 GB, o arquivo QAT na RTX 5090. |
+| **RAM** | Cerca de **15, 18, 19 ou 21 GB** ao lado de uma placa de 8 GB para os quatro tamanhos, pela estimativa do instalador. Pela mesma estimativa, uma placa de 16 GB guarda inteiros os dois tamanhos menores e o arquivo QAT. Os quatro tamanhos rodaram em um notebook com 32 GB. |
 | **Disco** | 11, 13, 15 ou 17 GB para o arquivo do modelo e o modelo de rascunho dele, 1 GB a mais para ler imagens. |
 | **Sistema** | Linux ou Windows 10 / 11, e um driver NVIDIA atual. |
 

@@ -30,14 +30,14 @@ Gemessen wie [Qwen3.6-35B-A3B](qwen36.de.md), auf denselben zwei PCs.
 </td></tr>
 </table>
 
-Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 2,130 Tokens/s gelesen und auf der Workstation mit 6,800. QAT-UD-Q4_K_XL wurde später mit der Engine von v0.1.45-poly.4 gemessen; UD-Q4_K_M, daneben mit dieser Engine gemessen, schrieb 333-353 Tokens/s und las 8,510-8,570. Auf dem Laptop noch nicht gemessen.
+Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 2,130 Tokens/s gelesen und auf der Workstation mit 6,800. QAT-UD-Q4_K_XL wurde später mit der Engine von v0.1.45-poly.4 gemessen; UD-Q4_K_M, daneben mit dieser Engine gemessen, schrieb 333-353 Tokens/s und las 8,510-8,570. Auf dem Laptop lief sie, mit anderen offenen Programmen und knappem RAM, abwechselnd mit UD-Q4_K_M: sie schrieb in einem Chat 50-62 Tokens/s gegen 47-48, las den langen Prompt mit 1,680-1,730 gegen 1,660-1,670 und schrieb danach 65-68 gegen 48-49.
 
 ## Was du brauchst
 
 | | |
 | --- | --- |
 | **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 6 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Auf einer AMD-Karte läuft es als Beta unter Linux und unter Windows: Setup kompiliert die Engine auf deinem PC; bisher nur mit Qwen3.6 und Ornith auf einer RX 7600 getestet. |
-| **RAM** | Etwa **15, 18, 19 oder 21 GB** neben einer 8-GB-Karte für die vier Größen, nach der Schätzung des Installers. Nach derselben Schätzung hält eine Karte mit 16 GB die beiden kleineren Größen und die QAT-Datei ganz. Die drei Unsloth-Größen liefen auf einem Laptop mit 32 GB, die QAT-Datei auf der RTX 5090. |
+| **RAM** | Etwa **15, 18, 19 oder 21 GB** neben einer 8-GB-Karte für die vier Größen, nach der Schätzung des Installers. Nach derselben Schätzung hält eine Karte mit 16 GB die beiden kleineren Größen und die QAT-Datei ganz. Alle vier Größen liefen auf einem Laptop mit 32 GB. |
 | **Festplatte** | 11, 13, 15 oder 17 GB für die Modelldatei und ihr Entwurfsmodell, 1 GB mehr, um Bilder zu lesen. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |
 

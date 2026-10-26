@@ -30,14 +30,14 @@ Mesuré comme [Qwen3.6-35B-A3B](qwen36.fr.md), sur les deux mêmes PC.
 </td></tr>
 </table>
 
-Un prompt de 10,000 tokens est lu à 2,130 tokens/s sur le portable et à 6,800 sur la station de travail. QAT-UD-Q4_K_XL a été mesuré plus tard, avec le moteur de v0.1.45-poly.4 ; UD-Q4_K_M, mesuré à côté avec ce moteur, a écrit 333-353 tokens/s et lu 8,510-8,570. Pas encore mesuré sur le portable.
+Un prompt de 10,000 tokens est lu à 2,130 tokens/s sur le portable et à 6,800 sur la station de travail. QAT-UD-Q4_K_XL a été mesuré plus tard, avec le moteur de v0.1.45-poly.4 ; UD-Q4_K_M, mesuré à côté avec ce moteur, a écrit 333-353 tokens/s et lu 8,510-8,570. Sur le portable, avec d'autres programmes ouverts et peu de RAM, il a tourné en alternance avec UD-Q4_K_M : il a écrit 50-62 tokens/s dans un chat contre 47-48, lu le long prompt à 1,680-1,730 contre 1,660-1,670 et écrit ensuite 65-68 contre 48-49.
 
 ## Ce qu'il vous faut
 
 | | |
 | --- | --- |
 | **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 6 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
-| **RAM** | Environ **15, 18, 19 ou 21 Go** à côté d'une carte de 8 Go pour les quatre tailles, d'après l'estimation de l'installeur. D'après la même estimation, une carte de 16 Go contient en entier les deux plus petites et le fichier QAT. Les trois tailles d'Unsloth ont tourné sur un portable de 32 Go, le fichier QAT sur la RTX 5090. |
+| **RAM** | Environ **15, 18, 19 ou 21 Go** à côté d'une carte de 8 Go pour les quatre tailles, d'après l'estimation de l'installeur. D'après la même estimation, une carte de 16 Go contient en entier les deux plus petites et le fichier QAT. Les quatre tailles ont tourné sur un portable de 32 Go. |
 | **Disque** | 11, 13, 15 ou 17 Go pour le fichier du modèle et son modèle brouillon, 1 Go de plus pour lire les images. |
 | **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |
 

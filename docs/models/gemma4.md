@@ -32,14 +32,14 @@ Measured the same way as [Qwen3.6-35B-A3B](qwen36.md), on the same two PCs.
 
 A prompt of 10,000 tokens is read at 2,130 tokens/s on the laptop and at 6,800 on the workstation. QAT-UD-Q4_K_XL was
 measured later, with the engine of v0.1.45-poly.4; UD-Q4_K_M measured beside it with that engine wrote 333-353 tokens/s
-and read 8,510-8,570. Not measured on the laptop yet.
+and read 8,510-8,570. On the laptop, with other programs open and RAM short, it was run in turn with UD-Q4_K_M: it wrote 50-62 tokens/s in a chat against 47-48, read the long prompt at 1,680-1,730 against 1,660-1,670, and wrote 65-68 after it against 48-49.
 
 ## What you need
 
 | | |
 | --- | --- |
 | **Graphics card** | One **NVIDIA** GeForce RTX 20 series card or newer with **8 GB of VRAM or more**. About 6 GB are taken before any expert. It has run on a 32 GB card, on that card held to 8 GB, and on a laptop's 8 GB card. On an AMD card it can run as a beta on Linux and under Windows: setup compiles the engine on your PC; tested so far with Qwen3.6 and Ornith on an RX 7600. |
-| **RAM** | About **15, 18, 19 or 21 GB** beside an 8 GB card for the four sizes, the installer's estimate. By the same estimate a card with 16 GB holds the two smaller sizes and the QAT file whole. The three Unsloth sizes have run on a laptop with 32 GB, the QAT file on the RTX 5090. |
+| **RAM** | About **15, 18, 19 or 21 GB** beside an 8 GB card for the four sizes, the installer's estimate. By the same estimate a card with 16 GB holds the two smaller sizes and the QAT file whole. All four sizes have run on a laptop with 32 GB. |
 | **Disk** | 11, 13, 15 or 17 GB for the model file and its draft model, 1 GB more to read pictures. |
 | **System** | Linux or Windows 10 / 11, and a current NVIDIA driver. |
 
