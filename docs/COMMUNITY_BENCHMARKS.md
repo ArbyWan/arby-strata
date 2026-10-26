@@ -56,6 +56,12 @@ and Qwen 64K/128K allocations with about 32K actual input. It includes thirteen 
 exact release commits and binary hashes, two retained LFM request failures, and an older-driver appendix.
 These October 22/24 results do not test v0.1.45-poly.4 or later releases.
 
+A [follow-up on the RX 6700 XT / Ryzen 5 3600, now with 64 GB RAM](../bench/results/2026-10-26-community-rx6700xt-poly2-poly4-memory/README.md)
+compares **v0.1.45-poly.2 and v0.1.45-poly.4** at 28 and 52 GiB container memory limits, all at 64K configured context.
+It includes 28 official suites, frozen expert-profile seeds, exact native HIP build hashes and four retained LFM
+agent-request failures. The earlier report stays intact; the new limits compare available capacity on the upgraded
+machine rather than recreating its old physical RAM.
+
 ### Comparing with llama.cpp
 
 `bench/bench_vs_llama.py` is the script Strata used for
