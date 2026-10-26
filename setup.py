@@ -6566,7 +6566,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         warn(f"{title} on AMD cards on Windows: EXPERIMENTAL.  Setup compiles the HIP engine here (AMD's ROCm "
              "wheels), which has run one model on an RX 9070 XT and nothing else yet; the log says where it stops "
              "if it does")
-    elif hip and family in ("glm", "deepseek", "lfm25", "flint", "gemma4", "tiel"):   # the engine runs on AMD, these models not yet
+    elif hip and family in ("glm", "deepseek", "flint"):   # the engine runs on AMD, these models not yet
         warn(f"{title} on the AMD card has not been tried: the engine runs there, this model was not")
     if cuda_tk == 12:
         warn(f"{title}'s engine with CUDA 12 is compiled here (the ready-made one is CUDA 13)" +
