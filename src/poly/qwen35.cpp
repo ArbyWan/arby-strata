@@ -10,6 +10,9 @@
 #ifdef STRATA_POLY_GDN_MMA
 #include "gdn_mma.hpp"
 #endif
+#if defined(STRATA_USE_HIP)
+#include "hip_value_split_policy.hpp"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -221,6 +224,18 @@ void Qwen35::assign_scratch() {
         std::fprintf(stderr, "strata-poly: STRATA_FDEC: decode attention %s\n",
                      fdec_ ? "through the tensor-core decode kernel" : "unchanged (no kernel for it on this card)");
     }
+#if defined(STRATA_USE_HIP)
+    // STRATA_HIP_VALUE_SPLIT=1: split the long-context weighted-value reduction in HIP's attend().
+    if (hip_value_split::requested(std::getenv("STRATA_HIP_VALUE_SPLIT")) && !hip_value_split_logged_) {
+        const bool ready = hip_value_split::fits(
+            head_dim_, n_head_, n_kv_, opt_.max_context, chunk_, 0, 0, false,
+            (size_t) chunk_ * n_head_ * opt_.max_context);
+        std::fprintf(stderr, "strata-poly: STRATA_HIP_VALUE_SPLIT: %s\n",
+                     ready ? "split value reduction on supported decode calls from 12,288 keys"
+                           : "unchanged (unsupported head shape, context or scratch)");
+        hip_value_split_logged_ = true;
+    }
+#endif
 }
 
 // A recurrent layer's convolution and delta-rule state lie one behind the other in state_ (alloc_caches()).
