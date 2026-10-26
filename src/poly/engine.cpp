@@ -2330,7 +2330,9 @@ bool Engine::moe(Layer& L, int il, int n, const std::function<void()>* first) {
             if (split_) cudaSetDevice(device_);   // one of the experts' threads, which every card's engine shares
             if (first && at == 0) (*first)();
             const size_t ff = (size_t) n_ff_exp_, q8_row = kernels::native_q8_1_bytes(n_ff_exp_);
-            const int per = rows_ >= kSlots ? kSlots : 1;   // the scratch holds rows_ experts' values
+            // the scratch holds rows_ experts' values, and a launch's down rows stay inside one add_scaled's kSumRows
+            const int most = kernels::native_mmvq_slots_wide() ? kSlots : 8;
+            const int per = rows_ >= most ? most : rows_ >= 8 ? 8 : 1;
             ScaledRows sum{};
             for (int i0 = 0; i0 < n_cached; i0 += per) {
                 const int m = std::min(per, n_cached - i0);

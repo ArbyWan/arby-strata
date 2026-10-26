@@ -588,8 +588,7 @@ def extract(gguf_path, out_dir) -> dict:
                               else ".ref/llama.cpp src/llama-vocab.cpp L396 (LLAMA_VOCAB_PRE_TYPE_QWEN35)",
         "ignore_merges": tk.ignore_merges,
     }
-    (out / "vocab.json").write_text(json.dumps(tk.ids, ensure_ascii=False), encoding="utf-8")
-    merges = ["%s %s" % k for k, _ in sorted(tk.ranks.items(), key=lambda kv: kv[1])]
+    merges =["%s %s" % k for k, _ in sorted(tk.ranks.items(), key=lambda kv: kv[1])]
     if tk.raw:      # its pieces can hold a newline, which a line a merge cannot
         (out / "merges.json").write_text(json.dumps(merges, ensure_ascii=False), encoding="utf-8")
     else:
@@ -602,6 +601,9 @@ def extract(gguf_path, out_dir) -> dict:
     tpl = GGUFFile(pathlib.Path(gguf_path)).metadata.get("tokenizer.chat_template")
     if tpl:
         (out / "chat_template.jinja").write_text(tpl, encoding="utf-8", newline="\n")
+    # last: setup and iq_pack.py take vocab.json as the sign that the folder is complete, so an extraction that
+    # stops part way is run again instead of leaving a tokenizer without its merges
+    (out / "vocab.json").write_text(json.dumps(tk.ids, ensure_ascii=False), encoding="utf-8")
     return cfg
 
 
