@@ -54,7 +54,7 @@ All throughput columns are tokens/s. TTFT is seconds. Qwen = Qwen3.6-35B-A3B UD-
 | Qwen ([raw](runs/qwen36-ud-q3_k_m__v0.1.45-poly.3__mma_on/results.json)) | v0.1.45-poly.3 | mma_on | 89.7 | 0.403 | 1446.9 | 1675.4 | 79.5 | 0 |
 | Qwen ([raw](runs/qwen36-ud-q3_k_m__v0.1.45-poly.3__mma_off/results.json)) | v0.1.45-poly.3 | mma_off | 88.8 | 0.413 | 1286.5 | 1442.7 | 79.5 | 0 |
 
-The same-day default Qwen pair measured 85.8 â†’ 91.8 chat tokens/s (+7.0%) from poly.2 to poly.3; Gemma measured 75.0 â†’ 78.0 (+4.0%). These are observed medians without significance estimates. The separate Qwen MMA pair measured +12.5% / +16.1% prefill at ~4K / ~16K; chat changed +1.0%, agent median was unchanged. Quality parity was not tested in this report.
+The same-day default Qwen pair measured 85.8 → 91.8 chat tokens/s (+7.0%) from poly.2 to poly.3; Gemma measured 75.0 → 78.0 (+4.0%). These are observed medians without significance estimates. The separate Qwen MMA pair measured +12.5% / +16.1% prefill at ~4K / ~16K; chat changed +1.0%, agent median was unchanged. Quality parity was not tested in this report.
 
 **LFM had two agent requests return no tokens.** They remain in the raw failures and are not counted as successful zero-throughput samples. Every other suite recorded zero failed requests. All thirteen suites recorded zero skips. Speed alone does not establish correct output or a model ranking; quantization, draft behavior and approximation settings differ.
 
