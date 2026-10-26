@@ -50,6 +50,12 @@ with per-request data, exact settings and a separate Qwen UD-Q4_K_M speed contro
 has Qwen3.6, LFM2.5, Tiel Coder and Gemma 4 QAT at 32K and 64K, a rerun of Qwen on a newer commit and a Gemma
 draft A/B; its Qwen3.6 and LFM2.5 rows land within a few percent of the first.
 
+An official-suite report from an [RTX 3060 12 GB, Xeon W-2145 and 32 GB RAM](../bench/results/2026-10-24-community-rtx3060-polystrata-poly2-poly3/README.md)
+compares **v0.1.45-poly.2 and v0.1.45-poly.3** on Windows: five model configurations at 32K, a Qwen MMA pair,
+and Qwen 64K/128K allocations with about 32K actual input. It includes thirteen suites with per-request data,
+exact release commits and binary hashes, two retained LFM request failures, and an older-driver appendix.
+These October 22/24 results do not test v0.1.45-poly.4 or later releases.
+
 ### Comparing with llama.cpp
 
 `bench/bench_vs_llama.py` is the script Strata used for
