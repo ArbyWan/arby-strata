@@ -36,6 +36,7 @@ leaves out.
 | [Dampfinchen](https://github.com/VecSzn/PolyStrata/discussions/44) | RTX 2060 | Core i7-9750H; 32 GB; system not stated | Gemma 4 26B-A4B QAT, file not stated; 555 experts in VRAM, `--vram-reserve-mib 120` | 64K, measured at 18K | not stated | 30 at 18K; slower as the context grows, about llama.cpp's speed near 85K | 900 at 18K | llama.cpp at 18K: 16 writing and 470 reading, steady as the context grows |
 | [HaldunEymen](https://github.com/VecSzn/PolyStrata/issues/92) | RTX 3060 12 GB, PCIe 3.0 | Ryzen 5 5600G; 63 GB DDR4; Linux Mint 22.3, the models on a SATA hard disk | Tiel Coder 35B-A3B UD-Q3_K_XL and Ornith 1.5 APEX-I-Compact, main at 5e16c627, `polystrata.py benchmark --prompt-tokens 24000` | 32K; the long prompt is 32,201 tokens for Tiel, 32,022 for Ornith | on; Tiel 71% to 81% of the guesses kept, Ornith 74% to 95% | Tiel: 73 to 85 in a short chat, 52 to 60 after the long prompt; Ornith: 80 to 82 and 58 to 59 | Tiel 1,078, Ornith 1,141 to 1,166 for the long prompt; its first token after 79 s and 28 s | Qwen3.8-Flash-Next IQ3_XXS on the Strata project's engine, the same PC: 41 to 44 writing |
 | [DRojasLey](https://github.com/VecSzn/PolyStrata/issues/98) | RX 7800 XT 16 GB (gfx1101) | Ryzen 7 5700X; 31.3 GB; Ubuntu 24.04.5, ROCm from AMD's wheels | Tiel Coder 35B-A3B UD-Q3_K_XL, main at 7b700758, `tools/strata_bench.py` | 128K, `--kv-whole`, `--kv q8_0`, `--vram-reserve-mib 4096` | on, 67% to 79% of the guesses kept | 86 in a short chat (80 to 102), 67 after a 32K prompt | 885 at 4K, 873 at 16K, 661 at 32K | the first report of Tiel Coder on an RX 7800 XT |
+| [Csavoldi](https://github.com/VecSzn/PolyStrata/issues/88) | 2x Tesla V100-PCIE-32GB (sm_70), the layers split over both | Xeon E5-2682 v4; 47 GB; Linux | Qwen3.6-35B-A3B UD-Q3_K_M, main at 7b700758 built with CUDA 12.9.1 and `-DSTRATA_EXPERIMENTAL_SM60=ON`, `tools/strata_bench.py` | 32K | not stated | 157.5 in a short chat (135 to 196), 134.2 in an agent session | 2,615 at 4K, 2,778 at 16K | the first report of strata-poly on a Volta card |
 
 Setup offers Tiel Coder now (`--family tiel`), and not the HauhauCS file. How to give setup such a file is in the
 [FAQ](FAQ.md#can-i-run-a-fine-tune-or-another-model-with-the-same-architecture).
@@ -175,6 +176,10 @@ fast.
   IQ2_XS with adaptive cache E4/S24: 48.23 accepted-decode tok/s (median of 5) on a modified, locally built engine (not an official release; source commit and hashes in provenance.json, steps in REPRODUCE.md).
 - [2026-10-12: Radeon 780M (gfx1103), Ryzen 7 8745HS, 60 GB RAM, GTT 50 GiB](../bench/results/2026-10-12-community-gfx1103/README.md):
   the gfx1103 port (native dot4, the gfx11 WMMA kernels, the exact speed switches and a calibrated hipBLASLt table), hand-built on ROCm 10.1, Q2_0 + MTP at 32K: prompts 90 tok/s plain, 186 with the table, 277 with the WMMA opt-ins (4K), decode 13.1 -> 14.3 tok/s; zero GPU resets.
+- [2026-10-26: 2x Tesla V100-PCIE-32GB (sm_70), Xeon E5-2682 v4, 47 GB RAM](https://github.com/VecSzn/PolyStrata/issues/95):
+  PolyStrata 0.1.45 in Docker on a CUDA 12.9 image built for sm_70, Qwen3.8-Flash-Next UD-IQ4_XS (Unsloth), 262,144-token context, `--kv int8`,
+  split over both cards; `tools/strata_bench.py --long`: chat 53.9 tok/s (27 to 89 as the expert cache warms), prompt
+  1,242 / 1,885 / 2,244 tok/s at 4K / 16K / 32K, agent turns 62.7 tok/s at a 69% cache hit.
 
 ## Run the benchmark
 

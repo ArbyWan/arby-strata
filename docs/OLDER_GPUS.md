@@ -77,7 +77,9 @@ image encoder with it. It goes in `engine-poly\` in place of the ready-made one,
 later setup without `--cuda 12` takes the ready-made one back. #220 is the Qwen engine's prompt path and does not
 apply here: on an RTX 5090 with driver 570, strata-poly built with CUDA 12.8 read Tiel Coder's 31,516-token prompts
 at 6,200 to 6,700 tokens/s. On a Pascal or Volta card setup adds `-DSTRATA_EXPERIMENTAL_SM60=ON`; strata-poly
-compiles for sm_61 and sm_70 with CUDA 12.4 and 12.8. It has not run on such a card. Built as compute_61 PTX only and
+compiles for sm_61 and sm_70 with CUDA 12.4 and 12.8. On two Tesla V100-PCIE-32GB, built with CUDA 12.9.1, it ran
+Qwen3.6 UD-Q3_K_M split over both cards at 157 tokens/s in a chat and read 4K and 16K prompts at 2,615 and 2,778
+tokens/s ([issue 88](https://github.com/VecSzn/PolyStrata/issues/88)). Built as compute_61 PTX only and
 run on an RTX 3080, which takes the Pascal code paths, Qwen3.6's greedy answer matched llama.cpp's for 60 of 64
 tokens (the sm_86 build: 64) and differed after that by a near tie. On Windows, with CUDA 12.9 and Visual Studio's
 14.44 compiler, it builds for sm_61 and for sm_89; the sm_89 build wrote the same 200 tokens of Qwen3.6 UD-Q2_K_XL as
