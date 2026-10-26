@@ -80,6 +80,7 @@ HF_REVISIONS = {
     "unsloth/GLM-5.3-Flash-GGUF": "621d456e93e926e4b52f85cff5f634358c1828f9",                          # 2026-10-05
     "mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF": "4c326713c52d13fdb40983a2a09a46cca8e88739",             # 2026-10-05
     "unsloth/gemma-4-26B-A4B-it-GGUF": "c099eb48e663fd284577b04978a94ffccb261841",                     # 2026-10-05
+    "unsloth/gemma-4-26B-A4B-it-qat-GGUF": "7b92b5b28818151e8669af2e45e88d6086f490dd",                 # 2026-10-26
     "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP": "bbe9e566f39e4fc9652ac66b71968289a03c520a",        # 2026-09-10
     "unsloth/Qwen3.6-35B-A3B-MTP-GGUF": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",                  # 2026-10-12
     "unsloth/DeepSeek-V4-Flash-0731-GGUF": "fbbb5b93fb787c21338159b0af3318bb3f4d9768",               # 2026-10-15
@@ -657,13 +658,29 @@ FAMILIES = {
                           "UD-Q4_K_M": {"about": "4- and 5-bit experts (Unsloth Dynamic); the same draft model",
                                         "download_gb": 17.4, "ram_gb": 21, "arena_gb": 14.3,
                                         "vram_beside_gb": 5.3,
-                                        "draft_model": "MTP/mtp-gemma-4-26B-A4B-it-Q8_0.gguf"}},
+                                        "draft_model": "MTP/mtp-gemma-4-26B-A4B-it-Q8_0.gguf"},
+                          # Google's quantization-aware trained checkpoint, quantized by Unsloth; its own repository,
+                          # with a draft model and an image encoder of the same names as the others but not the same
+                          "QAT-UD-Q4_K_XL": {"about": "Google's QAT weights, 4-bit (Unsloth Dynamic), with their own "
+                                                      "draft model",
+                                             "hf": hf("unsloth/gemma-4-26B-A4B-it-qat-GGUF"),
+                                             "file": "gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+                                             "mmproj_hf": hf("unsloth/gemma-4-26B-A4B-it-qat-GGUF"),
+                                             "download_gb": 14.7, "ram_gb": 19, "arena_gb": 12.8,
+                                             "vram_beside_gb": 4.1,
+                                             "draft_model": "MTP/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+                                             "sha256": {"mtp-gemma-4-26B-A4B-it-Q8_0.gguf":
+                                                        (461785600, "75f58e20c32281d1adc086c0569d53f147e8d81a7b8493cf4a73a028415f67af"),
+                                                        "mmproj-F16.gguf":
+                                                        (1193058784, "d00f211a7d4f7fb19bd9b75d8e9342eccffb5920b08fd9562167560fdfcc5dd1")}}},
                "sha256": {"gemma-4-26B-A4B-it-UD-Q3_K_M.gguf":
                           (12728497888, "811882f6df81c8ea204a5d382f196d6bd601245091786912d4c70df41cdfa052"),
                           "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf":
                           (10546934240, "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658"),
                           "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf":
                           (16947541728, "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f"),
+                          "gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf":
+                          (14249047104, "a7c5bc715f5ff8e99a3e8901ce7d2b42b402c669bf24f7c5250747633d0f5891"),
                           "mtp-gemma-4-26B-A4B-it-Q8_0.gguf":
                           (461766816, "6326fb9f5e487aa8dcdd313a091e3c67724cb2a666ec3b7d2895b5b26d93ed1b"),
                           "mmproj-F16.gguf":
@@ -6769,20 +6786,22 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
                 continue
             download(d.get("hf", fam["hf"]) + s.name, s)
     check_shards(shards)
+    # a size from another repository can ship a draft model or an image encoder of the family's file names
+    sha = {**fam["sha256"], **d.get("sha256", {})}
 
     def _skip_or_verify(path, sha_key):
         """Verify a downloaded file's SHA-256; skip for user-supplied files (header-matched, no pinned hash)."""
         if _sg:                       # header-matched: trust it, the user pointed at this file
             return
-        verify_sha256(path, *fam["sha256"][sha_key], own=bool(a.gguf_dir) and path.parent == models_dir)
+        verify_sha256(path, *sha[sha_key], own=bool(a.gguf_dir) and path.parent == models_dir)
 
     for s in shards:
         if _sg:
             continue                    # user-supplied file: no sha256 to match
         elif a.gguf_dir:
-            verify_poly_own(s, *fam["sha256"][s.name], family)
+            verify_poly_own(s, *sha[s.name], family)
         else:
-            verify_poly_download(s, *fam["sha256"][s.name], family)
+            verify_poly_download(s, *sha[s.name], family)
     if guesser is not None:
         if not have_guesser:
             say("  Its draft model lets it guess a few words ahead and check them at once (faster answers).")
@@ -6790,7 +6809,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         _skip_or_verify(guesser, guesser.name)
     if mmproj is not None:
         if not have_mmproj:
-            download(fam["mmproj_hf"] + fam["mmproj"], mmproj, "vision encoder")
+            download(d.get("mmproj_hf", fam["mmproj_hf"]) + fam["mmproj"], mmproj, "vision encoder")
         _skip_or_verify(mmproj, mmproj.name)
         ok(f"vision encoder: {mmproj}")
     ok("model file present")
