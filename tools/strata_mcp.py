@@ -175,7 +175,9 @@ FALLBACK_FAMILIES = {
                           "UD-Q2_K_XL": {"about": "2-bit i-quant experts (Unsloth Dynamic): the least RAM; the same "
                                                   "draft model", "download_gb": 11.0, "ram_gb": 15, "arena_gb": 8.7},
                           "UD-Q4_K_M": {"about": "4- and 5-bit experts (Unsloth Dynamic); the same draft model",
-                                        "download_gb": 17.4, "ram_gb": 21, "arena_gb": 14.3}}},
+                                        "download_gb": 17.4, "ram_gb": 21, "arena_gb": 14.3},
+                          "QAT-UD-Q4_K_XL": {"about": "Google's QAT weights, 4-bit (Unsloth Dynamic), with their own "
+                                                      "draft model", "download_gb": 14.7, "ram_gb": 19, "arena_gb": 12.8}}},
     "tiel": {"title": "Tiel Coder 35B-A3B", "about": "Ornith 1.5 quantized for coding, with the Sharp chat template; a "
                                                     "17 GB file, ~21 GB of RAM beside an 8 GB card; a smaller and a "
                                                     "larger size too", "tag": "tiel-",
