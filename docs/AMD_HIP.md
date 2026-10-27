@@ -494,8 +494,8 @@ unreported, so setup warns before it installs a model.
   | Ornith 1.5 APEX-I-Mini | 40 tokens/s | 444 / 43 tokens/s |
 
   The first tokens after a load come slower while the expert cache fills (the port's own steady-state figures
-  were 64 and 35 tokens/s, with 5,125 and 4,517 experts in VRAM). Gemma 4, GLM and Kolibri 1 have not been tried
-  on an AMD card, and setup warns so.
+  were 64 and 35 tokens/s, with 5,125 and 4,517 experts in VRAM). GLM 5.3 Flash, DeepSeek V4, Flint and
+  Kolibri 1 have not been tried on an AMD card, and setup warns so.
 - Measured under Windows 11 on an RX 9070 XT (gfx1201, 16 GB; Ryzen 7 7800X3D, 64 GB of RAM), engine 0.1.45
   compiled by setup from AMD's TheRock wheels (ROCm 10.2.0a20260930), Tiel Coder 35B-A3B UD-Q3_K_XL, 32K of
   context, `--kv-whole`, one request at a time: the engine loaded in 8.5 s (15.5 s the first time) with 8,031 of

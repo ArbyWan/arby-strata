@@ -58,9 +58,8 @@ models run on AMD since 0.1.42-poly.4, as a beta: setup compiles their engine fo
 Windows with AMD's TheRock wheels as well. A contributor's port was tested with Qwen3.6 UD-Q2_K_XL and
 Ornith APEX-I-Mini on an RX 7600 with 8 GB: 74 and 40 tokens/s in a short chat, 53 and 43 after a 32K prompt,
 read at 481 and 444. One Windows run, Tiel Coder UD-Q3_K_XL on an RX 9070 XT, wrote at 55 to 75 tokens/s and
-read a 7,376-token prompt at 2,750. Gemma 4, LFM2.5, Flint, GLM and Kolibri 1 have not been tried on an AMD card, and
-setup says so
-when you pick them. I don't have an AMD card myself, so reports from one help; see
+read a 7,376-token prompt at 2,750. GLM 5.3 Flash, DeepSeek V4, Flint and Kolibri 1 have not been tried on an AMD
+card, and setup says so when you pick them. I don't have an AMD card myself, so reports from one help; see
 [AMD_HIP.md](AMD_HIP.md#strata-poly-on-amd-beta).
 
 ### Will it run on a 6 GB card, or 4 GB?
