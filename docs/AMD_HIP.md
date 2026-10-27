@@ -900,6 +900,47 @@ after three refusals for good. `hip_prefill_rocblas_gemm` (with `STRATA_ROCBLAS_
 smoke test: it refuses a table for another architecture or build and checks Gemm's FP16 route against hipBLASEx on the
 table's first two shapes.
 
+## Opt-in split value reduction in strata-poly
+
+`STRATA_HIP_VALUE_SPLIT=1` splits the weighted-value reduction into 1,024-key
+parts, then sums those parts. It applies only to `attend()` with head dimension
+256, eight query heads per KV head, at least 12,288 keys, and no sliding window,
+ring buffer or whole-context attention. Both FP16 and Q8_0 value caches are
+supported. The existing score and softmax kernels still run.
+
+The option reuses the score scratch space after softmax; it allocates no extra
+VRAM. It falls back to the existing reduction if transposed weights or scratch
+space are unavailable. Only the literal value `1` enables it; unset, `0`, and
+other values retain the default path. Set it before starting the engine: a
+captured HIP graph retains the path selected at capture time.
+
+This targets the D256/GQA8 full-attention path used by Qwen3.6-35B-A3B:
+its published configuration has 16 query heads, two KV heads and 10
+full-attention layers among 40. Variants with the same geometry are eligible
+under the runtime gates above; linear-attention layers are unaffected.
+The engine logs availability once the model geometry is known.
+
+On the tested RX 9070 XT configuration, three restarted runs per flag measured
+58.5 -> 59.8 tokens/s at 12K, 48.5 -> 52.3 at 32K and 36.5 -> 44.6 at 98K.
+The 12K ranges overlap; the repeatable gains are +7.8% at 32K and +22.2% at 98K.
+Prompt processing stayed within 3.8%, and peak sampled VRAM was unchanged.
+
+Benchmark representative: Cyber-Tiel-Coder-35B-A3B UD-Q4_K_XL, a community
+`qwen35moe` derivative with this geometry, using Q8_0 KV. These numbers are
+measured on that artifact. End-to-end gains on other compatible variants
+depend on quantization and CPU/GPU expert placement. The separate results
+submission records exact artifacts, hashes, raw runs and reproduction commands.
+
+The enabled reduction changes FP32 addition order, so its output need not be
+bitwise identical to the default. The option targets long-context decode;
+it leaves prefill unchanged.
+
+The project's existing `STRATA_FDEC` path (PR #51) also splits decode
+attention into 1,024-key parts and merges them, but uses CUDA tensor cores and
+keeps the old path on HIP. This new option is a HIP value-reduction kernel; it
+does not replace `STRATA_FDEC` and makes no claim to the general split-key
+algorithm itself.
+
 ## Original backend validation (PR #94)
 
 The following is historical validation of the original backend, not a fresh

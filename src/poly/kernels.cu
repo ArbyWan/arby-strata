@@ -1,6 +1,7 @@
 // src/poly/kernels.cu - see the header.  The reference for every formula is llama.cpp's graph of the model and the
 // ggml ops it builds.  Where a kernel takes several tokens, blockIdx.y is the token unless it says otherwise.
 #include "strata/poly/kernels.hpp"
+#include "strata/kernels/dp4a.hpp"
 #ifdef STRATA_POLY_GDN_MMA
 #include "gdn_mma.hpp"
 #include "strata/kernels/gdn_mma_policy.hpp"
@@ -9,6 +10,9 @@
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#if defined(STRATA_USE_HIP)
+#include "hip_value_split.cuh"
+#endif
 
 #include <algorithm>
 #include <climits>
@@ -2449,7 +2453,7 @@ void* blas_create(void* stream) {
     const half* a = (const half*) p;
     cublasGemmStridedBatchedEx(h, CUBLAS_OP_T, CUBLAS_OP_N, n, n, n, &one, a, CUDA_R_16F, n, n * n, a + n * n,
                                CUDA_R_16F, n, n * n, &zero, (float*) (a + 2 * n * n), CUDA_R_32F, n, n * n, 1,
-                               CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+                               CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
     cudaStreamSynchronize(cs(stream));
     cudaFree(p);
     return h;
@@ -2904,6 +2908,16 @@ void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int6
         // Two blocks of queries a launch block read the values half as often, where the launch still has
         // blocks for most of the card's 36 multiprocessors: for Qwen3.6's two tokens they are half as many and
         // slower, for three or four tokens and for Gemma 4's full layers faster.
+        // The scores are dead after softmax. Reuse them for the partial sums,
+        // leaving the transposed weights behind them intact. Off by default.
+#if defined(STRATA_USE_HIP)
+        if (wt && hip_value_split::requested(std::getenv("STRATA_HIP_VALUE_SPLIT")) &&
+            hip_value_split::fits(dim, n_head, kv_heads, keys, c, window, ring, whole, size_t(wt - score))) {
+            hip_value_split::run(wt, vcache, vq8.codes, vq8.scales, score, out, keys, n_head, kv_heads, first, c,
+                                 (long long) pos, at, (hipStream_t) stream);
+            continue;
+        }
+#endif
         const int dims = grid(dim, VALUE_DIMS);
         if (wt && blocks > 1 && kv_heads * dims * grid(blocks, 2) >= 32) {
             if (vq)
@@ -2999,7 +3013,7 @@ __device__ __forceinline__ void attn_scores_q8(const int8_t* __restrict__ qc, co
 #pragma unroll
     for (int j = 0; j < PER / SCORE_VALUES; ++j)
 #pragma unroll
-        for (int i = 0; i < N; ++i) sumi[i] = __dp4a(q8_pack4(qc + (size_t) i * dim, base + SCORE_VALUES * j),
+        for (int i = 0; i < N; ++i) sumi[i] = STRATA_DP4A(q8_pack4(qc + (size_t) i * dim, base + SCORE_VALUES * j),
                                                      k4[j], sumi[i]);
     float acc[N];
 #pragma unroll
@@ -3053,7 +3067,7 @@ __device__ __forceinline__ void attn_scores_q8_sub(const int8_t* __restrict__ qc
         int sumi = 0;
 #pragma unroll
         for (int j = 0; j < PER / SCORE_VALUES; ++j)
-            sumi = __dp4a(q8_pack4(qch, base + SCORE_VALUES * j), k4[j], sumi);
+            sumi = STRATA_DP4A(q8_pack4(qch, base + SCORE_VALUES * j), k4[j], sumi);
         float acc = (float) sumi * (dk * q8_half(qdh[block]));
 #pragma unroll
         for (int off = LANES / 2; off > 0; off >>= 1) acc += __shfl_xor_sync(0xffffffffu, acc, off);
@@ -3144,7 +3158,7 @@ attn_score_reg_int8_kernel(const KvInt8 q8, const KvInt8 kq, float* __restrict__
             for (int i = 0; i < N; ++i) {
                 int sum = 0;
 #pragma unroll
-                for (int s = 0; s < STEPS; ++s) sum = __dp4a(qcode[i][s], kcode[s], sum);
+                for (int s = 0; s < STEPS; ++s) sum = STRATA_DP4A(qcode[i][s], kcode[s], sum);
                 acc[i] = (float) sum * (dk * qdel[i]);
             }
             int which;
@@ -3546,10 +3560,10 @@ __global__ void dp4a_speed_kernel(const int8_t* __restrict__ A, const int8_t* __
     for (int i = 0; i < iters; ++i) {
 #pragma unroll
         for (int j = 0; j < 64; ++j) {
-            a0 = __dp4a(xa, xb, a0);
-            a1 = __dp4a(xa, xb, a1);
-            a2 = __dp4a(xa, xb, a2);
-            a3 = __dp4a(xa, xb, a3);
+            a0 = STRATA_DP4A(xa, xb, a0);
+            a1 = STRATA_DP4A(xa, xb, a1);
+            a2 = STRATA_DP4A(xa, xb, a2);
+            a3 = STRATA_DP4A(xa, xb, a3);
         }
     }
     C[lane] = (a0 + a1) + (a2 + a3);
@@ -3675,7 +3689,7 @@ void attend_batch(void* blas, const float* q, const uint16_t* kcache, const uint
             blas_ck(cublasGemmStridedBatchedEx(h, CUBLAS_OP_T, CUBLAS_OP_N, m, (int) cols, dim, &scale,
                                                krow, CUDA_R_16F, width, dim, qg,
                                                CUDA_R_16F, dim, cols * dim, &zero, score, CUDA_R_32F, m, cols * m,
-                                               kv_heads, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP),
+                                               kv_heads, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT),
                     "attention scores");
             attn_softmax_block_kernel<<<c * n_head, 128, 0, cs(stream)>>>(score, weight, m, lo0 + k0, (long long) pos,
                                                                          first, window, c, per, last, top, sum,
@@ -3686,7 +3700,7 @@ void attend_batch(void* blas, const float* q, const uint16_t* kcache, const uint
                                                vrow, CUDA_R_16F, width, dim,
                                                weight, CUDA_R_16F, m, cols * m, k0 > 0 ? &one : &zero, og, CUDA_R_32F,
                                                dim, cols * dim, kv_heads, CUBLAS_COMPUTE_32F,
-                                               CUBLAS_GEMM_DEFAULT_TENSOR_OP),
+                                               CUBLAS_GEMM_DEFAULT),
                     "attention values");
         }
         if (sinks)

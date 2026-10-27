@@ -415,7 +415,8 @@ ENGINE_REQUEST = re.compile(
     # "+ 12288 of 98179 read": a request cancelled while its prompt was read (#471)
     r"prompt (?P<prompt>\d+) tokens = (?P<reused>\d+) reused \+ \d+(?: of \d+)? read in (?P<read>[\d.]+) ms "
     r"\((?P<pp>[\d.]+) tok/s\), "
-    r"(?P<gen>\d+) generated in (?P<gen_ms>[\d.]+) ms \((?P<tg>[\d.]+) tok/s\)")
+    r"(?P<gen>\d+) generated in (?P<gen_ms>[\d.]+) ms \((?P<tg>[\d.]+) tok/s\)"
+    r"(?:, drafts accepted (?P<drafts_accepted>\d+) of (?P<drafts_offered>\d+))?")
 
 
 _echoing: set[str] = set()      # the logs echo_requests already follows (restart() runs StrataEngine.__init__ again)
@@ -602,9 +603,12 @@ def echo_requests(log_path: str, offset: int) -> None:
             m = ENGINE_REQUEST.search(line)
             if m:
                 read_ms, gen_ms = float(m["read"]), float(m["gen_ms"])
+                drafts = ""
+                if m["drafts_accepted"]:                       # the engine had MTP drafts on this request
+                    drafts = ", drafts accepted %s of %s" % (m["drafts_accepted"], m["drafts_offered"])
                 print("[strata] request prompt %s cached %s output %s prompt_read %.0f ms total %.0f ms prefill %s "
-                      "tok/s decode %s tok/s" % (m["prompt"], m["reused"], m["gen"], read_ms, read_ms + gen_ms, m["pp"],
-                                                 m["tg"]), flush=True)
+                      "tok/s decode %s tok/s%s" % (m["prompt"], m["reused"], m["gen"], read_ms, read_ms + gen_ms, m["pp"],
+                                                 m["tg"], drafts), flush=True)
 
 
 def experts_loading_words(args: list, size: str) -> str:

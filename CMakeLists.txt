@@ -1987,6 +1987,8 @@ endif()
 
 # The opt-in lifecycle is a host-only test, including on non-CUDA builds.
 if(STRATA_BUILD_TESTS)
+  add_executable(poly_hip_value_split_policy_test src/poly/hip_value_split_policy_test.cpp)
+  add_test(NAME poly_hip_value_split_policy_test COMMAND poly_hip_value_split_policy_test)
   add_executable(poly_gdn_mma_control_test src/poly/gdn_mma_control_test.cpp)
   add_test(NAME poly_gdn_mma_control_test COMMAND poly_gdn_mma_control_test)
 endif()
@@ -2149,6 +2151,12 @@ if(STRATA_NATIVE_EXPERTS AND (STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP) AND NOT S
   target_include_directories(poly_attend_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
                                                      ${_strata_gpu_include_directories})
   target_link_libraries(poly_attend_test PRIVATE ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target})
+  add_executable(poly_hip_value_split_test src/poly/hip_value_split_test.cu src/poly/kernels.cu)
+  target_include_directories(poly_hip_value_split_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+                            ${_strata_gpu_include_directories})
+  target_link_libraries(poly_hip_value_split_test PRIVATE ${_strata_gpu_blas_target} ${_strata_gpu_runtime_target})
+  add_test(NAME poly_hip_value_split_test COMMAND poly_hip_value_split_test)
+  set_tests_properties(poly_hip_value_split_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   # attend_batch() against attend() with Flint's heads, sinks and window ring; needs a card
   add_executable(poly_sink_attend_test src/poly/sink_attend_test.cu src/poly/kernels.cu)
   target_include_directories(poly_sink_attend_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
