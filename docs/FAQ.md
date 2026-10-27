@@ -65,7 +65,8 @@ card, and setup says so when you pick them. I don't have an AMD card myself, so 
 ### Will it run on a 6 GB card, or 4 GB?
 
 It has only run on 8 GB cards and up. With a context of 32K, Qwen3.6 takes about 5 GB of VRAM beside its experts,
-Ornith about 4 GB, Gemma 4 about 6 GB, Tiel Coder about 5 GB, LFM2.5 about 4 GB and Flint about 4 GB. The
+Ornith about 4 GB, Gemma 4 about 6 GB, Tiel Coder about 5 GB, LFM2.5 about 4 GB, Flint about 4 GB and Kolibri 1
+about 4 GB. The
 attention caches are part of that and take their share as a conversation grows, so a short chat leaves more room.
 On a 6 GB card Ornith and LFM2.5 are the ones to try; LFM2.5's caches grow the least, 20 KB a token.
 That is untested. On 4 GB, none of them leaves room for experts.

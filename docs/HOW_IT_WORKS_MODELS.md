@@ -192,3 +192,19 @@ Every part and its numbers: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works).
   pass through it once for the whole prompt.
 
 Every part and its numbers: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works).
+
+## Kolibri 1
+
+<p align="center"><img src="media/how-it-works-kolibri.svg" width="860" alt="The model's 19,200 experts: the ones an answer keeps using on the graphics card, the rest in RAM, the model's file on the SSD"></p>
+
+- **The model is a team of 19,200 small experts**, 384 in each of 50 layers. Each word needs only 6 from every layer,
+  and one shared expert that every word uses.
+- **Four layers in five look back 513 tokens.** They keep a ring of rows that does not grow. The fifth keeps the whole
+  conversation and has no word positions at all.
+- **Your graphics card** keeps as many experts as fit: about a tenth of them on an 8 GB card, all of Q2_K on a 32 GB
+  card. **Your RAM** holds the rest, and **your processor** runs them at the same time. **Your SSD** holds the model's
+  file, which is used where it is, with no second copy.
+- **No draft block.** The model has nothing that guesses ahead, so the engine guesses only from text the
+  conversation repeats.
+
+Every part and its numbers: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works).

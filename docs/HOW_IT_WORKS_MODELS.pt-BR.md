@@ -197,3 +197,19 @@ Cada parte e seus números: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works) 
   os outros passam por ela uma única vez para o prompt inteiro.
 
 Cada parte e seus números: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works) (em inglês).
+
+## Kolibri 1
+
+<p align="center"><img src="media/how-it-works-kolibri.svg" width="860" alt="Os 19,200 experts do modelo: os que uma resposta escolhe sem parar na placa de vídeo, os outros na RAM, o arquivo do modelo no SSD"></p>
+
+- **O modelo é uma equipe de 19,200 pequenos experts**, 384 em cada uma de 50 camadas. Cada palavra precisa de só 6 de
+  cada camada, e de um expert compartilhado que toda palavra usa.
+- **Quatro de cada cinco camadas olham 513 tokens para trás.** Elas guardam um anel de linhas que não cresce. A
+  quinta lembra a conversa inteira e não usa nenhuma posição das palavras.
+- **Sua placa de vídeo** guarda quantos experts couberem: cerca de um décimo numa placa de 8 GB, todos os do Q2_K numa
+  placa de 32 GB. **Sua RAM** guarda os outros, e **seu processador** calcula esses ao mesmo tempo. **Seu SSD** guarda
+  o arquivo do modelo, usado onde está, sem uma segunda cópia.
+- **Sem bloco de rascunho.** O modelo não tem nada que adivinhe o que vem a seguir, então o motor só adivinha a
+  partir do texto que a conversa repete.
+
+Cada parte e seus números: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works) (em inglês).

@@ -201,3 +201,19 @@ Jeder Teil und seine Zahlen: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works)
   laufen die übrigen für den ganzen Prompt einmal durch sie.
 
 Jeder Teil und seine Zahlen: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works) (englisch).
+
+## Kolibri 1
+
+<p align="center"><img src="media/how-it-works-kolibri.svg" width="860" alt="Die 19,200 Experten des Modells: die, die eine Antwort immer wieder braucht, auf der Grafikkarte, die übrigen im RAM, die Modelldatei auf der SSD"></p>
+
+- **Das Modell ist ein Team aus 19,200 kleinen Experten**, 384 in jeder von 50 Schichten. Jedes Wort braucht nur 6 aus
+  jeder Schicht und einen gemeinsamen Experten, den jedes Wort benutzt.
+- **Vier von fünf Schichten schauen 513 Tokens zurück.** Sie halten einen Ring von Zeilen, der nicht wächst. Die
+  fünfte behält die ganze Unterhaltung und kennt überhaupt keine Wortpositionen.
+- **Deine Grafikkarte** hält so viele Experten, wie passen: etwa ein Zehntel davon auf einer 8-GB-Karte, alle von Q2_K
+  auf einer 32-GB-Karte. **Dein RAM** hält die übrigen, und **dein Prozessor** rechnet sie gleichzeitig. **Deine SSD**
+  hält die Modelldatei, die dort benutzt wird, wo sie liegt, ohne zweite Kopie.
+- **Kein Entwurfsblock.** Das Modell hat nichts, was vorausrät, darum rät die Engine nur aus Text, den die
+  Unterhaltung wiederholt.
+
+Jeder Teil und seine Zahlen: [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works) (englisch).

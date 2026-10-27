@@ -203,3 +203,19 @@ Chaque partie et ses chiffres : [docs/BACKENDS.md](BACKENDS.md#how-a-backend-wor
   experts, les autres passent par elle une seule fois pour tout le prompt.
 
 Chaque partie et ses chiffres : [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works) (en anglais).
+
+## Kolibri 1
+
+<p align="center"><img src="media/how-it-works-kolibri.svg" width="860" alt="Les 19,200 experts du modèle : ceux qu'une réponse choisit sans cesse sur la carte graphique, les autres en RAM, le fichier du modèle sur le SSD"></p>
+
+- **Le modèle est une équipe de 19,200 petits experts**, 384 dans chacune de 50 couches. Chaque mot n'en demande que 6
+  par couche, plus un expert partagé que chaque mot utilise.
+- **Quatre couches sur cinq regardent 513 tokens en arrière.** Elles gardent un anneau de lignes qui ne grandit pas.
+  La cinquième garde toute la discussion et n'utilise aucune position des mots.
+- **Votre carte graphique** garde autant d'experts qu'elle peut : environ un dixième sur une carte de 8 Go, tous ceux de
+  Q2_K sur une carte de 32 Go. **Votre RAM** contient les autres, et **votre processeur** les calcule en même temps.
+  **Votre SSD** contient le fichier du modèle, utilisé là où il se trouve, sans seconde copie.
+- **Pas de bloc de brouillon.** Le modèle n'a rien qui devine la suite, donc le moteur ne devine qu'à partir du texte
+  que la discussion répète.
+
+Chaque partie et ses chiffres : [docs/BACKENDS.md](BACKENDS.md#how-a-backend-works) (en anglais).
