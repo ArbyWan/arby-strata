@@ -135,6 +135,17 @@ FALLBACK_FAMILIES = {
                                         "download_gb": 36.3, "ram_gb": 40, "arena_gb": 34.2},
                          "Q8_0": {"about": "8-bit throughout: the closest to the model as trained",
                                   "download_gb": 42.3, "ram_gb": 46, "arena_gb": 40.2}}},
+    "kolibri": {"title": "Kolibri 1",
+                "about": "on the strata-poly engine, with the kolibri1 patch: Linux or Windows, one or two NVIDIA cards "
+                         "(run on 32 GB, and on 12 GB under Windows); a 48 GB file, ~52 GB of RAM beside an 8 GB "
+                         "card; two other sizes too, no images",
+                "tag": "kolibri1-", "engine": "poly", "vision": False, "experimental": True,
+                "models": {"Q4_K_M": {"about": "4-bit: Q4_K gate/up, Q6_K down on half the layers",
+                                      "download_gb": 47.5, "ram_gb": 52, "arena_gb": 45.7},
+                           "Q2_K": {"about": "2-bit, the fastest: the least RAM",
+                                    "download_gb": 28.6, "ram_gb": 33, "arena_gb": 26.9},
+                           "Q3_K_M": {"about": "3-bit: the least RAM that still reads well",
+                                      "download_gb": 37.5, "ram_gb": 42, "arena_gb": 35.8}}},
     # a family with sizes of its own ("models"): two of these have a size of one name
     "qwen36": {"title": "Qwen3.6-35B-A3B", "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a "
                                                      "17 GB file, ~21 GB of RAM beside an 8 GB card; a smaller and a "
@@ -1068,7 +1079,8 @@ def tool_defs(models: dict, families: dict, contexts: list) -> list:
          "description": "The models and sizes PolyStrata's setup offers (families: qwen = Qwen3.8-Flash-Next, swift = "
                         "Swift 1.5, coder = the Coder, unsloth = Unsloth's ~4-bit, glm = GLM 5.3 Flash, another "
                         "model with its own engine, deepseek = DeepSeek V4 Flash on that engine, lfm25 = LFM2.5-24B-A2B, "
-                        "flint = Flint 40B-A2.5B, qwen36 = Qwen3.6-35B-A3B, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B and tiel = Tiel "
+                        "flint = Flint 40B-A2.5B, kolibri = Kolibri 1, qwen36 = Qwen3.6-35B-A3B, ornith = Ornith 1.5, "
+                        "gemma4 = Gemma 4 26B-A4B and tiel = Tiel "
                         "Coder 35B-A3B, 11-25 GB models on that engine), with "
                         "download size, RAM needed, "
                         "whether each fits this PC, which are installed, the context lengths, and the recommendation. "
@@ -1093,7 +1105,9 @@ def tool_defs(models: dict, families: dict, contexts: list) -> list:
                                        "Flash (another model: Linux, one NVIDIA card, 64-128 GB of RAM, a 79 or "
                                        "114 GB download, no images), deepseek = DeepSeek V4 Flash (GLM's "
                                        "engine: Linux, one NVIDIA card, ~72 GB of RAM beside a 32 GB card, a 91 "
-                                       "GB download, no images), lfm25 = LFM2.5-24B-A2B, flint = Flint 40B-A2.5B, qwen36 = "
+                                       "GB download, no images), lfm25 = LFM2.5-24B-A2B, flint = Flint 40B-A2.5B, "
+                                       "kolibri = Kolibri 1 (Linux or Windows, one NVIDIA card, ~52 GB of RAM "
+                                       "beside an 8 GB card, a 48 GB download, no images), qwen36 = "
                                        "Qwen3.6-35B-A3B, ornith = Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = "
                                        "Tiel Coder 35B-A3B (GLM's engine: one NVIDIA card, an 11-25 GB download, "
                                        "15-31 GB of RAM beside an 8 GB card by setup's estimate; images with "

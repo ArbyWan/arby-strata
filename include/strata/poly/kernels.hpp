@@ -179,10 +179,12 @@ void geglu(const float* gate, const float* up, float* out, int n, void* stream);
 /// geglu for rows that each hold n gate values and then n up values; out has n values a row.
 void geglu_rows(const float* gate_up, float* out, int n, int rows, void* stream);
 /// The routing of `rows` tokens from their router scores (n_expert a token, times in_scale), as an architecture's
-/// route() does it on the host: probabilities by `gate` (0 softmax, 1 sigmoid, 2 sqrt(softplus)), the n_used
-/// largest of the probabilities plus `bias` (null: none), the lower expert first among equals; their weights are the
-/// probabilities, with `norm` divided by their sum (ggml's floor under it), times escale[expert] (null: none), times
-/// w_scale (0: not).  ids and w: n_used a token, on the card.  Throws std::invalid_argument past 512 experts.
+/// route() does it on the host: probabilities by `gate` (0 softmax, 1 sigmoid, 2 sqrt(softplus), 3 sigmoid with the
+/// pick on the bare scores), the n_used largest of the probabilities plus `bias` (null: none), the lower expert
+/// first among equals; their weights are the probabilities, with `norm` divided by their sum (ggml's floor under
+/// it), times escale[expert] (null: none), times w_scale (0: not).  ids and w: n_used a token, on the card.  Gate 3
+/// is llama.cpp's SIGMOID_LOGIT_ADD, Kolibri 1's: the weights are sigmoid(scores) and the pick is scores + bias.
+/// Throws std::invalid_argument past 512 experts.
 void route_rows(const float* logits, int n_expert, int n_used, int rows, int gate, float in_scale, const float* bias,
                 const float* escale, bool norm, float w_scale, int32_t* ids, float* w, void* stream);
 /// acc[t] += sum over k < n_used of w[t * n_used + k] * x[t * n_used + k], for rows of n values: a token's

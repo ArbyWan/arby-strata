@@ -5,6 +5,7 @@
 #include "deepseek4.hpp"
 #include "gemma4.hpp"
 #include "glm5next.hpp"
+#include "kolibri1.hpp"
 #include "lfm2moe.hpp"
 #include "flint.hpp"
 #include "mmq.hpp"
@@ -1048,13 +1049,14 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
     const Shards file(o.model);
     const MetaValue* arch = file.get("general.architecture");
     const std::string name = arch ? arch->s : std::string();
-    if (o.kv_format == KvFmt::kQ8_0 && name != "qwen35moe")
-        throw std::runtime_error("--kv q8_0 is only supported for qwen35moe models in v1; this is a '" + name + "' model");
+    if (o.kv_format == KvFmt::kQ8_0 && name != "qwen35moe" && name != "kolibri1")
+        throw std::runtime_error("--kv q8_0 is supported for qwen35moe and kolibri1 models in v1; this is a '" + name +
+                                 "' model");
     // int8 and int8k are Gemma 4's: their readers are not the arithmetic q8_0's are, so a model takes one
     // family or the other rather than a choice between them.
     if (name != "gemma4" && (o.kv_format == KvFmt::kInt8 || o.kv_format == KvFmt::kInt8K))
-        throw std::runtime_error("--kv int8 and --kv int8k are Gemma 4's; for a qwen35moe model use --kv q8_0 "
-                                 "(this is a '" + name + "' model)");
+        throw std::runtime_error("--kv int8 and --kv int8k are Gemma 4's; for a qwen35moe or kolibri1 model use "
+                                 "--kv q8_0 (this is a '" + name + "' model)");
     const auto make = [&]() -> std::unique_ptr<Engine> {
         if (name == "glm5-next" || name == "glm5next") return std::make_unique<Glm5Next>();   // Unsloth: no hyphen
         if (name == "qwen35moe") return std::make_unique<Qwen35>();
@@ -1062,6 +1064,7 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
         if (name == "deepseek4") return std::make_unique<DeepSeek4>();
         if (name == "lfm2moe") return std::make_unique<Lfm2Moe>();
         if (name == "flint") return std::make_unique<Flint>();
+        if (name == "kolibri1") return std::make_unique<Kolibri1>();
         throw std::runtime_error(o.model + " is a '" + name + "' model, which this engine does not run");
     };
     int cards = 1, devices = 1;

@@ -1025,6 +1025,14 @@ __global__ void route_kernel(const float* __restrict__ logits, int n_expert, int
         const float inv = 1.0f / warp_sum(sum);
 #pragma unroll
         for (int k = 0; k < PER; ++k) p[k] *= inv;
+    } else if (gate == 3) {   // sigmoid_logit_add (Kolibri 1): the weights are the sigmoid of the scores, but the
+                              // pick is on the scores and the bias, so it is taken before the scores turn to weights
+#pragma unroll
+        for (int k = 0; k < PER; ++k) {
+            const int e = lane + k * WARP;
+            pick[k] = e < n_expert ? p[k] + (bias ? bias[e] : 0.0f) : -INFINITY;
+            p[k] = e < n_expert ? 1.0f / (1.0f + expf(-p[k])) : -INFINITY;
+        }
     } else {
 #pragma unroll
         for (int k = 0; k < PER; ++k) {
@@ -1032,10 +1040,12 @@ __global__ void route_kernel(const float* __restrict__ logits, int n_expert, int
             p[k] = gate == 1 ? 1.0f / (1.0f + expf(-x)) : sqrtf(x > 20.0f ? x : logf(1.0f + expf(x)));
         }
     }
+    if (gate != 3) {
 #pragma unroll
-    for (int k = 0; k < PER; ++k) {
-        const int e = lane + k * WARP;
-        pick[k] = e < n_expert ? p[k] + (bias ? bias[e] : 0.0f) : -INFINITY;
+        for (int k = 0; k < PER; ++k) {
+            const int e = lane + k * WARP;
+            pick[k] = e < n_expert ? p[k] + (bias ? bias[e] : 0.0f) : -INFINITY;
+        }
     }
     float sum = 0.0f, mine = 0.0f;
     int my_id = 0;
