@@ -1,5 +1,9 @@
 # Community bench results, index
 
+Recent report: [RX 5700 XT on Windows, Qwen3.6 UD-Q3_K_M](2026-10-27-community-rx5700xt-windows-qwen36-q3/)
+includes the official 32K suite and single-request 64K/128K retrieval probes
+using a manual adapter for the unvalidated gfx1010 HIP target.
+
 One row per community folder in this directory (ported for 0.1.40.2 and 0.1.41 from the community bench PRs, authors credited in the commits). Raw dumps, logs and binaries were trimmed from the folders; each trimmed folder has a `TRIMMED.md` listing what was left out. The README in each folder has the full method.
 
 How to read the table:
