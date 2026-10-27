@@ -4721,12 +4721,19 @@ class Service:
             sampling = {**defaults, **req_values}
         # #123: read after the merge, so a budget shared through POST /settings is seen like the other keys
         budget = self.reasoning_budget(sampling) if thinking else None
-        if thinking and not budget and self.answer_room and max_new and max_new >= ANSWER_ROOM_MIN_CAP:
+        # Issue 16: a reply as long as the context has left (no max_tokens, or fit_max_tokens) was cut by the context,
+        # not by a small cap the client chose, so it gets the answer room however short it is.  Flint in an agent
+        # had 416 tokens left in a full 32K context, thought through all of them and gave no answer.
+        ctx = self.engine.max_context or getattr(self.engine, "known_ctx", 0)
+        by_context = bool(max_new) and ctx > 0 and max_new >= ctx - CTX_SLACK - len(ids)
+        if (thinking and not budget and self.answer_room and max_new
+                and (max_new >= ANSWER_ROOM_MIN_CAP or by_context)):
             # 0.1.45: max_tokens counts the thinking too.  A client that caps the reply at 8192 (the desktop agent's
             # harness sends max_completion_tokens: 8192 on every request) and a task the model thinks long about got
             # the cut-off in the middle of the thinking and NO answer.  So thinking is closed early enough to leave
             # the answer its quarter of the cap (the budget's wrap-up: a short closing sentence, </think>, the answer).
-            # A request with a budget of its own, or max_tokens below ANSWER_ROOM_MIN_CAP, is left as it was.
+            # A request with a budget of its own, or one that asked for fewer than ANSWER_ROOM_MIN_CAP tokens, is left
+            # as it was.
             budget = max_new - min(max(ANSWER_RESERVE_MIN, max_new // 4), max_new // 2)
             if max_new <= 32768: print(f"[strata] thinking limited to {budget} of max_tokens {max_new} so the answer has room "
                   "(\"answer_room\": false in the config turns this off)", flush=True)
@@ -5144,7 +5151,12 @@ class Service:
                                 hit_msg += f" (+{pcie_share*100:.1f}% of the routed experts over PCIe)"
                             print(f"[strata] done: {n} tokens in {el:.0f} s ({rate:.1f} tok/s) "
                                   f"({finish}, cancel={cancel.is_set()}){hit_msg}", flush=True)
-                            if finish == "length" and parser.state in ("reasoning", "rcall"):   # #530
+                            if finish == "length" and parser.state in ("reasoning", "rcall") and by_context:
+                                print(f"[strata] the reply reached the end of the context while still thinking, so it "
+                                      f"has no answer: only {max_new} tokens were left of the {ctx}. A larger "
+                                      "--max-context in strata-<model>.json, or \"drop_oldest\": true there, leaves "
+                                      "room for the conversation to go on", flush=True)
+                            elif finish == "length" and parser.state in ("reasoning", "rcall"):   # #530
                                 print("[strata] the reply reached max tokens while still thinking, so it has no "
                                       "answer: a thinking budget (reasoning_budget_tokens, in the request or in "
                                       "strata-<model>.json for every request) leaves room to answer", flush=True)
