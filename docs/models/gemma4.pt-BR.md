@@ -36,7 +36,7 @@ Um prompt de 10,000 tokens é lido a 2,130 tokens/s no notebook e a 6,800 na est
 
 | | |
 | --- | --- |
-| **Placa de vídeo** | Uma placa **NVIDIA** GeForce RTX série 20 ou mais nova com **8 GB de VRAM ou mais**. Cerca de 6 GB são ocupados antes do primeiro expert. Ele rodou numa placa de 32 GB, nessa placa limitada a 8 GB e na placa de 8 GB de um notebook. Em uma placa AMD ele também roda, em beta, no Linux e no Windows: o instalador compila o motor no seu PC; testado até agora com Qwen3.6 e Ornith em uma RX 7600. |
+| **Placa de vídeo** | Uma placa **NVIDIA** GeForce RTX série 20 ou mais nova com **8 GB de VRAM ou mais**. Cerca de 6 GB são ocupados antes do primeiro expert. Ele rodou numa placa de 32 GB, nessa placa limitada a 8 GB e na placa de 8 GB de um notebook. Em uma placa AMD ele também roda, em beta, no Linux e no Windows: o instalador compila o motor no seu PC; usuários já o rodaram numa RX 6700 XT (12 GB) no Linux. |
 | **RAM** | Cerca de **15, 18, 19 ou 21 GB** ao lado de uma placa de 8 GB para os quatro tamanhos, pela estimativa do instalador. Pela mesma estimativa, uma placa de 16 GB guarda inteiros os dois tamanhos menores e o arquivo QAT. Os quatro tamanhos rodaram em um notebook com 32 GB. |
 | **Disco** | 11, 13, 15 ou 17 GB para o arquivo do modelo e o modelo de rascunho dele, 1 GB a mais para ler imagens. |
 | **Sistema** | Linux ou Windows 10 / 11, e um driver NVIDIA atual. |

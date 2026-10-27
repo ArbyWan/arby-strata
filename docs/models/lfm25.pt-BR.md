@@ -51,7 +51,7 @@ estação de trabalho; o notebook o leu em 45 segundos.
 | **Disco** | 11 a 25 GB para o arquivo do modelo. |
 | **Sistema** | Linux ou Windows 10 / 11, e um driver NVIDIA atual. |
 
-O instalador cuida de todo o resto, como com o [Qwen3.6-35B-A3B](qwen36.pt-BR.md). Ainda não foi testado numa placa AMD. Ele
+O instalador cuida de todo o resto, como com o [Qwen3.6-35B-A3B](qwen36.pt-BR.md). Um usuário já o rodou numa AMD RX 6700 XT (12 GB) no Linux. Ele
 só lê texto. A licença da Liquid AI só permite o uso comercial a empresas que faturam menos de 10 milhões de dólares
 por ano ([LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/main/LICENSE)).
 

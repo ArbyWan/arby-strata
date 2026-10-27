@@ -46,7 +46,7 @@ Q8_0 在笔记本上占满了 32 GB 内存，所以在那里慢；工作站能�
 | **硬盘** | 模型文件 11 到 25 GB。 |
 | **系统** | Linux 或 Windows 10 / 11，以及 NVIDIA 的最新显卡驱动。 |
 
-其他的都由安装程序搞定，和 [Qwen3.6-35B-A3B](qwen36.zh-CN.md) 一样。还没在 AMD 显卡上试过。只能处理文字。
+其他的都由安装程序搞定，和 [Qwen3.6-35B-A3B](qwen36.zh-CN.md) 一样。已有用户在 Linux 下的 AMD RX 6700 XT（12 GB）上跑过。只能处理文字。
 Liquid AI 的许可证只允许年收入低于 1,000 万美元的公司商用（[LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/main/LICENSE)）。
 
 完整列表：[docs/LFM.md](../LFM.md#what-you-need)（英文）。

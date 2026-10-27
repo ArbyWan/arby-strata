@@ -35,7 +35,7 @@ Ein Prompt von 10,000 Tokens wird auf dem Laptop mit 1,670 Tokens/s gelesen und 
 
 | | |
 | --- | --- |
-| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 5 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Auf einer AMD-Karte läuft es als Beta unter Linux und unter Windows: Setup kompiliert die Engine auf deinem PC; bisher nur mit Qwen3.6 und Ornith auf einer RX 7600 getestet. |
+| **Grafikkarte** | Eine **NVIDIA** GeForce RTX 20 oder neuer mit **8 GB VRAM oder mehr**. Etwa 5 GB sind belegt, bevor ein Experte geladen ist. Gelaufen ist es auf einer 32-GB-Karte, auf dieser Karte, auf 8 GB begrenzt, und auf der 8-GB-Karte eines Laptops. Auf einer AMD-Karte läuft es als Beta unter Linux und unter Windows: Setup kompiliert die Engine auf deinem PC; Nutzer haben Tiel Coder unter Linux auf einer RX 6700 XT und einer RX 7800 XT laufen lassen, unter Windows auf einer RX 9070 XT. |
 | **RAM** | Etwa **18, 21 oder 27 GB** neben einer 8-GB-Karte für die drei Größen, nach der Schätzung des Installers. Eine Karte mit 24 GB hält alle drei Größen ganz. Alle drei Größen liefen auf einem Laptop mit 32 GB. |
 | **Festplatte** | 14, 17 oder 23 GB für die Modelldatei, 1 GB mehr, um Bilder zu lesen. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |

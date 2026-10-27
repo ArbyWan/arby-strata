@@ -35,7 +35,7 @@ Un prompt de 10,000 tokens est lu à 1,670 tokens/s sur le portable et à 6,300 
 
 | | |
 | --- | --- |
-| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; testé pour l'instant avec Qwen3.6 et Ornith sur une RX 7600. |
+| **Carte graphique** | Une carte **NVIDIA** GeForce RTX série 20 ou plus récente avec **8 Go de VRAM ou plus**. Environ 5 Go sont pris avant le premier expert. Il a tourné sur une carte de 32 Go, sur cette carte limitée à 8 Go, et sur la carte de 8 Go d'un portable. Sur une carte AMD, il tourne aussi, en bêta, sous Linux et sous Windows : l'installateur compile le moteur sur votre PC ; des utilisateurs l'ont fait tourner sur une RX 6700 XT et une RX 7800 XT sous Linux, et sur une RX 9070 XT sous Windows. |
 | **RAM** | Environ **18, 21 ou 27 Go** à côté d'une carte de 8 Go pour les trois tailles, d'après l'estimation de l'installeur. Une carte de 24 Go contient en entier les trois tailles. Les trois tailles ont tourné sur un portable de 32 Go. |
 | **Disque** | 14, 17 ou 23 Go pour le fichier du modèle, 1 Go de plus pour lire les images. |
 | **Système** | Linux ou Windows 10 / 11, et un pilote NVIDIA récent. |

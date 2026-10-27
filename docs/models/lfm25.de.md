@@ -51,8 +51,8 @@ beantwortete die Workstation in 8,7 Sekunden; der Laptop las ihn in 45 Sekunden.
 | **Festplatte** | 11 bis 25 GB für die Modelldatei. |
 | **System** | Linux oder Windows 10 / 11 und ein aktueller NVIDIA-Treiber. |
 
-Alles andere richtet der Installer ein, wie bei [Qwen3.6-35B-A3B](qwen36.de.md). Auf einer AMD-Karte wurde es noch nicht
-probiert. Es liest nur Text. Die Lizenz von Liquid AI erlaubt die kommerzielle Nutzung nur Firmen mit weniger als
+Alles andere richtet der Installer ein, wie bei [Qwen3.6-35B-A3B](qwen36.de.md). Ein Nutzer hat es unter Linux auf einer
+AMD RX 6700 XT (12 GB) laufen lassen. Es liest nur Text. Die Lizenz von Liquid AI erlaubt die kommerzielle Nutzung nur Firmen mit weniger als
 10 Millionen Dollar Jahresumsatz ([LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/main/LICENSE)).
 
 Die ganze Liste: [docs/LFM.md](../LFM.md#what-you-need) (englisch).

@@ -35,7 +35,7 @@ Un prompt de 10,000 tokens se lee a 1,670 tokens/s en el portátil y a 6,300 en 
 
 | | |
 | --- | --- |
-| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En una tarjeta AMD también lo ejecuta, en beta, en Linux y en Windows: el instalador compila el motor en tu PC; probado hasta ahora con Qwen3.6 y Ornith en una RX 7600. |
+| **Tarjeta gráfica** | Una tarjeta **NVIDIA** GeForce RTX serie 20 o más nueva con **8 GB de VRAM o más**. Unos 5 GB se ocupan antes del primer experto. Ha funcionado en una tarjeta de 32 GB, en esa tarjeta limitada a 8 GB y en la tarjeta de 8 GB de un portátil. En una tarjeta AMD también lo ejecuta, en beta, en Linux y en Windows: el instalador compila el motor en tu PC; hay usuarios que lo han ejecutado en una RX 6700 XT y una RX 7800 XT en Linux, y en una RX 9070 XT en Windows. |
 | **RAM** | Unos **18, 21 o 27 GB** junto a una tarjeta de 8 GB para los tres tamaños, según la estimación del instalador. Una tarjeta de 24 GB guarda enteros los tres tamaños. Los tres tamaños han funcionado en un portátil con 32 GB. |
 | **Disco** | 14, 17 o 23 GB para el archivo del modelo, 1 GB más para leer imágenes. |
 | **Sistema** | Linux o Windows 10 / 11, y un controlador de NVIDIA actual. |

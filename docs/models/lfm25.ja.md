@@ -50,7 +50,7 @@ PolyStrata は 452 と 387 です。
 | **ディスク** | モデルファイルに 11〜25 GB。 |
 | **OS** | Linux または Windows 10 / 11 と、最新の NVIDIA ドライバー。 |
 
-ほかはすべてインストーラーが用意します。[Qwen3.6-35B-A3B](qwen36.ja.md) と同じです。AMD のカードではまだ試していません。テキストだけを読みます。
+ほかはすべてインストーラーが用意します。[Qwen3.6-35B-A3B](qwen36.ja.md) と同じです。ユーザーが Linux の AMD RX 6700 XT（12 GB）で動かしています。テキストだけを読みます。
 Liquid AI のライセンスで商用利用が認められるのは、年間売上が 1,000 万ドル未満の会社だけです（[LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B/blob/main/LICENSE)）。
 
 詳しい一覧：[docs/LFM.md](../LFM.md#what-you-need)（英語）。
