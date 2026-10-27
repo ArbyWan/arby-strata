@@ -168,7 +168,7 @@ Two things to know when measuring on such a card:
 Since 91fe6531 the `--kv int8` readers in `src/poly/kernels.cu` called `__dp4a`, which compute capability 6.0 does not
 have, so a build with `60` in `CMAKE_CUDA_ARCHITECTURES` stopped at `identifier "__dp4a" is undefined`. They now use
 `STRATA_DP4A` from `strata/kernels/dp4a.hpp`, as the i-quant kernels do; every other card compiles to `__dp4a` as
-before. The poly path's three cuBLAS calls use `CUBLAS_GEMM_DEFAULT`, as the Strata engine does, instead of the
+before. The poly path's three cuBLAS calls use `CUBLAS_GEMM_DEFAULT`, as the Qwen3.8-Flash-Next engine does, instead of the
 tensor-op hint (the P100 has no tensor cores).
 
 Built with CUDA 12.8 and gcc 14, `-DSTRATA_EXPERIMENTAL_SM60=ON`, `CMAKE_CUDA_ARCHITECTURES="60;61;75"`, with today's

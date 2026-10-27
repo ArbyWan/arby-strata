@@ -7449,7 +7449,7 @@ def resolve_custom_gguf(path_str: str) -> tuple[str, str, list[Path]]:
         else:  # layout
             matches = [k for k, v in known.items() if v["expert_bytes"] == fp["expert_bytes"]]
         if len(matches) > 1:
-            say(f"Strata: {sentence}")
+            say(f"PolyStrata: {sentence}")
             fail(f"this GGUF's header matches several entries ({', '.join(sorted(matches))})",
                  "use --inspect to read the full explanation, then pick explicitly with --family X --model Y")
         fam_model = matches[0].split("/")
@@ -7469,7 +7469,7 @@ def resolve_custom_gguf(path_str: str) -> tuple[str, str, list[Path]]:
             if fam:
                 break
         if not fam:
-            say(f"Strata: {sentence}")
+            say(f"PolyStrata: {sentence}")
             fail("cannot install this GGUF with --custom-gguf",
                  "use --inspect to read the full explanation, or give it to --gguf-dir")
         # derive the size from the filename's quant token (e.g. "Q4_K_M" in "...-Q4_K_M.gguf")
@@ -7479,12 +7479,12 @@ def resolve_custom_gguf(path_str: str) -> tuple[str, str, list[Path]]:
                       or m.lower().endswith(quant.lower())), None)
         if not model:
             model = sorted(models_dict)[0]
-            warn(f"Strata: {sentence}\n  your file's quant '{quant}' is not one setup offers "
+            warn(f"PolyStrata: {sentence}\n  your file's quant '{quant}' is not one setup offers "
                  f"{', '.join(sorted(models_dict))}: it will run as-is; the RAM and VRAM estimates are for "
                  f"{FAMILIES[fam]['title']}'s --model {model}")
         return fam, model, files
 
-    say(f"Strata: {sentence}")
+    say(f"PolyStrata: {sentence}")
     fail("cannot install this GGUF with --custom-gguf",
          "use --inspect to read the full explanation, or give it to --gguf-dir")
 
