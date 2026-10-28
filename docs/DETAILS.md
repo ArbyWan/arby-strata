@@ -2095,16 +2095,17 @@ model's.
 changes at 10% of positions, mean KL from the stock model 0.063 nats (max 4.1), perplexity +15% on code, +2.3% on
 the document, +0.4% on the chat. Details: `bench/results/2026-09-27-esp/`.
 
-## strata-poly: flash attention for prompt reading (`STRATA_FATTN=1`, off by default)
+## strata-poly: flash attention for prompt reading (on by default; `STRATA_FATTN=0` turns it off)
 
 For strata-poly's Qwen3.6 family, including Ornith 122B (heads of 256 values, 8 or 16 heads a group), on an
-Ampere or later NVIDIA card. With
-`STRATA_FATTN=1` in the environment a prompt batch's attention runs through llama.cpp's flash-attention kernel
+Ampere or later NVIDIA card. A prompt batch's attention runs through llama.cpp's flash-attention kernel
 (`src/poly/fattn_mma.cuh`, a copy of `fattn-mma-f16.cuh` with the causal mask computed in the kernel) instead of
 two cuBLAS products and a softmax over scores in memory. Under the q8_0 cache (`--kv int8`) blocks of keys are
 dequantized to fp16 in the attention's existing score scratch; an fp16 cache is read where it lies. No VRAM is added.
 The server logs `STRATA_FATTN: prompt attention through llama.cpp's flash-attention kernel`. Decode, Turing, HIP and
-other models keep the old path, and without the variable nothing changes.
+other models keep the old path, and so does `STRATA_FATTN=0`. It was opt-in (`STRATA_FATTN=1`) until two cards beside
+the one below showed the same gain ([issue 107](https://github.com/VecSzn/PolyStrata/issues/107) and the measurement at
+the end of the next section).
 
 **Measured** on an RTX 3070 8 GB (PCIe 3.0 x16; Ryzen 5 2600X, 32 GB DDR4-3200; Cyber-Tiel-Coder 35B-A3B
 UD-Q4_K_XL, `--max-context 262144`, q8_0 cache), a coding-agent conversation of growing turns: prompt read 1,437 -> 1,824 tokens/s at 32K of context, 749 -> 1,268 at 103K,
@@ -2114,17 +2115,19 @@ the arithmetic in doubles (up to 7.7e-3 on results up to 2.9) than the old path'
 both caches. Greedy answers part from the old path's after a few dozen characters, at near-ties where the old path
 also parts from itself between runs.
 
-## strata-poly: tensor-core decode attention (`STRATA_FDEC=1`, off by default)
+## strata-poly: tensor-core decode attention (on by default from 4,096 tokens of context; `STRATA_FDEC=0` turns it off)
 
-The decode side of the same layers: the few tokens of an answer's step (one, or a window of guesses). With
-`STRATA_FDEC=1` they go through a kernel of this project's own (`fdec_q8()` / `fdec_f16()` in `src/poly/fattn.cu`)
+The decode side of the same layers: the few tokens of an answer's step (one, or a window of guesses). Once the cache
+holds 4,096 positions they go through a kernel of this project's own (`fdec_q8()` / `fdec_f16()` in `src/poly/fattn.cu`)
 instead of `attend()`'s score, softmax and value kernels, which write every score to memory and read it back twice.
 One CUDA block takes 1,024 keys of a KV head's group for up to 4 tokens (group 8) or 2 tokens (group 16) as flash
 attention on the tensor cores. The cache is read once for those tokens, and the blocks are merged by their softmax
 max and sum. q8_0 and fp16 caches, heads of 256 values, 8 or 16 heads a group, Ampere or later NVIDIA.
 A token gets the same bits alone or in a window, as
 with `attend()`. No VRAM is added. The server logs `STRATA_FDEC: decode attention through the tensor-core decode
-kernel`, or why not; Turing, HIP and other models keep the old path, and without the variable nothing changes.
+kernel from 4,096 tokens of context`; Turing, HIP and other models keep the old path, and so does `STRATA_FDEC=0`.
+Below 4,096 positions the old path stays, since its kernel is the faster one there (below); `STRATA_FDEC=1` uses
+the new one from the first position, as the opt-in did.
 
 **Measured** on the RTX 3070 setup above (q8_0 cache, 256K, with `STRATA_FATTN=1`), the same conversation, two runs
 each: decode 53.8 -> 63.9 tokens/s at 32K of context, 35.1 -> 53.0 at 103K, 29.3 -> 48.7 at 143K, 26.6 -> 45.6 at
@@ -2136,6 +2139,22 @@ arithmetic in doubles where `attend()` is within 1e-6. A long-context question s
 repository's source, temperature 0) got the same 11 of 12 checkable answers right with and without it, and its
 answers part from the old path's about as early as two runs of the old path part from each other. The 107K and a
 247K recall test passed.
+
+**Both, measured again before they became the default** on an RTX PRO 6000 (sm_120, CUDA 12.8) held to 12 GB with
+`--vram-reserve-mib`, Qwen3.6-35B-A3B UD-Q3_K_M with setup's own flags, fp16 cache, the expert split frozen, a
+prompt of this repository's documentation with a code hidden in its middle and a question about it at the end,
+the median of two runs:
+
+| Prompt | Neither: reads / writes, tokens/s | Both: reads / writes |
+| --- | ---: | ---: |
+| 21 tokens | 129 / 226 | 131 / 225 |
+| 4,833 | 3,911 / 178 | 4,216 / 188 |
+| 32,046 | 7,039 / 188 | 8,555 / 252 |
+| 100,046 | 5,837 / 106 | 8,210 / 230 |
+
+Every run at 32K and 100K answered the hidden code. With the fixed flags of a regression run the greedy answers of
+both and of neither were the same 128 tokens at 32K and parted at token 85 at 100K. The RTX 4060 Laptop of
+[issue 107](https://github.com/VecSzn/PolyStrata/issues/107) at 118K: 1.62x reading, 1.60x writing.
 
 ---
 

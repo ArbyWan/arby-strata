@@ -209,20 +209,31 @@ void Qwen35::assign_scratch() {
 #endif
         );
     }
-    // STRATA_FATTN=1: a prompt batch through llama.cpp's flash-attention kernel instead, in score_ (fattn.hpp)
+    // A prompt batch through llama.cpp's flash-attention kernel, in score_ (fattn.hpp), wherever it fits (Ampere or
+    // later, heads of 256): on unless STRATA_FATTN=0.  At 100K of context on an RTX PRO 6000 held to 12 GB, Qwen3.6
+    // read 8,210 tokens/s instead of 5,837; the answers part from the old path's at near-ties.  A card it does not fit
+    // keeps the old path without a word, unless STRATA_FATTN=1 asked for it.
     const char* fa = std::getenv("STRATA_FATTN");
-    if (rows_ >= kStageRows && fa && std::atoi(fa) == 1 && !fattn_) {   // assign_scratch() runs twice: say it once
+    if (rows_ >= kStageRows && !(fa && std::atoi(fa) == 0) && !fattn_) {   // assign_scratch() runs twice: say it once
         fattn_ = fattn_fits(head_dim_, n_head_, n_kv_, rows_, (size_t) chunk_ * n_head_ * opt_.max_context);
-        std::fprintf(stderr, "strata-poly: STRATA_FATTN: prompt attention %s\n",
-                     fattn_ ? "through llama.cpp's flash-attention kernel"
-                            : "unchanged (no kernel for it on this card, or --prompt-batch too large for the scratch)");
+        if (fattn_ || (fa && std::atoi(fa) == 1))
+            std::fprintf(stderr, "strata-poly: STRATA_FATTN: prompt attention %s\n",
+                         fattn_ ? "through llama.cpp's flash-attention kernel (STRATA_FATTN=0 turns it off)"
+                                : "unchanged (no kernel for it on this card, or --prompt-batch too large for the scratch)");
     }
-    // STRATA_FDEC=1: a few tokens' attention through fdec_q8() / fdec_f16() instead, in score_ (fattn.hpp)
+    // A few tokens' attention through fdec_q8() / fdec_f16(), in score_ (fattn.hpp), wherever it fits: on unless
+    // STRATA_FDEC=0, from 4,096 positions of context, below which its kernel was the slower one (docs/DETAILS.md);
+    // STRATA_FDEC=1 from the first position, as the opt-in was.  At 100K Qwen3.6 wrote 230 tokens/s instead of 106.
     const char* fd = std::getenv("STRATA_FDEC");
-    if (fd && std::atoi(fd) == 1 && !fdec_) {
+    if (!(fd && std::atoi(fd) == 0) && !fdec_) {
         fdec_ = fdec_fits(head_dim_, n_head_, n_kv_, (int) opt_.max_context, (size_t) chunk_ * n_head_ * opt_.max_context);
-        std::fprintf(stderr, "strata-poly: STRATA_FDEC: decode attention %s\n",
-                     fdec_ ? "through the tensor-core decode kernel" : "unchanged (no kernel for it on this card)");
+        fdec_from_ = fd && std::atoi(fd) == 1 ? 0 : 4096;
+        if (fdec_ || (fd && std::atoi(fd) == 1))
+            std::fprintf(stderr, "strata-poly: STRATA_FDEC: decode attention %s\n",
+                         !fdec_ ? "unchanged (no kernel for it on this card)"
+                         : fdec_from_ ? "through the tensor-core decode kernel from 4,096 tokens of context (STRATA_FDEC=0 "
+                                        "turns it off)"
+                                      : "through the tensor-core decode kernel");
     }
 #if defined(STRATA_USE_HIP)
     // STRATA_HIP_VALUE_SPLIT=1: split the long-context weighted-value reduction in HIP's attend().
@@ -461,7 +472,8 @@ void Qwen35::attn(Block& B, int64_t pos, int n) {
             attend_batch(blas_, q_, kc, vc, pos, n, score_, score_floats, awork_, att_, head_dim_, n_head_, n_kv_, scale,
                          st_, 0, 0, false, q8 ? Kvq8{B.k_codes, B.k_scales} : Kvq8{},
                          q8 ? Kvq8{B.v_codes, B.v_scales} : Kvq8{}, kw, vw, q8 ? work_halves_ : 0);
-    } else if (!(fdec_ && (q8 ? fdec_q8(q_, Kvq8{B.k_codes, B.k_scales}, Kvq8{B.v_codes, B.v_scales}, pos, n, at,
+    } else if (!(fdec_ && pos >= fdec_from_ &&
+                 (q8 ? fdec_q8(q_, Kvq8{B.k_codes, B.k_scales}, Kvq8{B.v_codes, B.v_scales}, pos, n, at,
                                         at ? room(n) : 0, att_, head_dim_, n_head_, n_kv_, scale, score_,
                                         (size_t) chunk_ * n_head_ * opt_.max_context, st_)
                               : fdec_f16(q_, B.keys, B.vals, pos, n, at, at ? room(n) : 0, att_, head_dim_, n_head_,
@@ -509,7 +521,8 @@ void Qwen35::attn_rows(Block& B, int n) {
         const int sized = room(1);
         pos_ = keep;
         const size_t sf = (size_t) chunk_ * n_head_ * opt_.max_context;
-        if (!(fdec_ && (q8 ? fdec_q8(q_ + i * hq, kq, vq, r.pos, 1, ai, sized, att_ + i * hq, head_dim_, n_head_, n_kv_,
+        if (!(fdec_ && r.pos >= fdec_from_ &&
+              (q8 ? fdec_q8(q_ + i * hq, kq, vq, r.pos, 1, ai, sized, att_ + i * hq, head_dim_, n_head_, n_kv_,
                                      scale, score_, sf, st_)
                            : fdec_f16(q_ + i * hq, kc, vc, r.pos, 1, ai, sized, att_ + i * hq, head_dim_, n_head_,
                                       n_kv_, scale, score_, sf, st_))))
