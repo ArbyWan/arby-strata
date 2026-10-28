@@ -125,6 +125,14 @@ struct Layer {
     size_t gu_bytes = 0, d_bytes = 0;  ///< one expert's gate (or up), and its down
     size_t gu_stride = 0;              ///< from an expert's gate to the next one's: twice gu_bytes in a file that
                                        ///< keeps an expert's gate and up in one tensor
+    // up's own format (issue 103: IsValorum's NanoPlus files quantize gate and up differently); in every other file
+    // these equal gu_type, gu_bytes and gu_stride, and nothing about the layer changes
+    uint32_t u_type = 0;
+    size_t u_bytes = 0, u_stride = 0;
+    bool mixed() const { return u_type != gu_type; }
+    size_t gu2() const { return gu_bytes + u_bytes; }   ///< an expert's gate and up: where its down starts in a slot
+    size_t gu_step = 0;   ///< from a staged expert's gate|up to the next one's: gu2(), and in a mixed layer whole
+                          ///< blocks of both types, since MMQ takes the stride in blocks (Mmq::mul)
     std::vector<uint8_t*> slot;        ///< per expert: gate | up | down in VRAM, or null
     size_t slot_bytes = 0;             ///< from a slot of the layer to the one behind it: whole blocks of both types
     std::vector<int32_t> ahead;        ///< experts a full prompt batch stages before it routes
@@ -701,6 +709,7 @@ protected:
     float *gu_ = nullptr, *hx_ = nullptr, *dx_ = nullptr;   ///< the rows' gate|up, hidden and down values
     float* hf_ = nullptr;   ///< the power of two a row was divided by for its half sums (guard_half_sums())
     void *mq_ = nullptr, *mq2_ = nullptr;                   ///< the rows quantized for the two products
+    void* mqu_ = nullptr;   ///< the rows quantized for up's product, in a layer whose up is not gate's type
     void* mqx_ = nullptr;                                   ///< lin()'s tokens quantized for a product
     int32_t *tab_ = nullptr, *h_tab_ = nullptr;   ///< a layer's row tables, in VRAM and pinned
     int32_t* iota_ = nullptr;                     ///< 0, 1, 2, ...
