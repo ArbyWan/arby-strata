@@ -6,12 +6,46 @@ All four **unmodified official default suites** used configured context 32768,
 three repetitions, thinking off and temperature 0: **132 measured requests,
 zero request errors, zero skips**. These suites measure speed, not correctness.
 
-| Model / quant | Chat decode median | 4K prompt median | 16K prompt median |
-|---|---:|---:|---:|
-| Qwen3.6 UD-Q3_K_M MTP | 31.4 tok/s | 516.7 tok/s | 510.6 tok/s |
-| Ornith APEX-I-COMPACT | 28.6 tok/s | 439.9 tok/s | 433.4 tok/s |
-| Tiel Coder UD-Q3_K_XL MTP | 29.2 tok/s | 498.7 tok/s | 495.8 tok/s |
-| Gemma 4 QAT-UD-Q4_K_XL, matching draft | 30.6 tok/s | 478.1 tok/s | 452.6 tok/s |
+## Official results in the community template format
+
+All rows use configured context **32768**, thinking off, temperature 0 and
+three suite repetitions. Values are **median (minimum–maximum)**; a single
+value means all samples were equal. Token counts use the same summary when
+inputs or outputs vary. `n` is the number of measured requests in that row.
+
+| Configuration / workload | Actual prompt tokens | Reused tokens | Generated tokens | Runs | Prompt tok/s median and range | Decode tok/s median and range | TTFT seconds median and range |
+|---|---:|---:|---:|---|---:|---:|---:|
+| Qwen3.6 Q3 MTP / chat | 46 (43–51) | 0 | 100 | 3 (n=9) | 65.0 (61.5–81.9) | 31.4 (27.9–37.2) | 0.711 (0.651–0.767) |
+| Qwen3.6 Q3 MTP / 4K prompt | 4019 | 0 | 24 | 3 (n=3) | 516.7 (515.7–518.3) | 25.9 (22.2–27.9) | 7.797 (7.761–7.800) |
+| Qwen3.6 Q3 MTP / 16K prompt | 16058 | 0 | 24 | 3 (n=3) | 510.6 (510.5–511.6) | 24.7 (23.7–27.1) | 31.468 (31.428–31.470) |
+| Qwen3.6 Q3 MTP / agent initial turns | 609 | 0 | 29 (19–52) | 3 (n=3) | 193.1 (190.4–209.4) | 29.2 (27.7–35.6) | 3.158 (2.923–3.227) |
+| Qwen3.6 Q3 MTP / agent follow-ups | 8604 (2220–15348) | 5634 (602–11548) | 47 (34–55) | 3 (n=15) | 360.7 (343.9–411.7) | 30.3 (23.3–37.0) | 8.387 (4.362–10.661) |
+| Ornith Compact / chat | 46 (43–51) | 0 | 100 | 3 (n=9) | 70.3 (63.5–79.8) | 28.6 (23.0–31.7) | 0.659 (0.616–0.681) |
+| Ornith Compact / 4K prompt | 4019 | 0 | 24 | 3 (n=3) | 439.9 (439.0–440.4) | 26.6 (24.3–27.5) | 9.142 (9.132–9.161) |
+| Ornith Compact / 16K prompt | 16058 | 0 | 24 | 3 (n=3) | 433.4 (432.2–433.9) | 25.7 (24.4–25.7) | 37.085 (37.021–37.169) |
+| Ornith Compact / agent initial turns | 609 | 0 | 39 (18–42) | 3 (n=3) | 194.3 (188.5–198.4) | 27.0 (23.6–29.1) | 3.138 (3.073–3.237) |
+| Ornith Compact / agent follow-ups | 8639 (2219–15399) | 5662 (602–11581) | 57 (47–64) | 3 (n=15) | 315.0 (303.5–352.6) | 26.3 (24.1–29.2) | 9.713 (5.107–12.065) |
+| Tiel Q3 XL / chat | 224 (221–229) | 0 | 100 | 3 (n=9) | 131.4 (125.1–142.8) | 29.2 (25.2–32.3) | 1.705 (1.607–1.787) |
+| Tiel Q3 XL / 4K prompt | 4025 | 0 | 24 | 3 (n=3) | 498.7 (496.9–498.9) | 25.9 (25.0–28.5) | 8.078 (8.075–8.125) |
+| Tiel Q3 XL / 16K prompt | 16058 | 0 | 24 | 3 (n=3) | 495.8 (495.2–496.9) | 22.9 (22.6–22.9) | 32.407 (32.331–32.445) |
+| Tiel Q3 XL / agent initial turns | 835 | 0 | 10 | 3 (n=3) | 216.2 (210.6–230.9) | 26.8 (26.1–29.1) | 3.866 (3.623–3.969) |
+| Tiel Q3 XL / agent follow-ups | 8845 (2441–15611) | 5923 (844–11859) | 51 (32–64) | 3 (n=15) | 355.3 (338.1–402.6) | 27.0 (24.3–29.3) | 8.416 (4.386–10.778) |
+| Gemma QAT Q4 XL / chat | 48 (45–53) | 0 | 100 | 3 (n=9) | 60.8 (57.9–72.4) | 30.6 (24.3–36.9) | 0.799 (0.732–0.834) |
+| Gemma QAT Q4 XL / 4K prompt | 4101 | 0 | 24 | 3 (n=3) | 478.1 (477.6–478.7) | 27.0 (25.2–28.5) | 8.591 (8.583–8.657) |
+| Gemma QAT Q4 XL / 16K prompt | 16390 | 0 | 24 | 3 (n=3) | 452.6 (452.4–452.7) | 31.3 (30.5–33.0) | 36.237 (36.223–36.655) |
+| Gemma QAT Q4 XL / agent initial turns | 396 | 0 | 22 | 3 (n=3) | 169.3 (167.4–184.6) | 32.4 (30.7–34.6) | 2.342 (2.149–2.372) |
+| Gemma QAT Q4 XL / agent follow-ups | 8575 (2078–15542) | 5553 (389–11629) | 52 (42–60) | 3 (n=15) | 341.1 (325.1–382.7) | 30.2 (23.2–34.8) | 9.150 (4.679–11.594) |
+
+Chat is three different questions repeated three times. Agent initial rows report
+three starting turns; follow-up rows pool the other15 turns from three six-turn
+sessions. Together, all table rows cover **132 total measured requests**.
+Prompt throughput uses engine timing for newly processed tokens; reused prefix
+tokens remain visible separately. TTFT is measured by the streaming client.
+Official prompt tests have a 24-token output cap, chat 100 and agent turns 64.
+The 4K/16K labels describe approximate workloads, not the configured window.
+All 132 requests succeeded; these speed checks do not establish correctness.
+
+[Numeric CSV with medians and range endpoints](official-results.csv).
 
 The single-request 64K/128K retrieval, coding/formatting checks and paired
 tail-skip comparison are **custom supplementary tests**, not additional official
