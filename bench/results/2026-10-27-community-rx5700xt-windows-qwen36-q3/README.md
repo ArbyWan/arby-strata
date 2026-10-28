@@ -1,4 +1,35 @@
-# RX 5700 XT on Windows: Qwen3.6 UD-Q3_K_M, 32K suite and 64K/128K retrieval
+# RX 5700 XT on Windows: four official suites and supplementary context tests
+
+Measured 2026-10-27 on a Xeon W-2145 / RX 5700 XT / 256 GiB desktop, using the
+same poly.5-equivalent `strata-poly` HIP executable compiled for actual `gfx1010`.
+All four **unmodified official default suites** used configured context 32768,
+three repetitions, thinking off and temperature 0: **132 measured requests,
+zero request errors, zero skips**. These suites measure speed, not correctness.
+
+| Model / quant | Chat decode median | 4K prompt median | 16K prompt median |
+|---|---:|---:|---:|
+| Qwen3.6 UD-Q3_K_M MTP | 31.4 tok/s | 516.7 tok/s | 510.6 tok/s |
+| Ornith APEX-I-COMPACT | 28.6 tok/s | 439.9 tok/s | 433.4 tok/s |
+| Tiel Coder UD-Q3_K_XL MTP | 29.2 tok/s | 498.7 tok/s | 495.8 tok/s |
+| Gemma 4 QAT-UD-Q4_K_XL, matching draft | 30.6 tok/s | 478.1 tok/s | 452.6 tok/s |
+
+The single-request 64K/128K retrieval, coding/formatting checks and paired
+tail-skip comparison are **custom supplementary tests**, not additional official
+suites or broad model-quality benchmarks. Formatting and coding failures are
+retained. Hybrid CPU/GPU execution is used throughout; this is not full GPU offload.
+
+- [Additional-model methods, results, failures and memory](ADDITIONAL-MODELS.md)
+- [Three-pair Qwen tail-skip comparison](TAIL-SKIP.md)
+- Original Qwen official JSON: [results.json](results.json)
+- Original Qwen provenance: [provenance.json](provenance.json)
+- New-model provenance and official JSON hashes: [additional-models/provenance.json](additional-models/provenance.json)
+
+The folder retains the original Qwen-specific name to keep the first submission's
+paths stable. All results are from this one desktop; differences between models,
+weights, drafts, profiles and adaptive Windows GPU budgets prevent a pure
+architecture/quantization comparison. No general quality ranking is claimed.
+
+## Original Qwen3.6 report and build details
 
 One RX 5700 XT successfully ran the official default benchmark suite and two
 separate long-prompt retrieval probes using the real `gfx1010` HIP target.
