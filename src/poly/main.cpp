@@ -1115,6 +1115,10 @@ void usage() {
                  "                         little (default 0 = none is; setup gives Qwen3.6 6)\n"
                  "  --skip-weight F        in place of --tail-skip: an expert outside VRAM that every token of a\n"
                  "                         window weighs under F of its experts' weight is left out (default 0 = off)\n"
+                 "  --cache-bias F         qwen35moe: a token's router scores get F added for each expert in VRAM\n"
+                 "                         before it picks, as it comes a few at a time; the weights stay the\n"
+                 "                         router's own: fewer experts on the CPU, and the answers move (default 0\n"
+                 "                         = off)\n"
                  "environment: STRATA_ROUTE_TAIL_SKIP=N  in place of --tail-skip (0 turns it off)\n"
                  "environment: STRATA_FREEZE_EXPERTS=1  hold the split of the routed experts between the card\n"
                  "                         and the CPU still, so the same request gives the same greedy answer\n"
@@ -1183,6 +1187,7 @@ int main(int argc, char** argv) {
         else if (a == "--expert-swaps") o.expert_swaps = std::atoi(val());
         else if (a == "--tail-skip") o.tail_skip = std::atoi(val());
         else if (a == "--skip-weight") o.skip_weight = (float) std::atof(val());
+        else if (a == "--cache-bias") o.cache_bias = (float) std::atof(val());
         else if (a == "--layer-split") o.layer_split = val();
         else if (a == "--batch" || a == "--slots") o.batch = std::atoi(val());
         else if (a == "--check-batch") check = std::atoi(val());
@@ -1253,6 +1258,10 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "strata-poly: loaded in %.1f s; %d of %d routed experts in VRAM (%.1f GiB), %d CPU threads\n",
                      ms_since(t0) / 1000.0, engine.cached_experts(), engine.total_experts(), engine.cached_gib(),
                      engine.threads());
+        if (o.cache_bias > 0)
+            std::fprintf(stderr, "strata-poly: cache bias %.2f: a token that comes a few at a time routes with %.2f "
+                                 "added to the score of each expert in VRAM; the weights stay the router's own\n",
+                         o.cache_bias, o.cache_bias);
         if (o.skip_weight > 0)
             std::fprintf(stderr, "strata-poly: skip weight %.3f: an expert outside VRAM that every token of a window "
                                  "weighs under %.1f%% of its experts' weight is left out (in place of --tail-skip)\n",

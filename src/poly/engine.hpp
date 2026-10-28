@@ -89,6 +89,9 @@ struct Options {
     float skip_weight = 0;        ///< in place of tail_skip: a routed expert outside VRAM whose router weight is under
                                   ///< this share of its token's experts' weight, for every token of the call, is left
                                   ///< out (--skip-weight); 0: tail_skip decides
+    float cache_bias = 0;         ///< a token's few-at-a-time routing adds this to the score of each expert in VRAM
+                                  ///< before it picks its experts; their weights stay the softmax of the scores the
+                                  ///< router gave (--cache-bias, qwen35moe only); 0: the router's own picks
     std::string layer_split;      ///< the layers across the CUDA devices this process sees, in their order: "auto"
                                   ///< (by each card's free VRAM) or the first layer of each later card ("20,30");
                                   ///< empty, or one device: the current card alone
@@ -470,6 +473,7 @@ protected:
     bool moe(Layer& L, int il, int n, const std::function<void()>* first = nullptr);
     bool card_moe(int n);
     bool moe_card(Layer& L, int il, int n);
+    const float* biased(const Layer& L, const float* scores);
     /// Whether n tokens take layer L's routed experts as a prompt batch, through MMQ (moe_rows()), and not a few at
     /// a time (moe()).
     bool batched(const Layer& L, int n) const;
@@ -728,6 +732,7 @@ protected:
     int stage_turn_ = 0;
     std::vector<int32_t> ids_, count_, first_, group_, round_;
     std::vector<float> route_tmp_;   ///< route()'s scratch, a share for each host thread
+    std::vector<float> bias_rl_;     ///< one token's scores with Options::cache_bias added (moe())
     struct Run {
         int c, j, m, most;   ///< the rows' class, its first cached expert and how many, the most rows one has
     };

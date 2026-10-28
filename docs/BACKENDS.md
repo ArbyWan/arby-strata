@@ -1855,6 +1855,17 @@ At about the same mean KL the weight is 10% to 12% faster; at 0.095 it moves the
 on every figure and leaves out 17% more experts. At 0.06 the most likely token agrees less often than at
 `--tail-skip 7`. With `--skip-weight` above 0, `--tail-skip` is not used. Other models were not measured.
 
+`--cache-bias F` (opt-in, off by default, `qwen35moe` models only) adds F to the router score of each expert that is in
+the VRAM cache before a token that comes a few at a time picks its experts, so a pick that was close goes to the
+cached expert and not to one the CPU has to compute. The weights stay the softmax of the scores the router gave the
+chosen experts, not of the biased ones. A prompt batch and a call routed on the card (every expert in VRAM) route as before, and
+with the option at 0 nothing in the path changes. With `--tail-skip`, the places it counts are the biased order's.
+The idea and these numbers are from issue 81, measured on the author's TensorRT Edge-LLM fork (RTX 4060 laptop,
+Qwen3.6-35B-A3B, own INT4 GPTQ weights, a simulated LRU cache for the misses): F = 0.5 gave about 65% fewer cache
+misses for +0.09% held-out perplexity, and F = 1 about 85% fewer for +1.5%. They were not measured on this engine,
+where a miss costs CPU time and not a PCIe copy; this change has not been timed or checked for how far it moves the
+answers here, and it has not been built on every backend.
+
 A call of fewer tokens than `--stage-ahead` routes a layer first and then copies the experts outside VRAM that it
 routes to: a turn of a conversation, a short prompt, the last call of a long one. A call of 150 to 800 tokens
 routes to most of a layer's experts, so with most of them outside VRAM the copies are most of its time, and the

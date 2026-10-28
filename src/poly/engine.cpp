@@ -1057,6 +1057,9 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
     if (name != "gemma4" && (o.kv_format == KvFmt::kInt8 || o.kv_format == KvFmt::kInt8K))
         throw std::runtime_error("--kv int8 and --kv int8k are Gemma 4's; for a qwen35moe or kolibri1 model use "
                                  "--kv q8_0 (this is a '" + name + "' model)");
+    // moe() weighs the picks as a softmax of their scores, which is how only this architecture's router does
+    if (o.cache_bias > 0.f && name != "qwen35moe")
+        throw std::runtime_error("--cache-bias is supported for qwen35moe models; this is a '" + name + "' model");
     const auto make = [&]() -> std::unique_ptr<Engine> {
         if (name == "glm5-next" || name == "glm5next") return std::make_unique<Glm5Next>();   // Unsloth: no hyphen
         if (name == "qwen35moe") return std::make_unique<Qwen35>();
@@ -1710,6 +1713,8 @@ void Engine::load(const Options& o) {
     if (opt_.tail_skip < 0) throw std::runtime_error("--tail-skip (STRATA_ROUTE_TAIL_SKIP) cannot be negative");
     if (!(opt_.skip_weight >= 0.f && opt_.skip_weight < 1.f))
         throw std::runtime_error("--skip-weight is a share of a token's experts' weight: 0 (off) up to below 1");
+    if (!(opt_.cache_bias >= 0.f && opt_.cache_bias <= 16.f))
+        throw std::runtime_error("--cache-bias is added to a router score: 0 (off) up to 16");
     if (opt_.dump || std::min(opt_.prompt_batch, opt_.max_context) == 1) opt_.window = 1;
     gg_ = std::make_unique<Shards>(opt_.model);
     if (!opt_.draft_model.empty() && opt_.draft && opt_.window != 1) dg_ = std::make_unique<Shards>(opt_.draft_model);
@@ -1861,6 +1866,7 @@ void Engine::load(const Options& o) {
         workers_ = std::make_shared<Workers>(threads);
     }
     route_tmp_.assign((size_t) workers_->threads() * 2 * n_expert_, 0.f);
+    if (opt_.cache_bias > 0.f) bias_rl_.assign((size_t) n_expert_, 0.f);
     start_swaps();
     reset();
     // nothing is read from the files when every expert is in VRAM
@@ -2251,6 +2257,12 @@ void Engine::moe_router(const Layer& L, int n) {
     copy2(rl_, h_rl_, n * n_expert_, xn_, h_x_, n * n_embd_, st_);
 }
 
+// One token's router scores with Options::cache_bias added to the ones of the experts in VRAM.
+const float* Engine::biased(const Layer& L, const float* scores) {
+    for (int e = 0; e < n_expert_; ++e) bias_rl_[(size_t) e] = scores[e] + (L.slot[(size_t) e] ? opt_.cache_bias : 0.f);
+    return bias_rl_.data();
+}
+
 // The routed experts of tokens that come a few at a time.  moe_router() is on its way, with ev_ behind it.  True
 // when experts were computed on the CPU: their sum waits in h_cpu_ for moe_add().  `first` is run once, by the
 // thread that hands the cached experts to the card and ahead of them.
@@ -2279,7 +2291,17 @@ bool Engine::moe(Layer& L, int il, int n, const std::function<void()>* first) {
         for (int t = 0; t < m; ++t) {
             int ids[kMaxUsed];
             float w[kMaxUsed];
-            route(il, h_rl_ + (size_t) (at + t) * n_expert_, tok_ ? tok_[at + t] : -1, ids, w, route_tmp_.data());
+            const float* scores = h_rl_ + (size_t) (at + t) * n_expert_;
+            route(il, opt_.cache_bias > 0.f ? biased(L, scores) : scores, tok_ ? tok_[at + t] : -1, ids, w,
+                  route_tmp_.data());
+            if (opt_.cache_bias > 0.f) {
+                // --cache-bias: the biased scores chose the experts; the weights are the router's own, a softmax of
+                // the scores it gave the chosen ones
+                float mx = scores[ids[0]], sum = 0.f;
+                for (int k = 1; k < n_used_; ++k) mx = std::max(mx, scores[ids[k]]);
+                for (int k = 0; k < n_used_; ++k) sum += w[k] = std::exp(scores[ids[k]] - mx);
+                for (int k = 0; k < n_used_; ++k) w[k] /= sum;
+            }
             float w_all = 0.f;
             for (int k = 0; k < n_used_; ++k) w_all += w[k];
             for (int k = 0; k < n_used_; ++k) {
