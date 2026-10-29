@@ -76,16 +76,20 @@ void Qwen35::load_geometry() {
     // The rotary embedding has an axis for time, two for an image and a spare one, and its sections say which
     // pairs turn by which.  A token of text has its position on the first three and none on the spare one, so
     // the kernel turns every pair by the position: that is wrong for a pair the sections leave to the spare axis.
-    const MetaValue* sec = find("rope.dimension_sections");
-    need(sec && sec->type == MetaType::ARRAY && sec->items.size() >= 3, "no rope.dimension_sections");
-    int sections[4] = {}, covered = 0;
-    for (size_t i = 0; i < 4 && i < sec->items.size(); ++i) covered += sections[i] = (int) sec->items[i].u;
-    need(covered > 0, "empty rope.dimension_sections");
-    for (int pair = 0; pair < n_rot_ / 2; ++pair) {
-        const int s = pair % covered;
-        need(s < 3 * sections[s % 3], "the rotary embedding leaves pairs to an axis text has no position on");
+    // Clover reads no pictures and its file has no sections: every pair turns by the position, as a text token's do.
+    clover_ = gg_->get("general.architecture")->s == "clover_moe";
+    if (!clover_) {
+        const MetaValue* sec = find("rope.dimension_sections");
+        need(sec && sec->type == MetaType::ARRAY && sec->items.size() >= 3, "no rope.dimension_sections");
+        int sections[4] = {}, covered = 0;
+        for (size_t i = 0; i < 4 && i < sec->items.size(); ++i) covered += sections[i] = (int) sec->items[i].u;
+        need(covered > 0, "empty rope.dimension_sections");
+        for (int pair = 0; pair < n_rot_ / 2; ++pair) {
+            const int s = pair % covered;
+            need(s < 3 * sections[s % 3], "the rotary embedding leaves pairs to an axis text has no position on");
+        }
+        sections_ = covered;
     }
-    sections_ = covered;
     theta_scale_ = std::pow(shape_f("rope.freq_base"), -2.f / (float) n_rot_);
 
     // this architecture puts no limit on a SwiGLU's inputs
@@ -108,7 +112,10 @@ void Qwen35::load_layer(int il) {
         B.wz = mat("attn_gate.weight", n_embd_, d_inner_);
         B.conv = f32("ssm_conv1d.weight", kConv, conv_dim_);
         B.dt = f32("ssm_dt.bias", v_heads_);
-        B.a = f32("ssm_a", v_heads_);
+        // a decay rate: llama.cpp's converter stores -exp(A_log), Clover's A_log itself
+        B.a = clover_ ? upload(tensor(il, "ssm_a"), blk(il, "ssm_a"), v_heads_, 1, kF32,
+                               [](float a) { return -std::exp(a); })
+                      : f32("ssm_a", v_heads_);
         B.alpha = mat("ssm_alpha.weight", n_embd_, v_heads_);
         B.beta = mat("ssm_beta.weight", n_embd_, v_heads_);
         B.o_norm = f32("ssm_norm.weight", s_dim_);

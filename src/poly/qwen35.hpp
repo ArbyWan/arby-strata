@@ -17,7 +17,7 @@ public:
     size_t card_row_bytes() const override;
     void save_card_rows(int64_t first, int64_t n, uint8_t* dst) override;
     void load_card_rows(const uint8_t* src, int64_t from, int64_t count, int64_t first, int64_t n) override;
-    bool sees() const override { return true; }
+    bool sees() const override { return !clover_; }
 
 protected:
     void load_geometry() override;
@@ -76,6 +76,7 @@ private:
     const int32_t* turns(int64_t pos, int n, int64_t* first);
 
     std::vector<Block> blocks_;   ///< one a layer of layers_
+    bool clover_ = false;         ///< a Clover file (architecture clover_moe): text only, its ssm_a is A_log itself
     int n_head_ = 0, n_kv_ = 0, head_dim_ = 0, n_rot_ = 0;
     float theta_scale_ = 0;   ///< a rotary pair turns by position * theta_scale^pair
     int sections_ = 1;        ///< the pairs the rotary embedding's three axes take in turn before they start over

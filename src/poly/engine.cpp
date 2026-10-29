@@ -1061,7 +1061,9 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
     const Shards file(o.model);
     const MetaValue* arch = file.get("general.architecture");
     const std::string name = arch ? arch->s : std::string();
-    if (o.kv_format == KvFmt::kQ8_0 && name != "qwen35moe" && name != "kolibri1")
+    // Clover is a qwen35moe model trained to also guess a block of tokens at once (Qwen35)
+    const bool qwen35 = name == "qwen35moe" || name == "clover_moe";
+    if (o.kv_format == KvFmt::kQ8_0 && !qwen35 && name != "kolibri1")
         throw std::runtime_error("--kv q8_0 is supported for qwen35moe and kolibri1 models in v1; this is a '" + name +
                                  "' model");
     // int8 and int8k are Gemma 4's: their readers are not the arithmetic q8_0's are, so a model takes one
@@ -1070,11 +1072,11 @@ std::unique_ptr<Engine> Engine::open(const Options& o) {
         throw std::runtime_error("--kv int8 and --kv int8k are Gemma 4's; for a qwen35moe or kolibri1 model use "
                                  "--kv q8_0 (this is a '" + name + "' model)");
     // moe() weighs the picks as a softmax of their scores, which is how only this architecture's router does
-    if (o.cache_bias > 0.f && name != "qwen35moe")
+    if (o.cache_bias > 0.f && !qwen35)
         throw std::runtime_error("--cache-bias is supported for qwen35moe models; this is a '" + name + "' model");
     const auto make = [&]() -> std::unique_ptr<Engine> {
         if (name == "glm5-next" || name == "glm5next") return std::make_unique<Glm5Next>();   // Unsloth: no hyphen
-        if (name == "qwen35moe") return std::make_unique<Qwen35>();
+        if (qwen35) return std::make_unique<Qwen35>();
         if (name == "gemma4") return std::make_unique<Gemma4>();
         if (name == "deepseek4") return std::make_unique<DeepSeek4>();
         if (name == "lfm2moe") return std::make_unique<Lfm2Moe>();
