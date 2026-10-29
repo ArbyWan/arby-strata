@@ -2429,6 +2429,124 @@ __global__ void gdn_out_kernel(float* __restrict__ out, const float* __restrict_
     out[at] = o / sqrtf(os / float(dim) + norm_eps) * o_norm[threadIdx.x] * (gate * sigmoid(gate));
 }
 
+// conv4_silu_kernel for a block of tokens that see each other (Clover): a token's sum adds its next three inputs
+// in the block, input t + d times right[d - 1], to the causal one.  The state is read and left as it was.
+__global__ void conv4_block_silu_kernel(const float* __restrict__ x, const float* __restrict__ state,
+                                        const float* __restrict__ w, const float* __restrict__ right,
+                                        float* __restrict__ out, int channels, int rows) {
+    const int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (c >= channels) return;
+    const float* wc = w + 4 * size_t(c);
+    const float* rc = right + 3 * size_t(c);
+    const float* st = state + 3 * size_t(c);
+    const auto in = [&](int row) { return row < 0 ? st[3 + row] : x[size_t(row) * channels + c]; };
+    for (int row = 0; row < rows; ++row) {
+        float y = in(row - 3) * wc[0] + in(row - 2) * wc[1] + in(row - 1) * wc[2] + in(row) * wc[3];
+        for (int d = 1; d <= 3 && row + d < rows; ++d) y += x[size_t(row + d) * channels + c] * rc[d - 1];
+        out[size_t(row) * channels + c] = y * sigmoid(y);
+    }
+}
+
+// A value head's weights in a block of tokens that see each other (Clover's gated delta net in a block): token
+// i's softmax over the block's tokens j, by the unscaled dot product of their normed query and key times the
+// head's logit scale, and over the head's recurrent state, by bias + c * log(rows / 32).  w gets rows + 1 a token
+// a head, the state's last.  qkv as gdn_norm_kernel left it: its queries are scaled by 1 / sqrt(dim).  A block a
+// head; the queries and keys in shared memory.
+__global__ void gdn_block_weights_kernel(const float* __restrict__ qkv, const float* __restrict__ logit_scale,
+                                         const float* __restrict__ hist_b, const float* __restrict__ hist_c,
+                                         float* __restrict__ w, int dim, int n_head, int k_heads, int rows) {
+    extern __shared__ float sh[];
+    float* q = sh;                      // rows * dim
+    float* k = q + size_t(rows) * dim;  // rows * dim
+    float* sc = k + size_t(rows) * dim; // rows * (rows + 1)
+    const int h = blockIdx.x, hk = h % k_heads, wide = rows + 1;
+    const size_t keys = size_t(dim) * k_heads, row_n = 2 * keys + size_t(dim) * n_head;
+    for (int at = threadIdx.x; at < rows * dim; at += blockDim.x) {
+        const int r = at / dim, i = at % dim;
+        const float* x = qkv + size_t(r) * row_n + size_t(hk) * dim;
+        q[at] = x[i];
+        k[at] = x[keys + i];
+    }
+    __syncthreads();
+    const float scale = logit_scale[h] * sqrtf(float(dim));   // the queries' 1 / sqrt(dim) undone
+    for (int at = threadIdx.x; at < rows * rows; at += blockDim.x) {
+        const int i = at / rows, j = at % rows;
+        float dot = 0.0f;
+        for (int d = 0; d < dim; ++d) dot += q[size_t(i) * dim + d] * k[size_t(j) * dim + d];
+        sc[size_t(i) * wide + j] = dot * scale;
+    }
+    __syncthreads();
+    const float past = hist_b[h] + hist_c[h] * logf(float(rows) / 32.0f);
+    for (int i = threadIdx.x; i < rows; i += blockDim.x) {
+        float* s = sc + size_t(i) * wide;
+        s[rows] = past;
+        float mx = s[0];
+        for (int j = 1; j < wide; ++j) mx = fmaxf(mx, s[j]);
+        float sum = 0.0f;
+        for (int j = 0; j < wide; ++j) sum += s[j] = expf(s[j] - mx);
+        float* o = w + (size_t(h) * rows + i) * wide;
+        for (int j = 0; j < wide; ++j) o[j] = s[j] / sum;
+    }
+}
+
+// The block's output before its norm, a warp a column as gdn_state_kernel: token i's read of the state, S q_i
+// decayed by the token's decay, times its weight on the state, and the block's values by its weights on them.
+// The state is read and left as it was.
+__global__ void gdn_block_out_kernel(const float* __restrict__ qkv, const float* __restrict__ decay,
+                                     const float* __restrict__ s, const float* __restrict__ w,
+                                     float* __restrict__ out, int dim, int n_head, int k_heads, int rows) {
+    const int per_head = dim / int(blockDim.x / WARP);
+    const int h = blockIdx.x / per_head, hk = h % k_heads;
+    const int j = (blockIdx.x % per_head) * int(blockDim.x / WARP) + int(threadIdx.x / WARP);
+    const int lane = threadIdx.x & (WARP - 1);
+    if (j >= dim) return;
+    const size_t keys = size_t(dim) * k_heads, d_inner = size_t(dim) * n_head, row_n = 2 * keys + d_inner;
+    const float* col = s + (size_t(h) * dim + j) * dim;
+    const int wide = rows + 1;
+    for (int row = 0; row < rows; ++row) {
+        const float* qn = qkv + size_t(row) * row_n + size_t(hk) * dim;
+        float o = 0.0f;
+        for (int i = lane; i < dim; i += WARP) o += col[i] * qn[i];
+        o = warp_sum(o);
+        if (lane != 0) continue;
+        const float* wt = w + (size_t(h) * rows + row) * wide;
+        float local = 0.0f;
+        for (int r = 0; r < rows; ++r) local += wt[r] * qkv[size_t(r) * row_n + 2 * keys + size_t(h) * dim + j];
+        out[size_t(row) * d_inner + size_t(h) * dim + j] = o * decay[size_t(row) * n_head + h] * wt[rows] + local;
+    }
+}
+
+// Qwen35::route_block() on the card: a thread an expert, one block for the call's tokens.
+__global__ void coreset_mask_kernel(float* __restrict__ logits, int n_expert, int n_used, int rows, float share) {
+    extern __shared__ float sh[];
+    float* p = sh;               // a token's probabilities before their sum divides them
+    float* mass = sh + n_expert; // each expert's probability, added up over the tokens that took it
+    __shared__ float part[32];
+    const int e = threadIdx.x;
+    mass[e] = 0.0f;
+    for (int t = 0; t < rows; ++t) {
+        const float s = logits[size_t(t) * n_expert + e];
+        const float x = expf(s - block_max(s, part));
+        const float sum = block_sum(x, part);
+        p[e] = x;
+        __syncthreads();
+        int ahead = 0;
+        for (int j = 0; j < n_expert; ++j) ahead += p[j] > x || (p[j] == x && j < e);
+        if (ahead < n_used) mass[e] += x / sum;
+        __syncthreads();
+    }
+    const float m = mass[e], total = block_sum(m, part);
+    int ahead = 0;
+    float before = 0.0f;
+    for (int j = 0; j < n_expert; ++j) {
+        const bool a = mass[j] > m || (mass[j] == m && j < e);
+        ahead += a;
+        before += a ? mass[j] : 0.0f;
+    }
+    if (ahead > 0 && before >= share * total)
+        for (int t = 0; t < rows; ++t) logits[size_t(t) * n_expert + e] = -INFINITY;
+}
+
 inline cudaStream_t cs(void* stream) { return (cudaStream_t) stream; }
 inline int grid(size_t n, int block) { return int((n + block - 1) / block); }
 
@@ -3831,6 +3949,37 @@ void gdn_step(float* qkv, float* alpha, float* beta, const float* dt, const floa
                                                                   snap, stride, sn);
     }
     gdn_out_kernel<<<rows * n_head, dim, 0, cs(stream)>>>(out, z, o_norm, dim, norm_eps);
+}
+
+void conv4_block_silu(const float* x, const float* state, const float* w, const float* right, float* out,
+                      int channels, int rows, void* stream) {
+    if (rows <= 0) return;
+    conv4_block_silu_kernel<<<grid(channels, 256), 256, 0, cs(stream)>>>(x, state, w, right, out, channels, rows);
+}
+
+void gdn_block(float* qkv, float* alpha, float* beta, const float* dt, const float* a, const float* s,
+               const float* z, const float* o_norm, const float* logit_scale, const float* hist_b,
+               const float* hist_c, float* out, float* w, int dim, int n_head, int k_heads, int rows,
+               float norm_eps, void* stream) {
+    if (dim % WARP != 0 || dim > 256) throw std::invalid_argument("gdn_block: a head of 32 to 256 values, in 32s");
+    const size_t shared = (2 * size_t(rows) * dim + size_t(rows) * (rows + 1)) * sizeof(float);
+    if (rows < 1 || rows > 32 || shared > 48 * 1024)
+        throw std::invalid_argument("gdn_block: 1 to 32 tokens whose queries and keys fit 48 KiB");
+    const size_t row_n = (2 * size_t(k_heads) + n_head) * dim;
+    const int gates = rows * n_head, columns = std::min(dim, 1024 / WARP);
+    gdn_norm_kernel<<<rows * k_heads, dim, 0, cs(stream)>>>(qkv, dim, k_heads, row_n, norm_eps);
+    gdn_gates_kernel<<<grid(gates, 256), 256, 0, cs(stream)>>>(alpha, beta, dt, a, n_head, gates);
+    gdn_block_weights_kernel<<<n_head, 256, shared, cs(stream)>>>(qkv, logit_scale, hist_b, hist_c, w, dim, n_head,
+                                                                 k_heads, rows);
+    const int blocks = n_head * ((dim + columns - 1) / columns), threads = columns * WARP;
+    gdn_block_out_kernel<<<blocks, threads, 0, cs(stream)>>>(qkv, alpha, s, w, out, dim, n_head, k_heads, rows);
+    gdn_out_kernel<<<rows * n_head, dim, 0, cs(stream)>>>(out, z, o_norm, dim, norm_eps);
+}
+
+void coreset_mask(float* logits, int n_expert, int n_used, int rows, float share, void* stream) {
+    if (n_expert % WARP != 0 || n_expert > 1024) throw std::invalid_argument("coreset_mask: 32 to 1024 experts, in 32s");
+    coreset_mask_kernel<<<1, n_expert, 2 * size_t(n_expert) * sizeof(float), cs(stream)>>>(logits, n_expert, n_used,
+                                                                                         rows, share);
 }
 
 }  // namespace strata::poly

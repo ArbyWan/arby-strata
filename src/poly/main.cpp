@@ -64,7 +64,8 @@ double ms_since(Clock::time_point t) { return std::chrono::duration<double, std:
 constexpr double kProfileSaveMs = 10000.0;
 
 // The most tokens of a window whose guesses are the block's: the token the model has and three guesses, each
-// from the one before.  A repeat of the conversation may fill a longer window (Options::window).
+// from the one before.  A repeat of the conversation may fill a longer window (Options::window), and so may a
+// model whose guesses come together (Engine::guesses_at_once()).
 constexpr int kBlockWindow = 4;
 
 // A window longer than that is for a copy: a repeat of the conversation whose match is this many tokens or more.
@@ -480,6 +481,7 @@ struct Session {
         };
         if (max_new > 0) {
             int32_t w[strata::spec::DraftPolicy::kMaxT], d[strata::spec::DraftPolicy::kMaxT];
+            const int block_window = engine.guesses_at_once() ? most : kBlockWindow;
             int32_t t = pick(engine.logits());   // picked, and not shown yet
             while (show(t)) {
                 // t goes into the model now, and with it guesses at what follows when there are any that pay
@@ -487,7 +489,7 @@ struct Session {
                 const bool room = engine.pos() + most <= engine.max_context();
                 const int offered = look && room ? repeats.propose(most - 1, w + 1) : 0;
                 const int match = repeats.last_match();
-                const int widest = match >= kCopyMatch ? most : std::min(most, kBlockWindow);   // this round's window
+                const int widest = match >= kCopyMatch ? most : std::min(most, block_window);   // this round's window
                 const int k = std::min(offered, widest - 1);
                 // A repeat that fills the window, from a match of a length that has been right nine times in ten,
                 // is taken as it is: the block would mostly say the same, and asking it takes time.  Otherwise the
@@ -501,7 +503,7 @@ struct Session {
                 strata::spec::DraftPolicy::Pick use = policy.choose(1, k, match);
                 if (ask) {
                     int n_d = 0;
-                    for (int32_t from = t; n_d < std::min(most, kBlockWindow) - 1 && guesses.wants(n_d); from = d[n_d++]) {
+                    for (int32_t from = t; n_d < std::min(most, block_window) - 1 && guesses.wants(n_d); from = d[n_d++]) {
                         float p = 0.f;
                         const Clock::time_point asked_at = Clock::now();
                         d[n_d] = engine.draft(from, n_d, &p);
