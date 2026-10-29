@@ -157,6 +157,16 @@ FALLBACK_FAMILIES = {
                                          "download_gb": 12.6, "ram_gb": 17, "arena_gb": 10.8},
                           "UD-Q4_K_M": {"about": "4-bit experts (Unsloth Dynamic), 5- and 6-bit where they write",
                                         "download_gb": 22.7, "ram_gb": 27, "arena_gb": 20.1}}},
+    "clover": {"title": "Clover-35B-A3B-Preview", "about": "on the strata-poly engine: one NVIDIA card, Linux or "
+                                                            "Windows; a 17 GB file, ~20 GB of RAM beside an 8 GB card; "
+                                                            "a smaller and a larger size too, no images",
+               "tag": "clover-", "engine": "poly", "vision": False, "experimental": True,
+               "models": {"Q3_K_M": {"about": "3-bit experts, 4- and 5-bit where they write",
+                                     "download_gb": 16.8, "ram_gb": 20, "arena_gb": 15.3},
+                          "APEX-I-NANOPLUS": {"about": "2- and 3-bit experts (APEX): the least RAM",
+                                              "download_gb": 12.6, "ram_gb": 16, "arena_gb": 10.8},
+                          "Q4_K_M": {"about": "4-bit experts, 6-bit where they write",
+                                     "download_gb": 21.2, "ram_gb": 25, "arena_gb": 19.5}}},
     "ornith": {"title": "Ornith 1.5 35B-A3B", "about": "Qwen3.6-35B-A3B's architecture, other weights; a 17 GB file, "
                                                         "~22 GB of RAM beside an 8 GB card; a smaller and a larger "
                                                         "size too", "tag": "ornith-",

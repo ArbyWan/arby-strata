@@ -64,7 +64,8 @@ double ms_since(Clock::time_point t) { return std::chrono::duration<double, std:
 constexpr double kProfileSaveMs = 10000.0;
 
 // The most tokens of a window whose guesses are the block's: the token the model has and three guesses, each
-// from the one before.  A repeat of the conversation may fill a longer window (Options::window).
+// from the one before.  A repeat of the conversation may fill a longer window (Options::window), and so may a
+// model whose guesses come together (Engine::guesses_at_once()).
 constexpr int kBlockWindow = 4;
 
 // A window longer than that is for a copy: a repeat of the conversation whose match is this many tokens or more.
@@ -480,6 +481,7 @@ struct Session {
         };
         if (max_new > 0) {
             int32_t w[strata::spec::DraftPolicy::kMaxT], d[strata::spec::DraftPolicy::kMaxT];
+            const int block_window = engine.guesses_at_once() ? most : kBlockWindow;
             int32_t t = pick(engine.logits());   // picked, and not shown yet
             while (show(t)) {
                 // t goes into the model now, and with it guesses at what follows when there are any that pay
@@ -487,7 +489,7 @@ struct Session {
                 const bool room = engine.pos() + most <= engine.max_context();
                 const int offered = look && room ? repeats.propose(most - 1, w + 1) : 0;
                 const int match = repeats.last_match();
-                const int widest = match >= kCopyMatch ? most : std::min(most, kBlockWindow);   // this round's window
+                const int widest = match >= kCopyMatch ? most : std::min(most, block_window);   // this round's window
                 const int k = std::min(offered, widest - 1);
                 // A repeat that fills the window, from a match of a length that has been right nine times in ten,
                 // is taken as it is: the block would mostly say the same, and asking it takes time.  Otherwise the
@@ -501,7 +503,7 @@ struct Session {
                 strata::spec::DraftPolicy::Pick use = policy.choose(1, k, match);
                 if (ask) {
                     int n_d = 0;
-                    for (int32_t from = t; n_d < std::min(most, kBlockWindow) - 1 && guesses.wants(n_d); from = d[n_d++]) {
+                    for (int32_t from = t; n_d < std::min(most, block_window) - 1 && guesses.wants(n_d); from = d[n_d++]) {
                         float p = 0.f;
                         const Clock::time_point asked_at = Clock::now();
                         d[n_d] = engine.draft(from, n_d, &p);
@@ -1115,6 +1117,10 @@ void usage() {
                  "                         little (default 0 = none is; setup gives Qwen3.6 6)\n"
                  "  --skip-weight F        in place of --tail-skip: an expert outside VRAM that every token of a\n"
                  "                         window weighs under F of its experts' weight is left out (default 0 = off)\n"
+                 "  --cache-bias F         qwen35moe: a token's router scores get F added for each expert in VRAM\n"
+                 "                         before it picks, as it comes a few at a time; the weights stay the\n"
+                 "                         router's own: fewer experts on the CPU, and the answers move (default 0\n"
+                 "                         = off)\n"
                  "environment: STRATA_ROUTE_TAIL_SKIP=N  in place of --tail-skip (0 turns it off)\n"
                  "environment: STRATA_FREEZE_EXPERTS=1  hold the split of the routed experts between the card\n"
                  "                         and the CPU still, so the same request gives the same greedy answer\n"
@@ -1183,6 +1189,7 @@ int main(int argc, char** argv) {
         else if (a == "--expert-swaps") o.expert_swaps = std::atoi(val());
         else if (a == "--tail-skip") o.tail_skip = std::atoi(val());
         else if (a == "--skip-weight") o.skip_weight = (float) std::atof(val());
+        else if (a == "--cache-bias") o.cache_bias = (float) std::atof(val());
         else if (a == "--layer-split") o.layer_split = val();
         else if (a == "--batch" || a == "--slots") o.batch = std::atoi(val());
         else if (a == "--check-batch") check = std::atoi(val());
@@ -1253,6 +1260,10 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "strata-poly: loaded in %.1f s; %d of %d routed experts in VRAM (%.1f GiB), %d CPU threads\n",
                      ms_since(t0) / 1000.0, engine.cached_experts(), engine.total_experts(), engine.cached_gib(),
                      engine.threads());
+        if (o.cache_bias > 0)
+            std::fprintf(stderr, "strata-poly: cache bias %.2f: a token that comes a few at a time routes with %.2f "
+                                 "added to the score of each expert in VRAM; the weights stay the router's own\n",
+                         o.cache_bias, o.cache_bias);
         if (o.skip_weight > 0)
             std::fprintf(stderr, "strata-poly: skip weight %.3f: an expert outside VRAM that every token of a window "
                                  "weighs under %.1f%% of its experts' weight is left out (in place of --tail-skip)\n",
