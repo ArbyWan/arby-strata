@@ -1126,6 +1126,12 @@ __global__ void head_norm_rope_kernel(const float* __restrict__ x, int x_stride,
     }
 }
 
+// A launch's `last` as attn_rows() takes it: -2 is a whole call of one launch whose position is on the card (attend()),
+// which ends at the launch's last token.  p0 is the launch's first token's position.
+__device__ __forceinline__ long long attn_last(long long p0, int tokens, long long last) {
+    return last == -2 ? p0 + tokens - 1 : last;
+}
+
 // The rows the token at position p attends: how many, and the first of them.  They end at its own row, or at row
 // `last` when that is given: the tokens of the call then see each other.
 __device__ __forceinline__ int attn_rows(long long p, int window, long long last, long long* lo) {
@@ -1212,6 +1218,7 @@ __global__ void attn_score_kernel(const float* __restrict__ q, const half* __res
                                   const uint16_t* __restrict__ kscales = nullptr) {
     const int unit = blockIdx.x * (blockDim.x / WARP) + threadIdx.x / WARP;   // a row and a group
     const int key = unit / kv_heads, g = unit % kv_heads, per = n_head / kv_heads;
+    last = attn_last((at ? *at : pos) + first, tokens, last);
     long long lo;
     if (key >= attn_span((at ? *at : pos) + first, tokens, window, last, &lo)) return;
     const long long row = ring > 0 ? (lo + key) % ring : lo + key;
@@ -1267,6 +1274,7 @@ attn_score_reg_kernel(const float* __restrict__ q, const half* __restrict__ kcac
     constexpr int dim = SCORE_VALUES * WARP * STEPS;
     const int unit = blockIdx.x * SCORE_WARPS + threadIdx.x / WARP;   // a group's block of rows
     const int g = unit % kv_heads, k0 = unit / kv_heads * SCORE_KEYS, lane = threadIdx.x % WARP;
+    last = attn_last((at ? *at : pos) + first, tokens, last);
     long long lo;
     const int span = attn_span((at ? *at : pos) + first, tokens, window, last, &lo);
     if (k0 >= span) return;
@@ -1327,6 +1335,7 @@ __global__ void attn_softmax_kernel(float* score, int n_keys, long long pos, int
                                     int per, const float* __restrict__ sinks) {
     __shared__ float part[8];
     const long long p = (at ? *at : pos) + first;
+    last = attn_last(p, tokens, last);
     long long lo, lo0;
     const int span = attn_span(p, tokens, window, last, &lo0);
     const int n = attn_rows(p + blockIdx.y, window, last, &lo), own = int(lo - lo0);
@@ -1434,6 +1443,7 @@ __global__ void attn_value_kernel(const float* __restrict__ score, const half* _
     const int lane = threadIdx.x % VALUE_DIMS, s = threadIdx.x / VALUE_DIMS;
     const int d = (blockIdx.x % dims) * VALUE_DIMS + lane;
     const long long p = (at ? *at : pos) + first;
+    last = attn_last(p, tokens, last);
     long long lo;
     const int span = attn_span(p, tokens, window, last, &lo);
     // the lane's query, and for a lane past the head's last value a value to read all the same
@@ -1635,6 +1645,7 @@ attn_value_t_kernel(const float* __restrict__ wt, const half* __restrict__ vcach
     const int lane = threadIdx.x % VALUE_DIMS, s = threadIdx.x / VALUE_DIMS;
     const int d = (blockIdx.x % dims) * VALUE_DIMS + lane;
     const long long p = (at ? *at : pos) + first;
+    last = attn_last(p, tokens, last);
     long long lo;
     const int span = attn_span(p, tokens, window, last, &lo);
     const size_t width = size_t(kv_heads) * dim;
@@ -2841,10 +2852,11 @@ void attend(const float* q, const uint16_t* kcache, const uint16_t* vcache, int6
             int chunk, float* out, int dim, int n_head, int kv_heads, float scale, void* stream, int window,
             int ring, bool whole, const long long* at, int room, size_t score_floats, Kvq8 kq8, Kvq8 vq8,
             const float* sinks) {
-    if (at && (whole || room < 1)) throw std::invalid_argument("attend: a position on the card needs its room");
+    if (at && (room < 1 || (whole && rows > chunk)))
+        throw std::invalid_argument("attend: a position on the card needs its room, and with `whole` one launch");
     if (dim % SCORE_VALUES || uintptr_t(q) % (SCORE_VALUES * sizeof(float)) || uintptr_t(kcache) % (SCORE_VALUES * 2))
         throw std::invalid_argument("attend: queries and keys are read four values at a time");
-    const long long last = whole ? pos + rows - 1 : -1;
+    const long long last = !whole ? -1 : at ? -2 : pos + rows - 1;   // -2: the launch's last token (attn_last())
     const int per = n_head / kv_heads;
     const bool kq = kq8.codes != nullptr, vq = vq8.codes != nullptr;
     // attn_split_kernel, a launch as many tokens as score has room for every block's sums of at the longest the call

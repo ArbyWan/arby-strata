@@ -241,7 +241,8 @@ struct Kvq8 {
 /// With `whole` the call's tokens see each other: each attends up to the call's last row, so a token can attend
 /// window - 1 + rows of them.
 /// With `at`, the tokens start at the position the card holds there; the launches are sized for `room` rows,
-/// which must be no fewer than a launch's tokens attend between them, and score has room for them.
+/// which must be no fewer than a launch's tokens attend between them, and score has room for them.  With `whole`
+/// too the call is one launch: rows is no more than chunk.
 /// score_floats: the floats score holds, when more than the above.  Heads of 64 values in groups of 4, or of 128 in
 /// groups of 8, over the whole conversation then take a launch block each block of rows, a launch as many tokens as
 /// score has room for those blocks' sums of at the longest the call can attend (attend_split_floats() for chunk of
