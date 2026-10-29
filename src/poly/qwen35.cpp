@@ -18,7 +18,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <numeric>
 #include <stdexcept>
+#include <vector>
 
 namespace strata::poly {
 namespace {
@@ -76,16 +78,28 @@ void Qwen35::load_geometry() {
     // The rotary embedding has an axis for time, two for an image and a spare one, and its sections say which
     // pairs turn by which.  A token of text has its position on the first three and none on the spare one, so
     // the kernel turns every pair by the position: that is wrong for a pair the sections leave to the spare axis.
-    const MetaValue* sec = find("rope.dimension_sections");
-    need(sec && sec->type == MetaType::ARRAY && sec->items.size() >= 3, "no rope.dimension_sections");
-    int sections[4] = {}, covered = 0;
-    for (size_t i = 0; i < 4 && i < sec->items.size(); ++i) covered += sections[i] = (int) sec->items[i].u;
-    need(covered > 0, "empty rope.dimension_sections");
-    for (int pair = 0; pair < n_rot_ / 2; ++pair) {
-        const int s = pair % covered;
-        need(s < 3 * sections[s % 3], "the rotary embedding leaves pairs to an axis text has no position on");
+    // Clover reads no pictures and its file has no sections: every pair turns by the position, as a text token's do.
+    clover_ = gg_->get("general.architecture")->s == "clover_moe";
+    if (clover_) {
+        // the token its block of guesses is filled with, and the share of the block's routing its experts are
+        // chosen from
+        const MetaValue* mask = gg_->get("tokenizer.ggml.mask_token_id");
+        mask_ = mask && mask->is_num() && mask->u < (uint64_t) n_vocab_ ? (int) mask->u : -1;
+        const MetaValue* on = find("moe_block_coreset_enabled");
+        const MetaValue* share = find("moe_block_coreset_top_p");
+        coreset_ = on && on->u && share && share->is_num() ? (float) share->num() : 0.f;
+    } else {
+        const MetaValue* sec = find("rope.dimension_sections");
+        need(sec && sec->type == MetaType::ARRAY && sec->items.size() >= 3, "no rope.dimension_sections");
+        int sections[4] = {}, covered = 0;
+        for (size_t i = 0; i < 4 && i < sec->items.size(); ++i) covered += sections[i] = (int) sec->items[i].u;
+        need(covered > 0, "empty rope.dimension_sections");
+        for (int pair = 0; pair < n_rot_ / 2; ++pair) {
+            const int s = pair % covered;
+            need(s < 3 * sections[s % 3], "the rotary embedding leaves pairs to an axis text has no position on");
+        }
+        sections_ = covered;
     }
-    sections_ = covered;
     theta_scale_ = std::pow(shape_f("rope.freq_base"), -2.f / (float) n_rot_);
 
     // this architecture puts no limit on a SwiGLU's inputs
@@ -108,11 +122,20 @@ void Qwen35::load_layer(int il) {
         B.wz = mat("attn_gate.weight", n_embd_, d_inner_);
         B.conv = f32("ssm_conv1d.weight", kConv, conv_dim_);
         B.dt = f32("ssm_dt.bias", v_heads_);
-        B.a = f32("ssm_a", v_heads_);
+        // a decay rate: llama.cpp's converter stores -exp(A_log), Clover's A_log itself
+        B.a = clover_ ? upload(tensor(il, "ssm_a"), blk(il, "ssm_a"), v_heads_, 1, kF32,
+                               [](float a) { return -std::exp(a); })
+                      : f32("ssm_a", v_heads_);
         B.alpha = mat("ssm_alpha.weight", n_embd_, v_heads_);
         B.beta = mat("ssm_beta.weight", n_embd_, v_heads_);
         B.o_norm = f32("ssm_norm.weight", s_dim_);
         B.wo = mat("ssm_out.weight", d_inner_, n_embd_);
+        if (mask_ >= 0) {
+            B.conv_right = f32("ssm_conv1d.weight_right", kConv - 1, conv_dim_);
+            B.bd_scale = f32("ssm_bd_logit_scale.weight", v_heads_);
+            B.bd_hist_b = f32("ssm_bd_history.bias", v_heads_);
+            B.bd_hist_c = f32("ssm_bd_history.weight", v_heads_);
+        }
         ++n_gdn_;
     } else {
         // the query projection gives every head its query and then the gate of its output
@@ -163,7 +186,9 @@ void Qwen35::alloc_caches() {
             B.vals = (uint16_t*) kv_alloc(row, 1);
         }
     }
-    chunk_ = (int) std::clamp<size_t>(kScoreFloats / ((size_t) n_head_ * opt_.max_context), 1, (size_t) rows_);
+    // a block of guesses attends in one launch (attn_block_pass())
+    const size_t fewest = mask_ >= 0 ? std::min(opt_.window, rows_) : 1;
+    chunk_ = (int) std::clamp<size_t>(kScoreFloats / ((size_t) n_head_ * opt_.max_context), fewest, (size_t) rows_);
     if (axes_) return;   // bind(): a call's scratch is every sequence's
     axes_ = (int32_t*) dmalloc((size_t) rows_ * 3 * sizeof(int32_t), "a call's rotary positions");
     h_axes_.resize((size_t) rows_ * 3);
@@ -366,6 +391,18 @@ void Qwen35::gdn(Block& B, int n) {
     lin(B.wo, gated_, ao_, n);
 }
 
+// gdn() for a block of guesses (Engine::guess_block()): the block's tokens see each other and the state is only
+// read.  The scratch of the attention's scores holds the block's weights: no attention runs meanwhile.
+void Qwen35::gdn_block_pass(Block& B, int n) {
+    lin(B.wqkv, xn_, proj_, n, xq_);
+    lin(B.wz, xn_, z_, n, xq_);
+    lin(B.alpha, xn_, alpha_, n, xq_);
+    conv4_block_silu(proj_, B.past, fp(B.conv), fp(B.conv_right), qkv_, conv_dim_, n, st_);
+    gdn_block(qkv_, alpha_, beta_, fp(B.dt), fp(B.a), B.s, z_, fp(B.o_norm), fp(B.bd_scale), fp(B.bd_hist_b),
+              fp(B.bd_hist_c), gated_, score_, s_dim_, v_heads_, k_heads_, n, rms_eps_, st_);
+    lin(B.wo, gated_, ao_, n);
+}
+
 // A row's position on the rotary embedding's three axes, as llama.cpp's mtmd counts them.  Text has the same on
 // all three and counts up.  A picture's rows share the position the picture starts at on the first axis, and add
 // their line to it on the second and their column on the third; the text after a picture goes on as many
@@ -485,6 +522,24 @@ void Qwen35::attn(Block& B, int64_t pos, int n) {
     lin(B.wo, att_, ao_, n);
 }
 
+// attn() for a block of guesses: the block's tokens see each other, each attending to the rows up to the block's last.
+// One launch (chunk_ holds a window), so a recording reads the position on the card as attn()'s do.
+void Qwen35::attn_block_pass(Block& B, int64_t pos, int n) {
+    int64_t first;
+    const int32_t* axes = turns(pos, n, &first);
+    const long long* at = recording_ ? at_ : nullptr;
+    lin(B.wq, xn_, qg_, n, xq_);
+    head_norm_rope(qg_, 2 * head_dim_, fp(B.q_norm), q_, head_dim_, n_head_, n_rot_, theta_scale_, first, n, rms_eps_,
+                   st_, nullptr, axes, sections_, at ? at + 1 : nullptr);
+    attn_store(B, pos, n);
+    const bool q8 = opt_.kv_format == KvFmt::kQ8_0;
+    attend(q_, q8 ? nullptr : B.keys, q8 ? nullptr : B.vals, pos, n, score_, chunk_, att_, head_dim_, n_head_, n_kv_,
+           1.f / std::sqrt((float) head_dim_), st_, 0, 0, true, at, at ? room(n) : 0, 0,
+           q8 ? Kvq8{B.k_codes, B.k_scales} : Kvq8{}, q8 ? Kvq8{B.v_codes, B.v_scales} : Kvq8{});
+    mul_sigmoid(att_, qg_ + head_dim_, head_dim_, n * n_head_, 2 * head_dim_, false, st_);
+    lin(B.wo, att_, ao_, n);
+}
+
 // step()'s rows, each of its own sequence: the products for all of them at once, each row's position from at_, and
 // each row's keys and values stored and attended to in its own sequence's caches.
 void Qwen35::attn_rows(Block& B, int n) {
@@ -539,8 +594,14 @@ void Qwen35::layer_head(Layer& L, int il, int n) {
     rms_norm(r_, fp(L.attn_norm), xn_, n_embd_, n, rms_eps_, st_);
     kernels::native_quantize_q8_1(xn_, xq_, n_embd_ * n, 1, st_);
     dbg("attn_in", il, xn_, n_embd_);
-    if (B.gdn) gdn(B, n);
-    else attn(B, pos_, n);
+    if (block_pass_) {
+        if (B.gdn) gdn_block_pass(B, n);
+        else attn_block_pass(B, pos_, n);
+    } else if (B.gdn) {
+        gdn(B, n);
+    } else {
+        attn(B, pos_, n);
+    }
     dbg("attn", il, ao_, n_embd_);
     axpy(ao_, 1.f, r_, n * n_embd_, true, st_);
 
@@ -578,7 +639,43 @@ void Qwen35::route(int, const float* logits, int32_t, int* ids, float* w, float*
     for (int k = 0; k < n_used_; ++k) w[k] /= denom;
 }
 
+// Clover's block of guesses chooses its experts among few: each token's n_used likeliest, their probabilities added
+// up over the block, and the experts with the most of that sum, in order, while the ones before them hold less than
+// coreset_ of it.  The others' scores become -inf for every token of the block.  Ties go to the lower expert.
+void Qwen35::route_block(int, float* scores, int n) {
+    if (coreset_ <= 0.f) return;
+    std::vector<float> mass((size_t) n_expert_, 0.f), p((size_t) n_expert_);
+    std::vector<int> order((size_t) n_expert_);
+    const auto likelier = [&](const std::vector<float>& v) {
+        return [&v](int a, int b) { return v[(size_t) a] > v[(size_t) b] || (v[(size_t) a] == v[(size_t) b] && a < b); };
+    };
+    for (int t = 0; t < n; ++t) {
+        const float* s = scores + (size_t) t * n_expert_;
+        const float mx = *std::max_element(s, s + n_expert_);
+        double all = 0.0;
+        for (int e = 0; e < n_expert_; ++e) all += p[(size_t) e] = std::exp(s[e] - mx);
+        std::iota(order.begin(), order.end(), 0);
+        std::partial_sort(order.begin(), order.begin() + n_used_, order.end(), likelier(p));
+        for (int k = 0; k < n_used_; ++k) mass[(size_t) order[(size_t) k]] += (float) (p[(size_t) order[(size_t) k]] / all);
+    }
+    double total = 0.0;
+    for (float m : mass) total += m;
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), likelier(mass));
+    std::vector<char> keep((size_t) n_expert_, 0);
+    double before = 0.0;
+    for (int k = 0; k < n_expert_; ++k) {
+        if (k > 0 && before >= coreset_ * total) break;
+        keep[(size_t) order[(size_t) k]] = 1;
+        before += mass[(size_t) order[(size_t) k]];
+    }
+    for (int t = 0; t < n; ++t)
+        for (int e = 0; e < n_expert_; ++e)
+            if (!keep[(size_t) e]) scores[(size_t) t * n_expert_ + e] = -INFINITY;
+}
+
 bool Qwen35::route_card(int, int n, int32_t* ids, float* w) {
+    if (block_pass_ && coreset_ > 0.f) coreset_mask(rl_, n_expert_, n_used_, n, coreset_, st_);   // route_block()'s
     route_rows(rl_, n_expert_, n_used_, n, 0, 1.f, nullptr, nullptr, true, 0.f, ids, w, st_);
     return true;
 }

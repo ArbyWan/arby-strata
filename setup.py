@@ -89,6 +89,9 @@ HF_REVISIONS = {
     "unsloth/flint-GGUF": "20468edfc38ab43d6914cc88b08cbecb05d0fc62",                                 # 2026-10-21
     "openbmb/MiniCPM-V-4.7-35B-A3B-gguf": "77f6d8cb08b2b115ce27d2e2ac1359e126921689",                   # 2026-10-12
     "Hob-forge/Kolibri-1-GGUF": "40eaa5cf6cfca3afaf8b8832bac962652edb0bde",                              # 2026-10-08
+    "maternion/Clover-35B-A3B-Preview-GGUF": "2077d69015d943d8a82fa80bf39b36cf080cd520",                 # 2026-10-28
+    "IsValorum/Clover-35B-A3B-Preview-APEX-I-NanoPlus-V2.1-GGUF": "d22b8db8efc6dfe15df84264e2fae26fafe530bb",  # 2026-10-28
+    "Diffuspace/Clover-35B-A3B-Preview": "4b0402b65e523d0183a14c431955438714cb16ff",                     # 2026-10-28
 }
 
 
@@ -642,6 +645,34 @@ FAMILIES = {
                           (22663387424, "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b"),
                           "mmproj-F16.gguf":
                           (899283584, "71f3cbc1f7cc0f30d09d41cfa924c0060827ebc33bf15ace7e86661e856f0160")}},
+    # Clover (llama.cpp's clover_moe, ggml-org/llama.cpp PR 31306): Qwen3.6-35B-A3B trained further by DiffuSpace to
+    # guess a block of tokens at once as well, and the engine takes that block as its guesses: the files have no draft
+    # block.  Text only.  maternion's two files carry no chat template, so the model's own comes from DiffuSpace's
+    # repository ("template"); IsValorum's APEX file has it.
+    "clover": {"title": "Clover-35B-A3B-Preview", "by": "DiffuSpace; quantized by maternion and IsValorum",
+               "about": "on the strata-poly engine: one NVIDIA card, Linux or Windows; a 17 GB file, ~20 GB of RAM "
+                        "beside an 8 GB card; a smaller and a larger size too, no images",
+               "hf": hf("maternion/Clover-35B-A3B-Preview-GGUF"), "file": "Diffuspace-Clover-35B-A3B-Preview-{q}.gguf",
+               "shards": 1, "tag": "clover-", "name": "clover-35b-a3b-preview", "engine": "poly", "vision": False,
+               "experimental": True, "windows": True, "ran_on_gb": 8, "row_bytes": 20480,
+               "template_hf": hf("Diffuspace/Clover-35B-A3B-Preview"),
+               "template": ("chat_template.jinja", 7912,
+                            "01094df7cd8905d1220ea8b31e4f1086dc9bedf0305d3c2fa6578b5fa33b6815"),
+               "models": {"Q3_K_M": {"about": "3-bit experts, 4- and 5-bit where they write",
+                                     "download_gb": 16.8, "ram_gb": 20, "arena_gb": 15.3, "vram_beside_gb": 3.4},
+                          "APEX-I-NANOPLUS": {"about": "2- and 3-bit experts (APEX): the least RAM",
+                                              "download_gb": 12.6, "ram_gb": 16, "arena_gb": 10.8,
+                                              "vram_beside_gb": 3.6,
+                                              "file": "Clover-35B-A3B-Preview.APEX-I-NanoPlus-V2.1.gguf",
+                                              "hf": hf("IsValorum/Clover-35B-A3B-Preview-APEX-I-NanoPlus-V2.1-GGUF")},
+                          "Q4_K_M": {"about": "4-bit experts, 6-bit where they write",
+                                     "download_gb": 21.2, "ram_gb": 25, "arena_gb": 19.5, "vram_beside_gb": 3.5}},
+               "sha256": {"Diffuspace-Clover-35B-A3B-Preview-Q3_K_M.gguf":
+                          (16767725024, "0111b1c86fe647064e2bb3606da63d80f991d8ff56cdb994134a1632439e15a2"),
+                          "Clover-35B-A3B-Preview.APEX-I-NanoPlus-V2.1.gguf":
+                          (12557370304, "30e7ee2268128b662dc0514067faae3abb0609a55f087b1ad0465ea71fe50fce"),
+                          "Diffuspace-Clover-35B-A3B-Preview-Q4_K_M.gguf":
+                          (21169718752, "fe113ac0eecfe5aba6103d23a52e71f593034e2aa326afe5af6c4be4d842f58f")}},
     "ornith": {"title": "Ornith 1.5 35B-A3B", "by": "ornith-ai; APEX quantization by mudler",
                "about": "Qwen3.6-35B-A3B's architecture, other weights; a 17 GB file, ~22 GB of RAM beside an 8 GB card; "
                         "a smaller and a larger size too",
@@ -2262,7 +2293,7 @@ def verify_sha256(s: Path, size: int, sha: str, own: bool = False) -> None:
 # general.architecture of each strata-poly family's GGUFs, the name Engine::open() (src/poly/engine.cpp) picks its
 # code by; the families not listed are qwen35moe
 POLY_GGUF_ARCHS = {"glm": ("glm5-next", "glm5next"), "deepseek": ("deepseek4",), "lfm25": ("lfm2moe",),
-                   "gemma4": ("gemma4",), "flint": ("flint",), "kolibri": ("kolibri1",)}
+                   "gemma4": ("gemma4",), "flint": ("flint",), "kolibri": ("kolibri1",), "clover": ("clover_moe",)}
 
 
 def gguf_arch(s: Path) -> str:
@@ -6618,7 +6649,7 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
         warn(f"{title} on AMD cards on Windows: EXPERIMENTAL.  Setup compiles the HIP engine here (AMD's ROCm "
              "wheels), which has run Tiel Coder on an RX 9070 XT and Qwen3.6, Ornith, Tiel Coder and Gemma 4 on an "
              "RX 5700 XT, and nothing else yet; the log says where it stops if it does")
-    elif hip and family in ("glm", "deepseek", "flint", "kolibri"):   # the engine runs on AMD, these models not yet
+    elif hip and family in ("glm", "deepseek", "flint", "kolibri", "clover"):   # the engine runs on AMD, these not yet
         warn(f"{title} on the AMD card has not been tried: the engine runs there, this model was not")
     if cuda_tk == 12:
         warn(f"{title}'s engine with CUDA 12 is compiled here (the ready-made one is CUDA 13)" +
@@ -6854,6 +6885,12 @@ def poly_setup(a, family, gpu, hip, cuda_tk, multi, ram, data, elsewhere, port, 
     if not (pack / "tokenizer" / "vocab.json").exists():
         run([sys.executable, str(ROOT / "tools" / "strata_tokenizer.py"), "--gguf", str(gguf), "--out", str(pack)],
             env=dict(os.environ, STRATA_GGUF_PY=str(llama / "gguf-py")))   # writes <pack>/tokenizer/
+    # a file without a chat template gets the model's own from the model's repository, pinned like the files
+    tpl = pack / "tokenizer" / "chat_template.jinja"
+    if fam.get("template") and not tpl.exists():
+        name, size, sha = fam["template"]
+        download(fam["template_hf"] + name, tpl, "chat template")
+        verify_sha256(tpl, size, sha)
     # The engine counts which experts are used and writes the counts back when it stops, so its profile is a file of
     # this install's own: it starts as the counts the repository ships, or with none where it ships none.
     profile = pack / "expert-profile.txt"
@@ -7499,7 +7536,7 @@ def main() -> int:
     ap.add_argument("--family", choices=list(FAMILIES) + list(PREVIEW_FAMILIES),
                     help="qwen = Qwen3.8-Flash-Next, swift = Swift 1.5, glm = GLM 5.3 Flash (docs/GLM.md), deepseek = "
                          "DeepSeek V4 Flash, lfm25 = LFM2.5-24B-A2B, flint = Flint 40B-A2.5B, qwen36 = "
-                         "Qwen3.6-35B-A3B on strata-poly, ornith = "
+                         "Qwen3.6-35B-A3B on strata-poly, clover = Clover-35B-A3B-Preview, ornith = "
                          "Ornith 1.5, gemma4 = Gemma 4 26B-A4B, tiel = Tiel Coder 35B-A3B, minicpmv = MiniCPM-V 4.7 "
                          "35B-A3B (docs/BACKENDS.md), qwen36-strata = Qwen3.6-35B-A3B on the Strata project's "
                          "own engine (UD-Q4_K_XL and up, 32 GB of RAM or more; pictures with --vision, several "
