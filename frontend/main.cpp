@@ -1,7 +1,7 @@
 // UnbiasedStrata: the front end's program. Mirrors llama.cpp's tools/server/server.cpp without router mode, MCP,
 // server-side tools, the web UI and model downloads.
 //
-//   unbiased-strata --engine build/bin/strata-poly -m model.gguf [llama-server options] -- <engine options>
+//   arby-strata --engine build/bin/strata-poly -m model.gguf [llama-server options] -- <engine options>
 //
 // Options before `--` are llama-server's (common_params_parse): -m/--model gives the GGUF the vocabulary and chat
 // template are read from, --host/--port/--api-key/--threads-http the listener, --temp/--top-k/... the sampling
@@ -70,7 +70,7 @@ BOOL WINAPI console_ctrl_handler(DWORD type) {
 
 void usage() {
     std::fprintf(stderr,
-        "usage: unbiased-strata --engine <strata|strata-poly|path> -m <model.gguf> [llama-server options] -- <engine options>\n"
+        "usage: arby-strata --engine <strata|strata-poly|path> -m <model.gguf> [llama-server options] -- <engine options>\n"
         "\n"
         "  --engine PATH          the engine binary; a bare name is looked up beside this program\n"
         "  -m, --model FILE       the GGUF the vocabulary and chat template are read from (no tensors are loaded)\n"
@@ -85,7 +85,7 @@ void usage() {
         "  --                     everything after it is passed to the engine; --serve is added\n"
         "\n"
         "example (Qwen3.6-35B-A3B from its GGUF):\n"
-        "  unbiased-strata --engine strata-poly -m Qwen3.6-35B-A3B-UD-Q3_K_M.gguf --port 8080 \\\n"
+        "  arby-strata --engine strata-poly -m Qwen3.6-35B-A3B-UD-Q3_K_M.gguf --port 8080 \\\n"
         "      -- --model Qwen3.6-35B-A3B-UD-Q3_K_M.gguf --max-context 32768\n");
 }
 
@@ -176,7 +176,7 @@ int main(int argc, char ** argv) {
         }
     }
     if (!file_exists(engine_exe)) {
-        std::fprintf(stderr, "unbiased-strata: engine not found or not executable: %s\n", engine_exe.c_str());
+        std::fprintf(stderr, "arby-strata: engine not found or not executable: %s\n", engine_exe.c_str());
         return 2;
     }
 
@@ -191,7 +191,7 @@ int main(int argc, char ** argv) {
     // encoder runs on the CPU unless --mmproj-gpu asks for the card (upstream PolyStrata's choice as well)
     params.mmproj_use_gpu = mmproj_gpu;
     if (params.model.path.empty()) {
-        std::fprintf(stderr, "unbiased-strata: -m <model.gguf> is required (the vocabulary and chat template come from it)\n");
+        std::fprintf(stderr, "arby-strata: -m <model.gguf> is required (the vocabulary and chat template come from it)\n");
         return 2;
     }
     auto model_name = params.model.get_name();
