@@ -22,6 +22,7 @@ if not defined STRATA_HIP_ARCHS set "STRATA_HIP_ARCHS=gfx1201"
 if not defined ROCM_VENV set "ROCM_VENV=%SRC%\.rocm-win"
 if not defined BUILD_DIR set "BUILD_DIR=%SRC%\build-hip-win"
 if not defined PYTHON set "PYTHON=py -3.12"
+if not defined STRATA_JOBS set "STRATA_JOBS=4"
 
 rem ---- 1. ROCm: the compiler, the HIP runtime, hipBLAS/hipBLASLt/rocBLAS, and a device package per arch ----
 if not exist "%ROCM_VENV%\Scripts\rocm-sdk.exe" (
@@ -70,7 +71,20 @@ if not exist "%BUILD_DIR%\build.ninja" (
 if /i "%~1"=="configure" (echo Configured %BUILD_DIR% & endlocal & exit /b 0)
 
 rem ---- 4. build: the engine and the front end ----
-cmake --build "%BUILD_DIR%" --target strata arby-strata || exit /b 1
+rem Jobs are capped: the engine's translation units (generate.cpp, q36_engine.cu) take several GB of compiler
+rem memory each, and 16 of them at once on this box is how a build vanishes without a message. Output always goes
+rem to build.log so a failure can be read instead of guessed at.
+set "LOG=%SRC%\build.log"
+echo Building with -j %STRATA_JOBS% ^(log: %LOG%^) ...
+cmake --build "%BUILD_DIR%" --target strata arby-strata -j %STRATA_JOBS% > "%LOG%" 2>&1
+if errorlevel 1 (
+  echo.
+  echo BUILD FAILED. Last 40 lines of %LOG%:
+  echo ---------------------------------------------------------------
+  powershell -NoProfile -Command "Get-Content -Tail 40 '%LOG%'"
+  echo ---------------------------------------------------------------
+  endlocal & exit /b 1
+)
 echo.
 echo Built:
 dir /b "%BUILD_DIR%\bin\strata.exe" "%BUILD_DIR%\bin\arby-strata.exe" 2>nul
