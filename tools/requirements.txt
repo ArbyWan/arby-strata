@@ -1,0 +1,4 @@
+# The offline tools' dependencies only (packing, MTP drafts, tokenizer, inspection).  Nothing on the serving
+# path imports Python: the server is the C++ front end, arby-strata.
+numpy
+regex
