@@ -32,8 +32,13 @@
 #include <set>
 #include <chrono>
 #include <thread>
-#ifndef _WIN32
-#include <unistd.h>
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
+#else
+#  include <unistd.h>
 #endif
 
 using strata_frontend::Engine;
@@ -76,7 +81,7 @@ struct Slot {
 
     void release() {
         if (!images_path.empty()) {
-            ::unlink(images_path.c_str());
+            std::remove(images_path.c_str());   // ISO C: unlink on POSIX, the CRT's delete on Windows
         }
         *this = Slot{};
     }
@@ -521,9 +526,30 @@ struct strata_context_impl {
         return true;
     }
 
-    // the request's pictures file (slot.images_path, unlinked when the slot is released)
+    // the request's pictures file (slot.images_path, removed when the slot is released)
     std::FILE * open_pictures_file(std::string & err) {
-        char name[] = "/tmp/unbiased-strata-pictures-XXXXXX";
+#ifdef _WIN32
+        // There is no mkstemp here: GetTempFileNameA creates a uniquely named file in the directory it is given.
+        // It hands back a path, so the file is closed and reopened by std::fopen like the POSIX branch's fdopen.
+        char dir[MAX_PATH + 1] = {0};
+        if (GetTempPathA(MAX_PATH, dir) == 0) {
+            err = "cannot find the temporary directory";
+            return nullptr;
+        }
+        char name[MAX_PATH + 1] = {0};
+        if (GetTempFileNameA(dir, "arb", 0, name) == 0) {
+            err = "cannot create the pictures file";
+            return nullptr;
+        }
+        slot.images_path = name;
+        std::FILE * f = std::fopen(slot.images_path.c_str(), "wb");
+        if (f == nullptr) {
+            std::remove(slot.images_path.c_str());
+            err = "cannot open the pictures file";
+        }
+        return f;
+#else
+        char name[] = "/tmp/arby-strata-pictures-XXXXXX";
         const int fd = ::mkstemp(name);
         if (fd < 0) {
             err = "cannot create the pictures file";
@@ -536,6 +562,7 @@ struct strata_context_impl {
             err = "cannot open the pictures file";
         }
         return f;
+#endif
     }
 
     // the ids with every picture's rows written to `f` and image_pad in their place; slot.image_keys for the GENI line
