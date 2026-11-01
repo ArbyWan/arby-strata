@@ -14,6 +14,9 @@
 BUILD_DIR     ?= build-hip
 FE_BUILD_DIR  ?= build-frontend
 HIP_ARCHS     ?= gfx1201
+# ROCm's own prefix. CMake finds the HIP *compiler* on its own, but find_package(hip CONFIG) does not search
+# /opt/rocm, so the prefix has to be handed to configure explicitly or everything downstream of it fails.
+ROCM_PATH     ?= /opt/rocm
 JOBS          ?= $(shell n=$$(nproc 2>/dev/null || echo 8); [ $$n -gt 16 ] && n=16; echo $$n)
 TARGETS       ?= strata arby-strata
 
@@ -28,6 +31,7 @@ configure:
 	      -DSTRATA_ENABLE_HIP=ON -DSTRATA_ENABLE_CUDA=OFF \
 	      -DSTRATA_NATIVE_EXPERTS=ON -DSTRATA_BUILD_TESTS=OFF \
 	      -DCMAKE_HIP_ARCHITECTURES=$(HIP_ARCHS) \
+	      -DCMAKE_PREFIX_PATH=$(ROCM_PATH) \
 	      -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=$(abspath $(BUILD_DIR))/bin
 
 build: configure
