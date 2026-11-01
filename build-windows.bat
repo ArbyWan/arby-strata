@@ -88,6 +88,20 @@ if errorlevel 1 (
 echo.
 echo Built:
 dir /b "%BUILD_DIR%\bin\strata.exe" "%BUILD_DIR%\bin\arby-strata.exe" 2>nul
+
+rem ---- 5. the HIP runtime beside the exes ----
+rem Windows searches System32 BEFORE PATH, and the AMD *display driver* installs its own, older amdhip64_7.dll
+rem there. Loading that copy produces "the procedure entry point hipKernelNameRefByPtr could not be located"
+rem because the ROCm 10 API is newer than the driver's runtime. The application directory beats System32, so the
+rem ROCm 10 copies go beside the exes (upstream's packager does the same, #468 / #461).
+for %%F in (amdhip64_7.dll amd_comgr.dll rocm_kpack.dll) do (
+  if exist "%ROCM%\bin\%%F" (
+    copy /y "%ROCM%\bin\%%F" "%BUILD_DIR%\bin\" >nul && echo   sidecar: %%F
+  ) else (
+    echo   WARNING: %ROCM%\bin\%%F is missing - the engine may load the display driver's runtime instead
+  )
+)
+echo.
 echo.
 echo Run (export the tuning table that matches hipBLASLt 1.5.0 in this ROCm):
 echo   set STRATA_HIPBLASLT_TUNING=%SRC%\tools\hip\gfx1201-hipblaslt-100500.txt
