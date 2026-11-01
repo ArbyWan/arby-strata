@@ -154,6 +154,16 @@ public:
             const int rc = read_line(line, wait_ms);
             if (rc < 0) {
                 err = "the engine exited before it was ready (its messages are above)";
+#ifdef _WIN32
+                // The exit code names the cause when nothing reached the pipes: 0xC0000135 (missing DLL),
+                // 0xC0000139 (entry point not found), 1 (usage), or the engine's own.
+                const long long code = exit_code();
+                if (code >= 0) {
+                    char hex[32];
+                    std::snprintf(hex, sizeof hex, "0x%08llX", (unsigned long long) code);
+                    err += std::string(", exit code ") + std::to_string(code) + " (" + hex + ")";
+                }
+#endif
                 return false;
             }
             if (rc == 0) {
@@ -300,6 +310,21 @@ public:
 #endif
     }
 
+#ifdef _WIN32
+    // The child's exit code once it has exited, -1 while it is running (or when we no longer hold the handle).
+    long long exit_code() {
+        std::lock_guard<std::mutex> lk(handle_mu_);
+        if (proc_ == nullptr) {
+            return -1;
+        }
+        DWORD code = 0;
+        if (!GetExitCodeProcess(proc_, &code) || code == STILL_ACTIVE) {
+            return -1;
+        }
+        return (long long) code;
+    }
+#endif
+
     bool alive() const { return alive_; }
     bool busy()  const { return busy_; }
     bool ready() const { return ready_; }
@@ -358,29 +383,47 @@ private:
         sa.bInheritHandle = TRUE;
 
         HANDLE child_in_r = nullptr, child_in_w = nullptr, child_out_r = nullptr, child_out_w = nullptr;
-        if (!CreatePipe(&child_in_r, &child_in_w, &sa, 0) || !CreatePipe(&child_out_r, &child_out_w, &sa, 0)) {
+        HANDLE child_err_r = nullptr, child_err_w = nullptr;
+        if (!CreatePipe(&child_in_r, &child_in_w, &sa, 0) ||
+            !CreatePipe(&child_out_r, &child_out_w, &sa, 0) ||
+            !CreatePipe(&child_err_r, &child_err_w, &sa, 0)) {
             err = win_error("CreatePipe");
             return false;
         }
         // only the child's ends are inherited
         SetHandleInformation(child_in_w, HANDLE_FLAG_INHERIT, 0);
         SetHandleInformation(child_out_r, HANDLE_FLAG_INHERIT, 0);
+        SetHandleInformation(child_err_r, HANDLE_FLAG_INHERIT, 0);
 
-        std::string cmd = quote_arg(executable);
-        for (const std::string & a : args) {
-            cmd += ' ';
-            cmd += quote_arg(a);
+        // argv[0] convention: the caller passes args[0] = the executable name (POSIX execv semantics). On POSIX
+        // that is argv[0]; on Windows the command line's first token IS argv[0], so emitting the executable and
+        // then args[0] again would hand the engine its own path as its first real argument - it then exits with a
+        // usage error before it prints anything.
+        std::string cmd;
+        if (!args.empty()) {
+            cmd = quote_arg(args[0]);
+            for (size_t i = 1; i < args.size(); ++i) {
+                cmd += ' ';
+                cmd += quote_arg(args[i]);
+            }
+        } else {
+            cmd = quote_arg(executable);
         }
         std::vector<char> cmdline(cmd.begin(), cmd.end());
         cmdline.push_back('\0');
+        std::fprintf(stderr, "arby-strata: engine command line: %s\n", cmd.c_str());
+        std::fflush(stderr);
 
+        // The engine's log is carried on its own pipe and forwarded by a thread (see start_error_reader): a console
+        // stderr handle is not reliably inheritable, and a child that dies during load taking its diagnosis with it
+        // is exactly how the first Windows run failed - "its messages are above" with nothing above.
         STARTUPINFOA si{};
         si.cb          = sizeof(STARTUPINFOA);
         si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
         si.wShowWindow = SW_HIDE;
         si.hStdInput   = child_in_r;
         si.hStdOutput  = child_out_w;
-        si.hStdError   = GetStdHandle(STD_ERROR_HANDLE);   // the engine's log is ours to show
+        si.hStdError   = child_err_w;   // the engine's log, forwarded to ours
 
         PROCESS_INFORMATION pi{};
         if (!CreateProcessA(executable.c_str(), cmdline.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
@@ -388,11 +431,14 @@ private:
             err = win_error(("could not start " + executable).c_str());
             CloseHandle(child_in_r); CloseHandle(child_in_w);
             CloseHandle(child_out_r); CloseHandle(child_out_w);
+            CloseHandle(child_err_r); CloseHandle(child_err_w);
             return false;
         }
         CloseHandle(pi.hThread);
         CloseHandle(child_in_r);
         CloseHandle(child_out_w);
+        CloseHandle(child_err_w);
+        err_r_ = child_err_r;
 
         // The engine must not outlive this process, even on a hard kill: a job object with KILL_ON_JOB_CLOSE does
         // what the process group does on POSIX. Failing to assign is not fatal (we may already be in a job).
@@ -412,6 +458,7 @@ private:
         out_r_ = child_out_r;
         alive_ = true;
         start_reader();
+        start_error_reader();
         return true;
     }
 
@@ -434,6 +481,28 @@ private:
                 eof_ = true;
             }
             cv_.notify_all();
+        });
+    }
+
+    // The engine's stderr, forwarded to ours as it arrives. ReadFile blocks, so this thread lives until the child
+    // closes the pipe - which a start-up failure does immediately, still delivering the message.
+    void start_error_reader() {
+        err_reader_ = std::thread([this]() {
+            char chunk[4096];
+            size_t total = 0;
+            while (true) {
+                DWORD got = 0;
+                if (!ReadFile(err_r_, chunk, (DWORD) sizeof chunk, &got, nullptr) || got == 0) {
+                    break;
+                }
+                total += (size_t) got;
+                std::fwrite(chunk, 1, (size_t) got, stderr);
+                std::fflush(stderr);
+            }
+            if (total == 0) {
+                std::fprintf(stderr, "arby-strata: the engine wrote nothing to stderr\n");
+                std::fflush(stderr);
+            }
         });
     }
 
@@ -464,6 +533,15 @@ private:
             out_r_ = nullptr;
         } else if (reader_.joinable()) {
             reader_.join();
+        }
+        if (err_r_ != nullptr) {
+            if (err_reader_.joinable()) {
+                err_reader_.join();
+            }
+            CloseHandle(err_r_);
+            err_r_ = nullptr;
+        } else if (err_reader_.joinable()) {
+            err_reader_.join();
         }
         if (job_ != nullptr) {
             CloseHandle(job_);   // KILL_ON_JOB_CLOSE: nothing of the engine survives this
@@ -536,7 +614,9 @@ private:
     HANDLE job_  = nullptr;
     HANDLE in_w_ = nullptr;
     HANDLE out_r_ = nullptr;
+    HANDLE err_r_ = nullptr;
     std::thread reader_;
+    std::thread err_reader_;
     std::mutex mu_;            // guards buf_ and eof_
     std::mutex write_mu_;      // one writer at a time on the engine's stdin
     std::mutex handle_mu_;     // guards proc_ (the supervisor and quit() share it)
