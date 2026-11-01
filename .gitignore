@@ -30,6 +30,8 @@ td.log
 /build/
 /build-hip/
 /build-frontend/
+/build-hip-win/
+/.rocm-win/
 /models/
 /packs/
 /mtp/

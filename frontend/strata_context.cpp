@@ -32,7 +32,9 @@
 #include <set>
 #include <chrono>
 #include <thread>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 using strata_frontend::Engine;
 using strata_frontend::EngineLine;

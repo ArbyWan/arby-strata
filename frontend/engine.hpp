@@ -1,14 +1,20 @@
-// UnbiasedStrata: the engine as a child process.
+// arby-strata: the engine as a child process (from UnbiasedStrata's frontend/engine.hpp).
 //
 // The engines (`strata`, `strata-poly`) speak lines over stdin/stdout: `GEN <max_new> key=value... <id,id,...>` in,
 // `T <id>` per token, `PP`, `RESUME`, `DONE ...`, `ERR ...` out, `STOP` to cancel, `QUIT` to end (docs/BACKENDS.md,
 // "How a backend works"). This class owns one such child. It never blocks longer than the caller allows: the server
 // loop polls it between tasks so a cancel from a disconnected client is seen within the poll interval.
+//
+// Two implementations behind one interface:
+//   POSIX   - pipe()/fork()/execv(), poll() on the child's stdout.
+//   Windows - CreateProcessA with inheritable anonymous pipes and a reader thread that blocks in ReadFile, so
+//             `read_line` waits on a condition variable instead of spinning (Windows has no poll()). The child is
+//             put in a job object with KILL_ON_JOB_CLOSE, so the engine dies with this process even on a hard kill.
 #pragma once
 
 #include <atomic>
+#include <algorithm>
 #include <cerrno>
-#include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -17,13 +23,29 @@
 #include <string>
 #include <vector>
 
-#include <fcntl.h>
-#include <poll.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#  define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <chrono>
+#  include <condition_variable>
+#  include <mutex>
+#  include <thread>
+#else
+#  include <csignal>
+#  include <fcntl.h>
+#  include <poll.h>
+#  include <sys/wait.h>
+#  include <unistd.h>
+#endif
 
 namespace strata_frontend {
 
+#ifndef _WIN32
 // Reap a dead child: kill(pid, 0) would report a zombie as alive. The pid slot is shared with quit() on another
 // thread (the supervisor polls this while a SIGTERM handler shuts down), so it is read once and cleared by
 // compare-exchange. Nothing here or in quit() may pass a pid that is not > 0 to kill(): kill(-1, SIGKILL) kills every
@@ -50,6 +72,7 @@ inline bool child_running(std::atomic<pid_t> & pid_slot, std::string & why) {
     pid_slot.compare_exchange_strong(pid, -1);
     return false;
 }
+#endif
 
 // One line from the engine, already classified.
 struct EngineLine {
@@ -74,8 +97,11 @@ public:
     Engine & operator=(const Engine &) = delete;
     ~Engine() { quit(); }
 
-    // fork+exec `executable` with `args` (args[0] is argv[0]). Must be called before any thread exists.
+    // Starts `executable` with `args` (args[0] is argv[0]), its stdout/stdin on pipes.
     bool start(const std::string & executable, const std::vector<std::string> & args, std::string & err) {
+#ifdef _WIN32
+        return start_windows(executable, args, err);
+#else
         int to_child[2], from_child[2];
         if (::pipe(to_child) != 0 || ::pipe(from_child) != 0) {
             err = std::string("pipe: ") + std::strerror(errno);
@@ -96,7 +122,7 @@ public:
             }
             argv.push_back(nullptr);
             ::execv(executable.c_str(), argv.data());
-            std::fprintf(stderr, "unbiased-strata: could not start the engine %s: %s\n", executable.c_str(), std::strerror(errno));
+            std::fprintf(stderr, "arby-strata: could not start the engine %s: %s\n", executable.c_str(), std::strerror(errno));
             ::_exit(127);
         }
         pid_ = pid;
@@ -106,6 +132,7 @@ public:
         out_fd_ = from_child[0];
         alive_  = true;
         return true;
+#endif
     }
 
     // Reads start-up lines until READY. Loading a model takes minutes; `timeout_s` bounds the wait (<= 0: forever).
@@ -216,8 +243,11 @@ public:
         }
     }
 
-    // Stop the engine: QUIT, up to 10 s for it to leave, then SIGKILL. Safe against reap_exit() on another thread.
+    // Stop the engine: QUIT, up to 10 s for it to leave, then kill it. Safe against reap_exit() on another thread.
     void quit() {
+#ifdef _WIN32
+        quit_windows();
+#else
         // Take the pid out of the shared slot first: from here only this call owns the child, and kill() below
         // targets this positive local copy, never the slot (which reads -1 once the supervisor has reaped it).
         const pid_t pid = pid_.exchange(-1);
@@ -236,15 +266,38 @@ public:
         if (in_fd_  >= 0) { ::close(in_fd_);  in_fd_  = -1; }
         if (out_fd_ >= 0) { ::close(out_fd_); out_fd_ = -1; }
         alive_ = false;
+#endif
     }
 
     // Non-blocking: has the child exited? `why` names the signal or code.
     bool reap_exit(std::string & why) {
+#ifdef _WIN32
+        HANDLE h = nullptr;
+        {
+            std::lock_guard<std::mutex> lk(handle_mu_);
+            h = proc_;
+            if (h == nullptr) {
+                return false;
+            }
+            if (WaitForSingleObject(h, 0) == WAIT_TIMEOUT) {
+                return false;   // still running (the lock is held across a non-blocking wait only)
+            }
+            DWORD code = 0;
+            GetExitCodeProcess(h, &code);
+            CloseHandle(h);
+            proc_ = nullptr;
+            pid_.store(-1);
+            why = "engine exited with code " + std::to_string((long long) code);
+        }
+        alive_ = false;
+        return true;
+#else
         if (child_running(pid_, why)) {
             return false;
         }
         alive_ = false;
         return true;
+#endif
     }
 
     bool alive() const { return alive_; }
@@ -253,15 +306,243 @@ public:
     bool can_stop() const { return can_stop_; }
     long long max_context() const { return max_context_; }
     const std::map<std::string, std::string> & info() const { return info_; }
-    pid_t pid() const { return pid_; }
+    int64_t pid() const { return pid_; }
 
     static int64_t now_ms() {
+#ifdef _WIN32
+        return (int64_t) GetTickCount64();
+#else
         struct timespec ts;
         ::clock_gettime(CLOCK_MONOTONIC, &ts);
         return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+#endif
     }
 
 private:
+#ifdef _WIN32
+    static std::string quote_arg(const std::string & a) {
+        if (!a.empty() && a.find_first_of(" \t\"") == std::string::npos) {
+            return a;
+        }
+        std::string out = "\"";
+        size_t backslashes = 0;
+        for (const char c : a) {
+            if (c == '\\') {
+                ++backslashes;
+                continue;
+            }
+            if (c == '"') {
+                out.append(backslashes * 2 + 1, '\\');
+                out += '"';
+                backslashes = 0;
+                continue;
+            }
+            out.append(backslashes, '\\');
+            backslashes = 0;
+            out += c;
+        }
+        out.append(backslashes * 2, '\\');
+        out += '"';
+        return out;
+    }
+
+    static std::string win_error(const char * what) {
+        const DWORD e = GetLastError();
+        return std::string(what) + " failed, Windows error " + std::to_string((long long) e);
+    }
+
+    bool start_windows(const std::string & executable, const std::vector<std::string> & args, std::string & err) {
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength        = sizeof(SECURITY_ATTRIBUTES);
+        sa.lpSecurityDescriptor = nullptr;
+        sa.bInheritHandle = TRUE;
+
+        HANDLE child_in_r = nullptr, child_in_w = nullptr, child_out_r = nullptr, child_out_w = nullptr;
+        if (!CreatePipe(&child_in_r, &child_in_w, &sa, 0) || !CreatePipe(&child_out_r, &child_out_w, &sa, 0)) {
+            err = win_error("CreatePipe");
+            return false;
+        }
+        // only the child's ends are inherited
+        SetHandleInformation(child_in_w, HANDLE_FLAG_INHERIT, 0);
+        SetHandleInformation(child_out_r, HANDLE_FLAG_INHERIT, 0);
+
+        std::string cmd = quote_arg(executable);
+        for (const std::string & a : args) {
+            cmd += ' ';
+            cmd += quote_arg(a);
+        }
+        std::vector<char> cmdline(cmd.begin(), cmd.end());
+        cmdline.push_back('\0');
+
+        STARTUPINFOA si{};
+        si.cb          = sizeof(STARTUPINFOA);
+        si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+        si.hStdInput   = child_in_r;
+        si.hStdOutput  = child_out_w;
+        si.hStdError   = GetStdHandle(STD_ERROR_HANDLE);   // the engine's log is ours to show
+
+        PROCESS_INFORMATION pi{};
+        if (!CreateProcessA(executable.c_str(), cmdline.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+                            nullptr, nullptr, &si, &pi)) {
+            err = win_error(("could not start " + executable).c_str());
+            CloseHandle(child_in_r); CloseHandle(child_in_w);
+            CloseHandle(child_out_r); CloseHandle(child_out_w);
+            return false;
+        }
+        CloseHandle(pi.hThread);
+        CloseHandle(child_in_r);
+        CloseHandle(child_out_w);
+
+        // The engine must not outlive this process, even on a hard kill: a job object with KILL_ON_JOB_CLOSE does
+        // what the process group does on POSIX. Failing to assign is not fatal (we may already be in a job).
+        {
+            std::lock_guard<std::mutex> lk(handle_mu_);
+            job_ = CreateJobObjectA(nullptr, nullptr);
+            if (job_ != nullptr) {
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION li{};
+                li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                SetInformationJobObject(job_, JobObjectExtendedLimitInformation, &li, sizeof li);
+                AssignProcessToJobObject(job_, pi.hProcess);
+            }
+            proc_ = pi.hProcess;
+            pid_.store((int64_t) pi.dwProcessId);
+        }
+        in_w_  = child_in_w;
+        out_r_ = child_out_r;
+        alive_ = true;
+        start_reader();
+        return true;
+    }
+
+    void start_reader() {
+        reader_ = std::thread([this]() {
+            char chunk[65536];
+            while (true) {
+                DWORD got = 0;
+                if (!ReadFile(out_r_, chunk, (DWORD) sizeof chunk, &got, nullptr) || got == 0) {
+                    break;
+                }
+                {
+                    std::lock_guard<std::mutex> lk(mu_);
+                    buf_.append(chunk, (size_t) got);
+                }
+                cv_.notify_all();
+            }
+            {
+                std::lock_guard<std::mutex> lk(mu_);
+                eof_ = true;
+            }
+            cv_.notify_all();
+        });
+    }
+
+    void quit_windows() {
+        HANDLE h = nullptr;
+        {
+            std::lock_guard<std::mutex> lk(handle_mu_);
+            h = proc_;
+            proc_ = nullptr;
+            pid_.store(-1);
+        }
+        if (h != nullptr) {
+            send("QUIT\n");
+            if (WaitForSingleObject(h, 10000) != WAIT_OBJECT_0) {
+                TerminateProcess(h, 1);
+                WaitForSingleObject(h, 5000);
+            }
+            CloseHandle(h);
+        }
+        if (in_w_ != nullptr) { CloseHandle(in_w_);  in_w_  = nullptr; }
+        if (out_r_ != nullptr) {
+            // the child is gone, so its stdout is closed and the reader sees EOF by itself; closing the handle
+            // here would race that ReadFile, so only join.
+            if (reader_.joinable()) {
+                reader_.join();
+            }
+            CloseHandle(out_r_);
+            out_r_ = nullptr;
+        } else if (reader_.joinable()) {
+            reader_.join();
+        }
+        if (job_ != nullptr) {
+            CloseHandle(job_);   // KILL_ON_JOB_CLOSE: nothing of the engine survives this
+            job_ = nullptr;
+        }
+        alive_ = false;
+    }
+
+    bool send(const std::string & s) {
+        if (in_w_ == nullptr) {
+            return false;
+        }
+        std::lock_guard<std::mutex> lk(write_mu_);
+        size_t off = 0;
+        while (off < s.size()) {
+            DWORD wrote = 0;
+            if (!WriteFile(in_w_, s.data() + off, (DWORD) (s.size() - off), &wrote, nullptr) || wrote == 0) {
+                alive_ = false;
+                return false;
+            }
+            off += (size_t) wrote;
+        }
+        return true;
+    }
+
+    // 1: a line; 0: timeout; -1: EOF/error
+    int read_line(std::string & line, int timeout_ms) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms <= 0 ? 0 : timeout_ms);
+        std::unique_lock<std::mutex> lk(mu_);
+        auto take_line = [&]() -> bool {
+            const size_t nl = buf_.find('\n');
+            if (nl == std::string::npos) {
+                return false;
+            }
+            line.assign(buf_, 0, nl);
+            buf_.erase(0, nl + 1);
+            while (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            return true;
+        };
+        while (true) {
+            if (take_line()) {
+                return 1;
+            }
+            if (eof_) {
+                if (!buf_.empty()) {   // a last line without its newline
+                    line.swap(buf_);
+                    buf_.clear();
+                    return 1;
+                }
+                alive_ = false;
+                return -1;
+            }
+            if (timeout_ms <= 0) {
+                return 0;
+            }
+            if (cv_.wait_until(lk, deadline) == std::cv_status::timeout) {
+                if (take_line()) {
+                    return 1;
+                }
+                return 0;
+            }
+        }
+    }
+
+    int64_t proc_pid() const { return pid_.load(); }
+
+    HANDLE proc_ = nullptr;
+    HANDLE job_  = nullptr;
+    HANDLE in_w_ = nullptr;
+    HANDLE out_r_ = nullptr;
+    std::thread reader_;
+    std::mutex mu_;            // guards buf_ and eof_
+    std::mutex write_mu_;      // one writer at a time on the engine's stdin
+    std::mutex handle_mu_;     // guards proc_ (the supervisor and quit() share it)
+    std::condition_variable cv_;
+    bool eof_ = false;
+#else
     bool send(const std::string & s) {
         if (in_fd_ < 0) {
             return false;
@@ -329,6 +610,10 @@ private:
         }
     }
 
+    int in_fd_   = -1;
+    int out_fd_  = -1;
+#endif
+
     void parse_info(const std::string & kv) {
         size_t i = 0;
         while (i < kv.size()) {
@@ -377,9 +662,11 @@ private:
         }
     }
 
+#ifdef _WIN32
+    std::atomic<int64_t> pid_{-1};
+#else
     std::atomic<pid_t> pid_{-1};
-    int in_fd_   = -1;
-    int out_fd_  = -1;
+#endif
     std::string buf_;
     std::atomic<bool> alive_{false};
     bool busy_      = false;

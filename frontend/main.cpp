@@ -27,7 +27,14 @@
 #include <thread>
 #include <vector>
 
-#include <unistd.h>
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
+#else
+#  include <unistd.h>
+#endif
 
 namespace {
 
@@ -43,6 +50,23 @@ void signal_handler(int signal) {
         shutdown_handler(signal);
     }
 }
+
+#ifdef _WIN32
+// Windows has no SIGTERM: the console control handler is the equivalent, and CTRL_CLOSE_EVENT is what a window
+// close or a logoff sends. Returning TRUE keeps the process alive long enough for the clean shutdown to run.
+BOOL WINAPI console_ctrl_handler(DWORD type) {
+    switch (type) {
+        case CTRL_C_EVENT:
+        case CTRL_BREAK_EVENT:
+        case CTRL_CLOSE_EVENT:
+        case CTRL_SHUTDOWN_EVENT:
+            signal_handler((int) type);
+            return TRUE;
+        default:
+            return FALSE;
+    }
+}
+#endif
 
 void usage() {
     std::fprintf(stderr,
@@ -66,6 +90,16 @@ void usage() {
 }
 
 std::string self_dir() {
+#ifdef _WIN32
+    char buf[MAX_PATH * 4];
+    const DWORD n = GetModuleFileNameA(nullptr, buf, (DWORD) sizeof buf);
+    if (n == 0 || n >= sizeof buf) {
+        return ".";
+    }
+    const std::string p(buf, (size_t) n);
+    const size_t slash = p.find_last_of("\\/");
+    return slash == std::string::npos ? "." : p.substr(0, slash);
+#else
     char buf[4096];
     const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof buf - 1);
     if (n <= 0) {
@@ -75,10 +109,16 @@ std::string self_dir() {
     std::string p(buf);
     const size_t slash = p.find_last_of('/');
     return slash == std::string::npos ? "." : p.substr(0, slash);
+#endif
 }
 
 bool file_exists(const std::string & p) {
+#ifdef _WIN32
+    const DWORD attr = GetFileAttributesA(p.c_str());
+    return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+#else
     return ::access(p.c_str(), X_OK) == 0;
+#endif
 }
 
 } // namespace
@@ -129,7 +169,7 @@ int main(int argc, char ** argv) {
         usage();
         return 2;
     }
-    if (engine_exe.find('/') == std::string::npos) {
+    if (engine_exe.find('/') == std::string::npos && engine_exe.find('\\') == std::string::npos) {
         const std::string beside = self_dir() + "/" + engine_exe;
         if (file_exists(beside)) {
             engine_exe = beside;
@@ -208,12 +248,16 @@ int main(int argc, char ** argv) {
     shutdown_handler = [&](int) {
         ctx_server.terminate();
     };
+#ifdef _WIN32
+    SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
+#else
     struct sigaction sigint_action;
     sigint_action.sa_handler = signal_handler;
     sigemptyset(&sigint_action.sa_mask);
     sigint_action.sa_flags = 0;
     sigaction(SIGINT,  &sigint_action, NULL);
     sigaction(SIGTERM, &sigint_action, NULL);
+#endif
 
     // the engine's exit ends this process too, with a non-zero code, so a unit with Restart=on-failure brings both
     // back. A replacement engine is not forked from this multithreaded process (UnbiasedStrata 1 main.cpp:873).
