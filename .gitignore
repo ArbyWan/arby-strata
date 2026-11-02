@@ -74,3 +74,8 @@ build-vision-cuda12.bat
 # local Windows HIP packaging output
 dist-hip/
 !/run-arby-strata.bat
+
+# front end console-UI test artifacts (built by frontend/build_and_test.bat)
+frontend/live_task_test.exe
+frontend/ui_live.o
+frontend/live_task_test.log

@@ -9,6 +9,8 @@
 // as they are; `--serve` is added. The engine's READY line gives the context size.
 
 #include "strata_context.hpp"
+#include "ui_live.hpp"   // [LIVE-UI] the console block
+#include "engine.hpp"    // [LIVE-UI] engine_log_sink: the engine's own log routing
 
 #include "arg.h"
 #include "common.h"
@@ -18,8 +20,10 @@
 #include "server-stream.h"
 
 #include <atomic>
+#include <chrono>
 #include <clocale>
 #include <csignal>
+#include <thread>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -82,6 +86,8 @@ void usage() {
         "                         sizes its expert cache only if the encoder loads first; for cards with room\n"
         "  --picture-cache N      keep the encoded rows of the last N pictures (default 64, up to 1 GiB) so a chat\n"
         "                         that resends its pictures every turn encodes each once; 0 turns it off\n"
+        "  --ui MODE              console block: live (default on a terminal), plain or off\n"
+        "  --log-file FILE        where log lines go while the block owns the console\n"
         "  --                     everything after it is passed to the engine; --serve is added\n"
         "\n"
         "example (Qwen3.6-35B-A3B from its GGUF):\n"
@@ -135,6 +141,8 @@ int main(int argc, char ** argv) {
     std::vector<char *> llama_argv;
     bool mmproj_gpu = false; // the vision encoder on the card: only where the engine leaves room (a 48 GB card)
     long picture_cache = 64; // --picture-cache N: encoded pictures kept for the turns that resend them
+    std::string ui_mode  = "live"; // [LIVE-UI] live | plain | off
+    std::string ui_log;            // [LIVE-UI] where log lines go while the block owns the console
     llama_argv.push_back(argv[0]);
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -155,6 +163,15 @@ int main(int argc, char ** argv) {
         }
         if (a == "--mmproj-gpu") {
             mmproj_gpu = true;
+            continue;
+        }
+        if (a.rfind("--ui=", 0) == 0) {
+            ui_mode = a.substr(5);
+            continue;
+        }
+        if (a == "--log-file") {
+            if (i + 1 >= argc) { usage(); return 2; }
+            ui_log = argv[++i];
             continue;
         }
         if (a == "--picture-cache") {
@@ -199,8 +216,59 @@ int main(int argc, char ** argv) {
         params.model_alias.insert(model_name);
     }
 
+    // [LIVE-UI] take stdout before the engine starts writing its load banner. A non-TTY or a console
+    // without VT demotes itself to plain inside init(); ~ConsoleUI restores the cursor on every exit.
+    live_ui::ConsoleUI ui;
+    {
+        using Mode = live_ui::ConsoleUI::Mode;
+        Mode mode = Mode::Live;
+        if (ui_mode == "plain") {
+            mode = Mode::Plain;
+        } else if (ui_mode == "off") {
+            mode = Mode::Off;
+        } else if (ui_mode != "live") {
+            std::fprintf(stderr, "arby-strata: unknown --ui value '%s' (live, plain or off)\n", ui_mode.c_str());
+            return 2;
+        }
+        std::string ui_err;
+        if (!ui.init(mode, ui_log, ui_err)) {
+            std::fprintf(stderr, "arby-strata: %s\n", ui_err.c_str());
+            return 2;
+        }
+        // [LIVE-UI] SRV_INF/LOG_INF do NOT go through llama_log_set: llama.cpp's common logger has its
+        // own sink (common_log_main()). Left alone it writes straight to the console, which is exactly
+        // the wall of text the block would have to fight. Point it at the same file.
+        if (!ui_log.empty()) {
+            common_log_set_file(common_log_main(), ui_log.c_str());
+        }
+        // [LIVE-UI] and the engine's own stderr is forwarded by a thread straight to our stderr
+        // (engine.hpp). Give it a sink so it lands in the log file, line by line.
+        if (!ui_log.empty()) {
+            auto carry = std::make_shared<std::string>();
+            strata_frontend::engine_log_sink() = [&ui, carry](const char * p, size_t n) {
+                carry->append(p, n);
+                size_t nl;
+                while ((nl = carry->find('\n')) != std::string::npos) {
+                    std::string line = carry->substr(0, nl);
+                    carry->erase(0, nl + 1);
+                    if (!line.empty() && line.back() == '\r') line.pop_back();
+                    if (!line.empty()) ui.log_line(line, false);
+                }
+                if (carry->size() > 8192) {   // never let a runaway stream grow without bound
+                    ui.log_line(*carry, false);
+                    carry->clear();
+                }
+            };
+        }
+    }
+
     llama_backend_init();
     llama_numa_init(params.numa);
+    // [LIVE-UI] every LOG_* line goes through the console object once the block owns stdout, so no log
+    // line can ever be written through the block
+    llama_log_set([](ggml_log_level level, const char * text, void * user) {
+        live_ui::ConsoleUI::log_callback((int) level, text, user);
+    }, &ui);
 
     strata_context ctx_server;
     ctx_server.set_picture_cache((size_t) picture_cache, (size_t) 1 << 30);
@@ -212,6 +280,7 @@ int main(int argc, char ** argv) {
 
     // routes first (handlers are not called until is_ready), then the engine (forked before any thread exists),
     // then the HTTP thread, which answers /health with 503 while the engine loads
+    ctx_server.set_ui(&ui);   // [LIVE-UI]
     ctx_server.init_routes(ctx_http);
 
     std::string err;
@@ -220,11 +289,23 @@ int main(int argc, char ** argv) {
         return 1;
     }
 
+    // [LIVE-UI] the counters need their own beat: the engine read loop blocks on the pipe
+    std::atomic<bool> ui_ticking{true};
+    std::thread ui_ticker([&] {
+        while (ui_ticking.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            ctx_server.tick_ui();
+        }
+    });
+
     auto clean_up = [&]() {
         SRV_INF("%s", "cleaning up before exit...\n");
+        ui_ticking.store(false);
+        if (ui_ticker.joinable()) ui_ticker.join();
         server_stream_session_manager_stop();
         ctx_http.stop();
         ctx_server.terminate();
+        ui.shutdown();   // [LIVE-UI] cursor back, block cleared
         llama_backend_free();
     };
 
@@ -244,6 +325,11 @@ int main(int argc, char ** argv) {
     }
     ctx_http.is_ready.store(true);
     SRV_INF("listening on %s, context %lld tokens\n", ctx_http.listening_address.c_str(), ctx_server.n_ctx());
+    // [LIVE-UI] the single info line above the frame
+    ui.log_line("arby-strata  :" + std::to_string(params.port) + "  " +
+                (params.model_alias.empty() ? std::string("model") : *params.model_alias.begin()) +
+                "  ctx " + std::to_string(ctx_server.n_ctx()) +
+                (ui_log.empty() ? std::string() : "   log: " + ui_log));
 
     shutdown_handler = [&](int) {
         ctx_server.terminate();

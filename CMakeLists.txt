@@ -2186,7 +2186,8 @@ if(STRATA_FRONTEND AND STRATA_NATIVE_EXPERTS)
   target_link_libraries(arby_llama_server PUBLIC llama-common llama mtmd cpp-httplib Threads::Threads)
   target_compile_features(arby_llama_server PUBLIC cxx_std_17)
 
-  add_executable(arby-strata frontend/main.cpp frontend/strata_context.cpp)
+  add_executable(arby-strata frontend/main.cpp frontend/strata_context.cpp
+                            frontend/live_task.cpp frontend/ui_live.cpp)
   target_include_directories(arby-strata PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/frontend)
   target_link_libraries(arby-strata PRIVATE arby_llama_server)
   target_compile_features(arby-strata PRIVATE cxx_std_20)

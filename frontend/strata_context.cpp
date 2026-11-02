@@ -7,6 +7,11 @@
 #include "engine.hpp"
 #include "literals.hpp"
 #include "picture_cache.hpp"
+#include "live_task.hpp"   // [LIVE-UI] the console block's state machine
+#include "ui_live.hpp"     // [LIVE-UI] the terminal side
+
+#include <chrono>
+#include <ctime>
 
 #include "server-common.h"
 #include "server-task.h"
@@ -214,6 +219,49 @@ struct strata_context_impl {
 
     Slot slot;
 
+    // ---- [LIVE-UI] the console block -----------------------------------------------------------------------------
+    // The HTTP thread feeds events, the ticker thread renders: live_mu is what keeps the two apart.
+    live_ui::LiveTask    live;
+    live_ui::ConsoleUI * ui = nullptr;
+    std::mutex           live_mu;
+    bool                 live_clock_set_ = false;
+
+    void set_ui(live_ui::ConsoleUI * u) { ui = u; }
+
+    static int64_t live_now_us() {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    static std::string live_clock() {
+        const std::time_t t = std::time(nullptr);
+        std::tm tm{};
+#ifdef _WIN32
+        localtime_s(&tm, &t);
+#else
+        localtime_r(&t, &tm);
+#endif
+        char buf[16] = {0};
+        std::strftime(buf, sizeof buf, "%H:%M:%S", &tm);
+        return std::string(buf);
+    }
+
+    // Called from the ticker thread at 20 Hz; LiveTask::should_render holds the 5 Hz policy.
+    void tick_ui() {
+        if (!ui) return;
+        const int64_t now = live_now_us();
+        std::lock_guard<std::mutex> lk(live_mu);
+        if (!live_clock_set_) {           // [LIVE-UI] the load line counts from here
+            live.set_start_time_us(now);
+            live_clock_set_ = true;
+        }
+        // Draw during loading too: the line IS the load display. It updates at 1 Hz (should_render)
+        // and publish() skips identical content, so this is one write a second, not a stream.
+        if (!live.should_render(now)) return;
+        ui->publish(live.render(ui->width(), ui->live(), now));
+        live.mark_rendered(now);
+        live.count_render();
+    }
+
     // ---- queue callbacks -------------------------------------------------------------------------------------------
 
     void send_error(int id_task, const std::string & error, enum error_type type, int32_t n_prompt_tokens = 0) {
@@ -237,6 +285,9 @@ struct strata_context_impl {
         switch (task.type) {
             case SERVER_TASK_TYPE_COMPLETION:
                 if (slot.active()) {
+                    // [LIVE-UI] the slot is busy: show the queue instead of silently waiting
+                    const int waiting = (int) queue_tasks.queue_tasks_deferred_size() + 1;
+                    { std::lock_guard<std::mutex> lk(live_mu); live.on_task_accepted(waiting); }
                     queue_tasks.defer(std::move(task));
                     return true;
                 }
@@ -346,6 +397,14 @@ struct strata_context_impl {
             // tool_choice=required) cannot constrain it. Same as upstream PolyStrata. The parser still runs on the output.
             SRV_WRN("task %d: a grammar was requested (%zu chars); this engine does not constrain sampling, parsing only\n",
                     t.id, t.params.sampling.grammar.grammar.size());
+        }
+
+        // [LIVE-UI] from here on the console names this request
+        {
+            std::lock_guard<std::mutex> lk(live_mu);
+            live.set_prompt_tokens(n_prompt);
+            live.set_max_tokens(slot.n_predict > 0 ? slot.n_predict : -1);
+            live.on_request_start(live_now_us());
         }
 
         const std::string header = gen_header(t, slot.n_predict, slot.images_path, slot.image_keys);
@@ -699,9 +758,14 @@ struct strata_context_impl {
 
             case EngineLine::RESUME:
                 slot.stats.n_prompt_cached = (uint64_t) line.n;
+                { std::lock_guard<std::mutex> lk(live_mu); live.on_cache(line.n); }   // [LIVE-UI]
                 break;
 
             case EngineLine::PP:
+                {   // [LIVE-UI] progress for the console whether or not the client asked for it
+                    std::lock_guard<std::mutex> lk(live_mu);
+                    live.on_pp(line.pp_done, line.pp_total, line.pp_rate);
+                }
                 if (!slot.cancelled && slot.task->params.stream && slot.task->params.return_progress) {
                     send_partial_response(completion_token_output{}, /* is_progress */ true, false, line.pp_done);
                 }
@@ -713,6 +777,10 @@ struct strata_context_impl {
 
             case EngineLine::ERR:
                 SRV_ERR("task %d: engine: %s\n", slot.task->id, line.message.c_str());
+                {   // [LIVE-UI]
+                    std::lock_guard<std::mutex> lk(live_mu);
+                    live.on_error(live_clock(), 0.0);
+                }
                 if (!slot.cancelled) {
                     send_error(*slot.task, "engine: " + line.message, ERROR_TYPE_SERVER);
                 }
@@ -730,7 +798,12 @@ struct strata_context_impl {
                 break;
 
             case EngineLine::INFO:
-                LOG_INF("engine: %s\n", line.raw.c_str());
+                // [LIVE-UI] engine diagnostics go to the log file, not through the block
+                if (ui) {
+                    ui->log_line("engine: " + line.raw, false);
+                } else {
+                    LOG_INF("engine: %s\n", line.raw.c_str());
+                }
                 break;
 
             case EngineLine::REUSED:
@@ -760,6 +833,10 @@ struct strata_context_impl {
 
         const std::string token_str = result.text_to_send;
         slot.generated_text += token_str;
+        {   // [LIVE-UI] counters, TTFT and the thinking -> writing transition
+            std::lock_guard<std::mutex> lk(live_mu);
+            live.on_token(live_now_us(), token_str);
+        }
         if (slot.task->params.return_tokens) {
             slot.generated_tokens.push_back(tok);
         }
@@ -842,6 +919,10 @@ struct strata_context_impl {
         }
 
         if (slot.cancelled) {
+            {   // [LIVE-UI] cancelled: the Idle line should say so
+                std::lock_guard<std::mutex> lk(live_mu);
+                live.on_cancel(live_clock(), (d.prompt_ms + d.decode_ms) / 1e3);
+            }
             finish_slot();
             return;
         }
@@ -857,6 +938,12 @@ struct strata_context_impl {
             } else {
                 slot.stop = STOP_TYPE_EOS;
             }
+        }
+        {   // [LIVE-UI] the numbers the Idle line keeps
+            std::lock_guard<std::mutex> lk(live_mu);
+            live.on_done(d.prompt_n, (long long) slot.stats.n_prompt_cached, d.produced,
+                         d.prompt_ms, d.decode_ms, d.draft_accepted, d.draft_offered,
+                         d.finish, live_clock());
         }
         send_final_response();
         finish_slot();
@@ -1288,6 +1375,15 @@ void strata_context::set_picture_cache(size_t entries, size_t bytes) {
     impl->pictures.configure(entries, bytes);
 }
 
+// [LIVE-UI] the console block's outside handles
+void strata_context::set_ui(live_ui::ConsoleUI * u) {
+    impl->set_ui(u);
+}
+
+void strata_context::tick_ui() {
+    impl->tick_ui();
+}
+
 bool strata_context::load(common_params & params, std::string & err) {
     auto & I = *impl;
     I.params = params;
@@ -1355,6 +1451,15 @@ bool strata_context::load(common_params & params, std::string & err) {
             /* force_pure_content    */ params.force_pure_content_parser
         };
         I.chat_caps = common_chat_templates_get_caps(I.chat_params.tmpls.get());
+
+        // [LIVE-UI] does this model reason, and what opens and closes its reasoning? literals.hpp
+        // resolved both markers from the vocabulary in init_literals(), above.
+        {
+            const bool capable = !I.literals.think_open.empty() && !I.literals.think_close.empty();
+            std::lock_guard<std::mutex> lk(I.live_mu);
+            I.live.set_thinking(capable, I.literals.think_open, I.literals.think_close);
+            I.live.set_model_name(I.model_name);   // the name on the "Loading Model:" line
+        }
     }
 
     // the engine: READY carries the context it allocated
@@ -1376,6 +1481,11 @@ bool strata_context::load(common_params & params, std::string & err) {
         LOG_INF("engine info: %s=%s\n", kv.first.c_str(), kv.second.c_str());
     }
     LOG_INF("engine ready: context %lld tokens, model %s\n", I.n_ctx, I.model_name.c_str());
+    {   // [LIVE-UI] loaded: the line stops saying "Loading Model" from here on
+        std::lock_guard<std::mutex> lk(I.live_mu);
+        I.live.set_model_name(I.model_name);
+        I.live.on_engine_ready(0.0);
+    }
 
     I.queue_tasks.on_new_task([this](server_task && task, bool is_yielding) {
         return impl->process_new_task(std::move(task), is_yielding);

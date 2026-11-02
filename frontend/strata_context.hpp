@@ -17,6 +17,7 @@
 
 struct common_params;
 struct strata_context_impl;
+namespace live_ui { class ConsoleUI; }
 
 struct strata_context {
     std::unique_ptr<strata_context_impl> impl;
@@ -34,6 +35,10 @@ struct strata_context {
     bool load(common_params & params, std::string & err);
     // --picture-cache: how many pictures' encoded rows are kept for the turns that resend them (0: none); before load()
     void set_picture_cache(size_t entries, size_t bytes);
+
+    // [LIVE-UI] the console block: the state lives in the impl, this is the handle from main()
+    void set_ui(live_ui::ConsoleUI * u);
+    void tick_ui();
 
     // Blocks the calling thread running the task loop until terminate().
     void start_loop();

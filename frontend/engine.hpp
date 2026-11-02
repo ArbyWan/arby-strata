@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -74,13 +75,36 @@ inline bool child_running(std::atomic<pid_t> & pid_slot, std::string & why) {
 }
 #endif
 
-// One line from the engine, already classified.
+// [LIVE-UI] where the engine's own chatter goes. Unset ⇒ stderr, exactly as before. The console UI
+// installs a sink so the engine's log lands in --log-file instead of through the status line.
+inline std::function<void(const char *, size_t)> & engine_log_sink() {
+    static std::function<void(const char *, size_t)> sink;
+    return sink;
+}
+
+inline void engine_log_write(const char * p, size_t n) {
+    auto & sink = engine_log_sink();
+    if (sink) {
+        sink(p, n);
+        return;
+    }
+    std::fwrite(p, 1, n, stderr);
+    std::fflush(stderr);
+}
+
+inline void engine_log_line(const std::string & line) {
+    engine_log_write(line.data(), line.size());
+    engine_log_write("\n", 1);
+}
+
+
 struct EngineLine {
     enum Kind { NONE, TOKEN, PP, RESUME, REUSED, DONE, ERR, INFO, OTHER, EOF_ } kind = NONE;
     std::string raw;
     int32_t token = -1;
-    // PP <done> <total> [<ms> <tok/s>]
+    // PP <done> <total> <ms> <tok/s>   — the engine sends all four (src/poly/main.cpp:853)
     long long pp_done = 0, pp_total = 0;
+    double    pp_ms   = 0, pp_rate = 0;
     // RESUME <n> / REUSED <n>
     long long n = 0;
     // DONE <generated> <prompt> <prompt_ms> <decode_ms> <finish> [<drafts_accepted> <drafts_offered> <reused> ...]
@@ -411,8 +435,7 @@ private:
         }
         std::vector<char> cmdline(cmd.begin(), cmd.end());
         cmdline.push_back('\0');
-        std::fprintf(stderr, "arby-strata: engine command line: %s\n", cmd.c_str());
-        std::fflush(stderr);
+        engine_log_line("arby-strata: engine command line: " + cmd);   // [LIVE-UI] sink, not stderr
 
         // The engine's log is carried on its own pipe and forwarded by a thread (see start_error_reader): a console
         // stderr handle is not reliably inheritable, and a child that dies during load taking its diagnosis with it
@@ -496,8 +519,7 @@ private:
                     break;
                 }
                 total += (size_t) got;
-                std::fwrite(chunk, 1, (size_t) got, stderr);
-                std::fflush(stderr);
+                engine_log_write(chunk, (size_t) got);   // [LIVE-UI] sink, not stderr
             }
             if (total == 0) {
                 std::fprintf(stderr, "arby-strata: the engine wrote nothing to stderr\n");
@@ -722,7 +744,9 @@ private:
             out.finish = got >= 5 ? finish : "stop";
         } else if (line.rfind("PP ", 0) == 0) {
             out.kind = EngineLine::PP;
-            std::sscanf(line.c_str(), "PP %lld %lld", &out.pp_done, &out.pp_total);
+            // four fields: the rate is the engine's own measurement, do not recompute it from arrival times
+            std::sscanf(line.c_str(), "PP %lld %lld %lf %lf",
+                        &out.pp_done, &out.pp_total, &out.pp_ms, &out.pp_rate);
         } else if (line.rfind("RESUME ", 0) == 0) {
             out.kind = EngineLine::RESUME;
             out.n = std::atoll(line.c_str() + 7);
