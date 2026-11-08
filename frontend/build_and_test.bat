@@ -30,11 +30,10 @@ rem ----------------------------------------------------------------------------
 :run
 set "CXX="
 
-rem 1) the ROCm 10 venv build-windows.bat uses: repo-root relative first, then the known absolute
-rem    location, then an explicit ROCM_ROOT override.
+rem 1) the ROCm 10 venv build-windows.bat uses: repo-root relative, then an explicit
+rem    ROCm_ROOT override.
 for %%C in (
   "%SRC%..\.rocm-win\Scripts\rocm-sdk.exe"
-  "D:\arby-strata\.rocm-win\Scripts\rocm-sdk.exe"
 ) do (
   if not defined ROCM if exist %%C for /f "delims=" %%R in ('%%C path --root') do set "ROCM=%%R"
 )
@@ -43,7 +42,6 @@ if defined ROCM if exist "%ROCM%\lib\llvm\bin\clang++.exe" set "CXX=%ROCM%\lib\l
 if not defined CXX (
   echo No clang++.exe found. Looked for the ROCm venv at:
   echo   "%SRC%..\.rocm-win\Scripts\rocm-sdk.exe"
-  echo   "D:\arby-strata\.rocm-win\Scripts\rocm-sdk.exe"
   echo   %%ROCM_ROOT%%\lib\llvm\bin\clang++.exe
   exit /b 2
 )
