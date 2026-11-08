@@ -55,12 +55,12 @@ The front end starts the engine as a child (`--engine`), adds `--serve` and spea
 
 ```sh
 build-hip/bin/arby-strata --engine build-hip/bin/strata \
-  -m /models/swift-abliterated-iq3_xxs/...00001-of-00002.gguf \
-  --host 0.0.0.0 --port 8080 --alias swift-abliterated-iq3_xxs \
-  -- --pack /models/packs/swift-abliterated-iq3_xxs \
-     --native /models/swift-abliterated-iq3_xxs/...00001-of-00002.gguf \
-     --ple-gguf /models/swift-abliterated-iq3_xxs/...00001-of-00002.gguf \
-     --expert-profile /models/packs/swift-abliterated-iq3_xxs/expert-profile.bin \
+  -m /models/my-model/...00001-of-00002.gguf \
+  --host 0.0.0.0 --port 8080 --alias my-model \
+  -- --pack /models/packs/my-model \
+     --native /models/my-model/...00001-of-00002.gguf \
+     --ple-gguf /models/my-model/...00001-of-00002.gguf \
+     --expert-profile /models/packs/my-model/expert-profile.bin \
      --expert-cache auto --prefill auto --spec 4 --spec-min-p 0.5 --mtp /models/mtp/rt \
      --max-context 131768 --kv int8 --kv-resident 32768 --vram-reserve-mib 1400
 ```
