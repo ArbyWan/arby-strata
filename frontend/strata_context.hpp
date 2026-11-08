@@ -11,6 +11,7 @@
 
 #include "server-http.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,6 +19,14 @@
 struct common_params;
 struct strata_context_impl;
 namespace live_ui { class ConsoleUI; }
+
+// [LOCAL-FIX friday / status-endpoint] The engine's own stderr lines ("strata serve: decode expert
+// cache hit rate: ...") are NOT protocol lines: they never reach handle_line(), so /status cannot
+// learn the engine counters from there. main.cpp already splits that stream into lines for the log
+// file; this sink is how those same lines reach the context. Registered by the impl, called by main.
+namespace strata_telemetry {
+std::function<void(const std::string &)> & engine_text_sink();
+}
 
 struct strata_context {
     std::unique_ptr<strata_context_impl> impl;

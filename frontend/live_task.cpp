@@ -206,6 +206,19 @@ void LiveTask::on_error(const std::string & clock, double total_s) {
     record_.finish = "error";
 }
 
+// [LOCAL-FIX friday / status-endpoint] the same words the console line uses, for GET /status.
+const char * LiveTask::phase_name(Phase p) {
+    switch (p) {
+        case Phase::Loading:  return "Loading";
+        case Phase::Queued:   return "Queued";
+        case Phase::Reading:  return "Reading Prompt";
+        case Phase::Thinking: return "Thinking";
+        case Phase::Writing:  return "Writing Reply";
+        case Phase::Idle:     break;
+    }
+    return "Idle";
+}
+
 // "Loading Model: <name>  [    |    ]  71s"
 std::string LiveTask::load_line(int width, int64_t now_us) const {
     const double age = start_us_ > 0 && now_us > start_us_ ? (double) (now_us - start_us_) / 1e6 : 0.0;

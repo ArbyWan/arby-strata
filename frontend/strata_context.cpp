@@ -9,9 +9,13 @@
 #include "picture_cache.hpp"
 #include "live_task.hpp"   // [LIVE-UI] the console block's state machine
 #include "ui_live.hpp"     // [LIVE-UI] the terminal side
+#include "sys_vitals.hpp"  // [LOCAL-FIX friday / status-endpoint] Windows commit / RAM for GET /status
 
 #include <chrono>
+#include <cstring>
 #include <ctime>
+#include <cstdlib>
+#include <deque>
 
 #include "server-common.h"
 #include "server-task.h"
@@ -179,6 +183,15 @@ std::string file_stem(const std::string & path) {
 
 } // namespace
 
+namespace strata_telemetry {
+
+std::function<void(const std::string &)> & engine_text_sink() {
+    static std::function<void(const std::string &)> sink;
+    return sink;
+}
+
+}   // namespace strata_telemetry
+
 struct strata_context_impl {
     common_params params;
 
@@ -228,6 +241,27 @@ struct strata_context_impl {
 
     void set_ui(live_ui::ConsoleUI * u) { ui = u; }
 
+    // ---- [LOCAL-FIX friday / status-endpoint] state behind GET /status --------------------------------------------
+    // Kept separate from live_mu: the HTTP thread must be able to answer while the engine holds a request.
+    struct RecentReq {
+        std::string clock;
+        long long   prompt_n   = 0;
+        long long   gen_n      = 0;
+        double      decode_tps = 0;
+        std::string finish;
+    };
+    struct EngineStats {
+        double    expert_hit_pct = -1;   // from "decode expert cache hit rate: X% (...)"
+        double    pcie_pct       = -1;   // from the same line: "... from another GPU (Y% of all N routed)"
+        double    kv_vram_pct    = -1;   // from "KV streaming: X% of N block reads hit VRAM"
+        double    kv_ram_mib     = -1;   // from the same line: "... M MiB read from RAM"
+        long long tail_skip      = -1;   // from "route tail skip: N missed experts skipped"
+    };
+    std::mutex            status_mu;
+    std::deque<RecentReq> recent;        // newest first, capped
+    EngineStats           eng_stats;
+    int64_t               status_boot_us = 0;   // stamped by tick_ui(), 0 until the first tick
+
     static int64_t live_now_us() {
         return std::chrono::duration_cast<std::chrono::microseconds>(
                    std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -252,6 +286,7 @@ struct strata_context_impl {
         std::lock_guard<std::mutex> lk(live_mu);
         if (!live_clock_set_) {           // [LIVE-UI] the load line counts from here
             live.set_start_time_us(now);
+            status_boot_us = now;         // [status-endpoint] same origin, for uptime_s
             live_clock_set_ = true;
         }
         // Draw during loading too: the line IS the load display. It updates at 1 Hz (should_render)
@@ -399,12 +434,14 @@ struct strata_context_impl {
                     t.id, t.params.sampling.grammar.grammar.size());
         }
 
-        // [LIVE-UI] from here on the console names this request
+        // [LIVE-UI] from here on the console names this request.
+        // Order matters: on_request_start() RESETS prompt_tokens_/max_tokens_, so the setters must
+        // follow it or every request reports prompt 0 and a bar with no denominator.
         {
             std::lock_guard<std::mutex> lk(live_mu);
+            live.on_request_start(live_now_us());
             live.set_prompt_tokens(n_prompt);
             live.set_max_tokens(slot.n_predict > 0 ? slot.n_predict : -1);
-            live.on_request_start(live_now_us());
         }
 
         const std::string header = gen_header(t, slot.n_predict, slot.images_path, slot.image_keys);
@@ -748,6 +785,36 @@ struct strata_context_impl {
         }
     }
 
+    // [status-endpoint] The engine reports its own counters on ITS stderr, not on the line protocol:
+    //   "strata serve: decode expert cache hit rate: 66.3% (26170/42314); ... (3.2% of all N routed)"
+    //   "strata serve: KV streaming: 90.9% of N block reads hit VRAM, 117.5 MiB read from RAM"
+    //   "strata serve: route tail skip: N missed experts skipped (M entries) since the start"
+    // main.cpp's engine-log sink hands each of those lines to us, so /status never parses the log file.
+    void on_engine_text(const std::string & raw) {
+        if (raw.find("hit rate:") == std::string::npos &&
+            raw.find("KV streaming:") == std::string::npos &&
+            raw.find("route tail skip:") == std::string::npos) {
+            return;
+        }
+        const auto num_after = [](const std::string & s, const char * key, double * out) {
+            const size_t p = s.find(key);
+            if (p == std::string::npos) return false;
+            const char * start = s.c_str() + p + std::strlen(key);
+            char * end = nullptr;
+            const double v = std::strtod(start, &end);
+            if (end == start) return false;
+            *out = v;
+            return true;
+        };
+        std::lock_guard<std::mutex> lk(status_mu);
+        double v = 0;
+        if (num_after(raw, "decode expert cache hit rate: ", &v)) eng_stats.expert_hit_pct = v;
+        if (num_after(raw, "another GPU (", &v))                 eng_stats.pcie_pct       = v;
+        if (num_after(raw, "KV streaming: ", &v))                eng_stats.kv_vram_pct    = v;
+        if (num_after(raw, "hit VRAM, ", &v))                    eng_stats.kv_ram_mib     = v;
+        if (num_after(raw, "route tail skip: ", &v))             eng_stats.tail_skip      = (long long) v;
+    }
+
     void handle_line(const EngineLine & line) {
         switch (line.kind) {
             case EngineLine::TOKEN:
@@ -798,6 +865,8 @@ struct strata_context_impl {
                 break;
 
             case EngineLine::INFO:
+                // [status-endpoint] the engine's counters can arrive on either channel
+                on_engine_text(line.raw);
                 // [LIVE-UI] engine diagnostics go to the log file, not through the block
                 if (ui) {
                     ui->log_line("engine: " + line.raw, false);
@@ -944,6 +1013,17 @@ struct strata_context_impl {
             live.on_done(d.prompt_n, (long long) slot.stats.n_prompt_cached, d.produced,
                          d.prompt_ms, d.decode_ms, d.draft_accepted, d.draft_offered,
                          d.finish, live_clock());
+        }
+        {   // [status-endpoint] keep the last finished requests for the TUI's history bars
+            std::lock_guard<std::mutex> lk(status_mu);
+            RecentReq r;
+            r.clock      = live_clock();
+            r.prompt_n   = d.prompt_n;
+            r.gen_n      = d.produced;
+            r.decode_tps = d.decode_ms > 0 ? (double) d.produced * 1000.0 / d.decode_ms : 0.0;
+            r.finish     = d.finish;
+            recent.push_front(std::move(r));
+            while (recent.size() > 12) recent.pop_back();
         }
         send_final_response();
         finish_slot();
@@ -1352,7 +1432,13 @@ struct strata_context_impl {
 
 // ---- strata_context -------------------------------------------------------------------------------------------------
 
-strata_context::strata_context() : impl(std::make_unique<strata_context_impl>()) {}
+strata_context::strata_context() : impl(std::make_unique<strata_context_impl>()) {
+    // [status-endpoint] register before any engine line can arrive; main.cpp's log sink calls this
+    // for every line the engine writes to its own stderr.
+    strata_telemetry::engine_text_sink() = [impl = impl.get()](const std::string & line) {
+        impl->on_engine_text(line);
+    };
+}
 strata_context::~strata_context() = default;
 
 bool strata_context::start_engine(const common_params & params, const std::string & engine_exe,
@@ -1553,6 +1639,112 @@ void strata_context::init_routes(server_http_context & http) {
         return res;
     };
 
+    // [LOCAL-FIX friday / status-endpoint] GET /status -- everything a remote renderer needs.
+    // Deliberately answers even when the engine is down: that is when it is most useful.
+    auto get_status = [I](const server_http_req &) {
+        auto res = I->create_response();
+        json out;
+
+        const int64_t now_us = I->live_now_us();
+        const bool    alive  = I->engine.alive() && !I->engine_dead.load();
+
+        out["server"] = {
+            {"service",       "strata"},
+            {"model",         I->model_name},
+            {"max_context",   I->n_ctx},
+            {"busy",          I->slot.active()},
+            {"engine_alive",  alive},
+            {"uptime_s",      I->status_boot_us > 0 && now_us > I->status_boot_us
+                                  ? (double) (now_us - I->status_boot_us) / 1e6 : 0.0},
+            {"sampled",       I->live_clock()},
+        };
+
+        {   // [status-endpoint] the launch config, straight from our own argv -- a label can never lie
+            const auto arg_after = [I](const char * flag) -> std::string {
+                for (size_t i = 0; i + 1 < I->engine_args.size(); ++i) {
+                    if (I->engine_args[i] == flag) return I->engine_args[i + 1];
+                }
+                return "";
+            };
+            out["launch"] = {
+                {"spec",             arg_after("--spec")},
+                {"prefill",          arg_after("--prefill")},
+                {"kv",               arg_after("--kv")},
+                {"kv_resident",      arg_after("--kv-resident")},
+                {"expert_cache",     arg_after("--expert-cache")},
+                {"vram_reserve_mib", arg_after("--vram-reserve-mib")},
+                {"spec_min_p",       arg_after("--spec-min-p")},
+            };
+        }
+
+        {   // the live state machine behind the console line
+            std::lock_guard<std::mutex> lk(I->live_mu);
+            const live_ui::RequestRecord & rec = I->live.record();
+            out["task"] = {
+                {"phase",         I->live.phase_label()},
+                {"waiting",       I->live.waiting()},
+                {"prompt_tokens", I->live.prompt_tokens()},
+                {"cached",        I->live.prompt_cached()},
+                {"pp_done",       I->live.pp_done()},
+                {"pp_total",      I->live.pp_total()},
+                {"prefill_tps",   I->live.pp_rate()},
+                {"gen_tokens",    I->live.gen_tokens()},
+                {"max_tokens",    I->live.max_tokens()},
+                {"decode_tps",    I->live.decode_rate(now_us)},
+                {"draft_pct",     I->live.draft_pct()},
+                {"last", {
+                    {"valid",       rec.valid},
+                    {"clock",       rec.clock},
+                    {"prompt_n",    rec.prompt_n},
+                    {"gen_n",       rec.gen_n},
+                    {"prefill_tps", rec.prompt_rate},
+                    {"decode_tps",  rec.gen_rate},
+                    {"draft_pct",   rec.draft_pct},
+                    {"finish",      rec.finish},
+                }},
+            };
+        }
+
+        {   // Windows commit / RAM, sampled now (never parsed out of the log)
+            const sys_vitals::Snapshot v = sys_vitals::sample();
+            out["system"] = {
+                {"valid",           v.valid},
+                {"commit_total_mib", v.commit_total / 1048576.0},
+                {"commit_limit_mib", v.commit_limit / 1048576.0},
+                {"commit_pct",       v.commit_limit
+                                         ? 100.0 * (double) v.commit_total / (double) v.commit_limit : 0.0},
+                {"commit_headroom_mib", v.commit_headroom / 1048576.0},
+                {"ram_total_mib",    v.ram_total / 1048576.0},
+                {"ram_avail_mib",    v.ram_avail / 1048576.0},
+            };
+        }
+
+        {   // counters the engine reports in its own INFO lines; -1 means "not seen yet"
+            std::lock_guard<std::mutex> lk(I->status_mu);
+            out["engine"] = {
+                {"expert_hit_pct",  I->eng_stats.expert_hit_pct},
+                {"pcie_pct",        I->eng_stats.pcie_pct},
+                {"kv_vram_hit_pct", I->eng_stats.kv_vram_pct},
+                {"kv_from_ram_mib", I->eng_stats.kv_ram_mib},
+                {"tail_skip_missed",I->eng_stats.tail_skip},
+            };
+            json arr = json::array();
+            for (const auto & r : I->recent) {
+                arr.push_back({
+                    {"clock",      r.clock},
+                    {"prompt_n",   r.prompt_n},
+                    {"gen_n",      r.gen_n},
+                    {"decode_tps", r.decode_tps},
+                    {"finish",     r.finish},
+                });
+            }
+            out["recent"] = std::move(arr);
+        }
+
+        res->ok(std::move(out));
+        return res;
+    };
+
     auto get_props = [I](const server_http_req &) {
         auto res = I->create_response();
         json caps = json::object();
@@ -1669,6 +1861,7 @@ void strata_context::init_routes(server_http_context & http) {
     http.get ("/props",               ex_wrapper(get_props));
     http.get ("/models",              ex_wrapper(get_models));
     http.get ("/v1/models",           ex_wrapper(get_models));
+    http.get ("/status",              ex_wrapper(get_status));   // [status-endpoint] for strata-top
     http.post("/completion",          ex_wrapper(post_completions));
     http.post("/completions",         ex_wrapper(post_completions));
     http.post("/v1/completions",      ex_wrapper(post_completions_oai));

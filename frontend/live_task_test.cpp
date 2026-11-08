@@ -30,7 +30,7 @@ static void dump(const Render & r) {
 static LiveTask make_task(bool thinking) {
     LiveTask t;
     t.set_start_time_us(0);
-    t.set_model_name("swift-abliterated-iq3_xxs");
+    t.set_model_name("Qwen3.8-Flash-Next-IQ3_XXS");
     t.set_server_info(":8080  ctx 131768");
     t.set_thinking(thinking, " thinking", "</think>");
     return t;
@@ -44,7 +44,7 @@ int main() {
         Render r = t.render(100, false, 72000000);
         dump(r);
         check(r.lines.size() == 1, "exactly one line");
-        check(has(mid(r), "Loading Model: swift-abliterated-iq3_xxs"), "names the model");
+        check(has(mid(r), "Loading Model: Qwen3.8-Flash-Next-IQ3_XXS"), "names the model");
         check(has(mid(r), "1m 11s"), "elapsed load time");
         check(has(mid(r), "####"), "the marching bar");
     }

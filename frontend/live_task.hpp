@@ -11,9 +11,9 @@
 //
 // Layout:
 //
-//   arby-strata  :8080  swift-abliterated-iq3_xxs  ctx 131768     <- printed once, at startup
+//   arby-strata  :8080  Qwen3.8-Flash-Next-IQ3_XXS  ctx 131768    <- printed once, at startup
 //   ------------------------------------------------------------------
-//   Loading Model: swift-abliterated-iq3_xxs  [    |    ]  71s
+//   Loading Model: Qwen3.8-Flash-Next-IQ3_XXS  [    |    ]  71s
 //   ------------------------------------------------------------------
 //
 //   ==================================================================
@@ -94,6 +94,22 @@ public:
     const RequestRecord & record() const { return record_; }
     const std::string & model_name() const { return model_name_; }
     const std::string & server_info() const { return server_info_; }
+
+    // [LOCAL-FIX friday / status-endpoint] read-only view of the live counters, for GET /status.
+    static const char * phase_name(Phase p);
+    const char * phase_label() const { return phase_name(phase_); }
+    long long prompt_tokens()   const { return prompt_tokens_; }
+    long long max_tokens()      const { return max_tokens_; }
+    long long pp_done()         const { return pp_done_; }
+    long long pp_total()        const { return pp_total_; }
+    double    pp_rate()         const { return pp_rate_; }
+    long long gen_tokens()      const { return n_gen_; }
+    long long prompt_cached()   const { return prompt_cached_; }
+    int       draft_pct()       const { return draft_pct_; }
+    int64_t   start_us()        const { return start_us_; }
+    int64_t   request_us()      const { return request_us_; }
+    int64_t   first_token_us()  const { return first_token_us_; }
+    double    decode_rate(int64_t now_us) const { return window_rate(now_us); }
 
     Render render(int width, bool ansi, int64_t now_us) const;
 

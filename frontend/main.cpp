@@ -86,7 +86,8 @@ void usage() {
         "                         sizes its expert cache only if the encoder loads first; for cards with room\n"
         "  --picture-cache N      keep the encoded rows of the last N pictures (default 64, up to 1 GiB) so a chat\n"
         "                         that resends its pictures every turn encodes each once; 0 turns it off\n"
-        "  --ui MODE              console block: live (default on a terminal), plain or off\n"
+        "  --ui MODE              console block: off (default), plain or live (opt-in; live demotes to plain\n"
+        "                         without a VT terminal)\n"
         "  --log-file FILE        where log lines go while the block owns the console\n"
         "  --                     everything after it is passed to the engine; --serve is added\n"
         "\n"
@@ -141,7 +142,7 @@ int main(int argc, char ** argv) {
     std::vector<char *> llama_argv;
     bool mmproj_gpu = false; // the vision encoder on the card: only where the engine leaves room (a 48 GB card)
     long picture_cache = 64; // --picture-cache N: encoded pictures kept for the turns that resend them
-    std::string ui_mode  = "live"; // [LIVE-UI] live | plain | off
+    std::string ui_mode  = "off";  // [LIVE-UI] off (default) | plain | live (opt-in)
     std::string ui_log;            // [LIVE-UI] where log lines go while the block owns the console
     llama_argv.push_back(argv[0]);
     for (int i = 1; i < argc; ++i) {
@@ -252,7 +253,11 @@ int main(int argc, char ** argv) {
                     std::string line = carry->substr(0, nl);
                     carry->erase(0, nl + 1);
                     if (!line.empty() && line.back() == '\r') line.pop_back();
-                    if (!line.empty()) ui.log_line(line, false);
+                    if (!line.empty()) {
+                        ui.log_line(line, false);
+                        // [status-endpoint] the same line feeds the engine counters behind /status
+                        if (auto & sink = strata_telemetry::engine_text_sink()) sink(line);
+                    }
                 }
                 if (carry->size() > 8192) {   // never let a runaway stream grow without bound
                     ui.log_line(*carry, false);
