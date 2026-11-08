@@ -362,7 +362,7 @@ __global__ void __launch_bounds__(S * RG) gdn_step_norm_multi_kernel(float* __re
             sq_part = oc * oc;
         }
         // every thread takes the shuffles, as the single-token kernel does: inside the `rg == 0` branch hipcc on
-        // gfx1151 gave another rounding for 3% of the outputs (gdn_parity section 5 on Aurora)
+        // gfx1151 gave another rounding for 3% of the outputs (gdn_parity section 5 on gfx1151)
         for (int o2 = 16; o2 > 0; o2 >>= 1) sq_part += __shfl_xor_sync(0xffffffffu, sq_part, o2);
         if (rg == 0 && (col & 31) == 0) wsum[col >> 5] = sq_part;
         __syncthreads();

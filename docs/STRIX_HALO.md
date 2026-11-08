@@ -163,7 +163,7 @@ IQ3_XXS at 8K was measured again with 6 interleaved pairs (an earlier 3-run set 
 ### Re-measured on the merged 0.1.40 code
 
 The same box and method, no environment switches at all (the arch defaults only), on the final merged tree. 4 interleaved pairs per cell,
-medians; "j" is the build of the table above (the Aurora port before the other 0.1.40 work was merged), "merged" is the release
+medians; "j" is the build of the table above (the gfx1151 port before the other 0.1.40 work was merged), "merged" is the release
 code. Every run printed the same token ids, and the ids also match `strata-int29` (the v4.2 config) on UD-IQ4_XS and UD-Q4_K_XL at
 a8 / 4K / 64K.
 

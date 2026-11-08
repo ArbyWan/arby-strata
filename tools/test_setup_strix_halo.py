@@ -2,7 +2,7 @@
 arch check (never a prefix: gfx1150 / gfx1152 are other chips), the PCI ids and marketing names, the unified-memory
 sizing, which card setup picks beside a discrete one, and the Windows engine zip (a zip without gfx1151 code is never used).
 
-The Linux fixture is Aurora's real answer (the maintainers' Strix Halo box, read-only):
+The Linux fixture is the maintainers' Strix Halo box's real answer (read-only):
   KFD node 1: gfx_target_version 110501, simd_count 80, vendor_id 4098, device_id 5510 (0x1586), drm_render_minor 128
   /sys/class/drm/card1/device: vendor 0x1002, device 0x1586, mem_info_vram_total 2147483648 (a 2 GiB BIOS carve-out),
                                mem_info_gtt_total 120259084288 (112 GiB: ttm.pages_limit=29360128), no product_name
@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import setup  # noqa: E402
 
-AURORA_RAM_GB = 127098456 * 1024 / 2 ** 30          # /proc/meminfo MemTotal on Aurora: 121.2 GiB
+STRIX_HALO_RAM_GB = 127098456 * 1024 / 2 ** 30          # /proc/meminfo MemTotal on that box: 121.2 GiB
 GIB = 1 << 30
 
 
@@ -67,7 +67,7 @@ class LinuxBase(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.win = setup.WIN
         setup.WIN = False
-        p = mock.patch.object(setup, "ram_gb", return_value=AURORA_RAM_GB)
+        p = mock.patch.object(setup, "ram_gb", return_value=STRIX_HALO_RAM_GB)
         p.start()
         self.addCleanup(p.stop)
 
@@ -75,7 +75,7 @@ class LinuxBase(unittest.TestCase):
         setup.WIN = self.win
         self.tmp.cleanup()
 
-    def aurora(self, node=1, minor=128, card=1):
+    def native_box(self, node=1, minor=128, card=1):
         fake_gpu(self.root, node, 110501, 80, minor, 0x1586, 2 * GIB, 120259084288, None, card)
 
 
@@ -185,10 +185,10 @@ class PciIds(unittest.TestCase):
         self.assertEqual(f(None, "AMD Radeon RX 6800M"), "")
 
 
-class AuroraFixture(LinuxBase):
-    def test_aurora(self):
+class RealBoxFixture(LinuxBase):
+    def test_real_box(self):
         cpu_node(self.root, 0)
-        self.aurora()
+        self.native_box()
         g = setup.amd_gpus(str(self.root))
         self.assertEqual(len(g), 1)
         g = g[0]
@@ -218,7 +218,7 @@ class AuroraFixture(LinuxBase):
         self.assertEqual(setup.amd_gpus(str(self.root))[0]["name"], "AMD Radeon 8060S")
 
     def test_pci_scan(self):
-        self.aurora()
+        self.native_box()
         d = setup.amd_pci_devices(str(self.root))
         self.assertEqual([(x["pci_id"], x["arch"]) for x in d], [(0x1586, "gfx1151")])
         self.assertAlmostEqual(d[0]["gtt_gb"], 112.0)
@@ -227,12 +227,12 @@ class AuroraFixture(LinuxBase):
     def test_gtt_never_exceeds_the_ram(self):
         fake_gpu(self.root, 0, 110501, 80, 128, 0x1586, 512 << 20, 200 * GIB)         # a bogus 200 GiB GTT
         g = setup.amd_gpus(str(self.root))[0]
-        self.assertAlmostEqual(g["shared_gb"], AURORA_RAM_GB - setup.UMA_OS_LEFT_GB)
+        self.assertAlmostEqual(g["shared_gb"], STRIX_HALO_RAM_GB - setup.UMA_OS_LEFT_GB)
 
     def test_no_gtt_file_means_half_the_ram(self):
         fake_gpu(self.root, 0, 110501, 80, 128, 0x1586, 2 * GIB, 0)
         g = setup.amd_gpus(str(self.root))[0]
-        self.assertAlmostEqual(g["shared_gb"], AURORA_RAM_GB / 2)
+        self.assertAlmostEqual(g["shared_gb"], STRIX_HALO_RAM_GB / 2)
 
     def test_big_carve_out(self):
         fake_gpu(self.root, 0, 110501, 80, 128, 0x1586, 96 * GIB, 24 * GIB)           # 96 GB carve-out, 32 GB left
@@ -469,7 +469,7 @@ class Recommendation(unittest.TestCase):
         self.assertEqual((setup.STRIX_HALO_FAMILY, setup.STRIX_HALO_MODEL), ("unsloth", "UD-IQ4_XS"))
         self.assertIn(setup.STRIX_HALO_MODEL, setup.MODELS)
         self.assertIn(setup.STRIX_HALO_FAMILY, setup.FAMILIES)
-        self.assertTrue(setup.strix_halo_recommends(self.halo(), AURORA_RAM_GB))
+        self.assertTrue(setup.strix_halo_recommends(self.halo(), STRIX_HALO_RAM_GB))
         self.assertTrue(setup.strix_halo_recommends(self.halo(), 128.0))
         self.assertTrue(setup.strix_halo_recommends(self.halo(32.0), 60.0))             # 32 GB carve-out + 60 GB RAM
         self.assertFalse(setup.strix_halo_recommends(self.halo(), 62.0))                # a 64 GB box: no recommendation
@@ -487,14 +487,14 @@ class Recommendation(unittest.TestCase):
         try:
             setup.WIN = False
             g = {**self.halo(), "shared_gb": 60.0, "vram_gb": 62.0}
-            notes = setup.strix_halo_notes(g, AURORA_RAM_GB)
+            notes = setup.strix_halo_notes(g, STRIX_HALO_RAM_GB)
             joined = "\n".join(notes)
             self.assertIn("docs/STRIX_HALO.md", joined)
             self.assertIn("UD-IQ4_XS", joined)
             self.assertTrue(any(n.startswith("!") and "ttm.pages_limit" in n for n in notes))   # a small GTT: a warning
             self.assertIn("changes no host setting", joined)
             big = {**self.halo(), "shared_gb": 112.0, "vram_gb": 114.0}
-            self.assertFalse(any(n.startswith("!") for n in setup.strix_halo_notes(big, AURORA_RAM_GB)))
+            self.assertFalse(any(n.startswith("!") for n in setup.strix_halo_notes(big, STRIX_HALO_RAM_GB)))
         finally:
             setup.WIN = win
 

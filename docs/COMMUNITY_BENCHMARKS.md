@@ -54,11 +54,11 @@ the medians. With a size that setup has installed:
 
    ```json
    {
-    "gguf": "D:/PolyStrata-data/models/qwen36-UD-Q3_K_M/Qwen3.6-35B-A3B-UD-Q3_K_M.gguf",
-    "llama_server": "D:/llama.cpp/llama-server.exe",
-    "strata_cfg": "D:/PolyStrata/strata-qwen36-ud-q3_k_m.json",
-    "serve": "D:/PolyStrata/serve",
-    "cwd": "D:/PolyStrata",
+    "gguf": "<data folder>/models/qwen36-UD-Q3_K_M/Qwen3.6-35B-A3B-UD-Q3_K_M.gguf",
+    "llama_server": "<llama.cpp folder>/llama-server.exe",
+    "strata_cfg": "<PolyStrata folder>/strata-qwen36-ud-q3_k_m.json",
+    "serve": "<PolyStrata folder>/serve",
+    "cwd": "<PolyStrata folder>",
     "configs": [
      {"name": "polystrata", "kind": "strata", "args": [], "override": {"--max-context": "36864"}},
      {"name": "llama-mtp", "kind": "llama", "args": ["--fit", "on", "-c", "36864", "-fa", "on",

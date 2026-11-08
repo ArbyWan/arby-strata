@@ -181,8 +181,8 @@ other ~18 GB), a 32 GB PC with a 12-16 GB GPU the Coder; IQ3_XXS on a 32 GB PC s
   Later prompts can read from a RAM copy changed by earlier decode requests. The log reports how many experts moved.
   Measured on an RTX 3060 12 GB with 32 GB of RAM (Linux, IQ2_XS, 20.5 GiB of experts in RAM and about 6,000 experts on
   the file tier, `--adapt-async 1`, `--spec 3`, power-saver), against v0.1.43: 47 frozen Korean requests from
-  my own use (tools, follow-ups and background tasks, 281-33,241 prompt tokens), replayed in order in fresh engines:
-  release, this option, release. Each starts from the same held learned profile; the private prompts are not attached.
+  a real workload (tools, follow-ups and background tasks, 281-33,241 prompt tokens), replayed in order in fresh engines:
+  release, this option, release. Each starts from the same held learned profile; the prompts are not attached.
   With default tail skip (7), decode is 43.26 -> 50.40 tok/s (+16.5%) against the closing release, computed as total
   generated tokens / total decode time; the two release arms are within 0.2%. Short/long new-input requests gain
   16.3%/16.9%; total prompt speed differs by 2.5%, within run variation. Decode file-tier demand reads per generated

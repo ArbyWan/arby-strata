@@ -1,5 +1,5 @@
 @echo off
-rem arby-strata: serve Swift-Qwen3.8-Flash-Next from the IQ3_XXS pack, engine + C++ front end, ROCm 10.
+rem arby-strata: serve a GGUF model from its IQ3_XXS pack, engine + C++ front end, ROCm 10.
 rem
 rem   run-arby-strata.bat            start on 0.0.0.0:8080
 rem   run-arby-strata.bat 8081       start on another port
@@ -39,10 +39,10 @@ set "STRATA_HIP_WMMA=1"
 set "STRATA_PREFILL_RING=96"
 set "STRATA_HELPER_CPUS=auto"
 
-set "MDL=D:\Strata-data\models\swift-abliterated-iq3_xxs"
-set "GGUF=%MDL%\IQ3_XXS\Swift-Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_XXS-00001-of-00002.gguf"
-set "MMPROJ=%MDL%\mmproj-Qwen3.8-Flash-Next-BF16.gguf"
-set "PACK=D:\Strata-data\packs\swift-abliterated-iq3_xxs"
+set "MDL=%~dp0models\my-model"
+set "GGUF=%MDL%\IQ3_XXS\my-model-IQ3_XXS-00001-of-00002.gguf"
+set "MMPROJ=%MDL%\mmproj-my-model-BF16.gguf"
+set "PACK=%~dp0packs\my-model"
 for %%F in ("%GGUF%") do if not exist "%%~fF" (echo Model not found: %%~fF & exit /b 1)
 
 echo arby-strata on port %PORT%
@@ -54,7 +54,7 @@ echo   rocm    %ROCM%
 echo.
 
 "%FRONTEND%" --engine "%ENGINE%" -m "%GGUF%" --mmproj "%MMPROJ%" --host 0.0.0.0 --port %PORT% ^
-  --alias swift-abliterated-iq3_xxs --threads 8 ^
+  --alias my-model --threads 8 ^
   -- --pack "%PACK%" ^
      --native "%GGUF%" ^
      --ple-gguf "%GGUF%" ^
@@ -62,7 +62,7 @@ echo.
      --expert-profile "%SRC%\data\expert-profile.bin" ^
      --expert-cache auto --prefill auto ^
      --spec 4 --spec-min-p 0.5 ^
-     --mtp D:\Strata-data\mtp\rt ^
+     --mtp "%~dp0mtp\rt" ^
      --max-context 131768 --kv int8 --kv-resident 32768 ^
      --vram-reserve-mib 1400
 

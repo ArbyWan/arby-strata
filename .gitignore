@@ -74,3 +74,11 @@ build-vision-cuda12.bat
 # local Windows HIP packaging output
 dist-hip/
 !/run-arby-strata.bat
+
+# Rotated logs (*.log.1 ...), local dashboards and one-off build/launch helpers on a Windows box:
+# a stray `git add -A` must never sweep these in.
+*.log.*
+/strata-top/
+/arby-strata-UD.bat
+/build-frontend-ui.bat
+/compile-check.bat

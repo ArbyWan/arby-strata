@@ -781,7 +781,7 @@ if(STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP)
       add_test(NAME hip_prefill_native_batch COMMAND hip_prefill_native_batch)
       list(APPEND _strata_hip_tests hip_prefill_native_batch)
     endif()
-    # Aurora: the prompt GDN recurrence's per-head kernel against the column-split + norm kernels, bitwise
+    # gfx11: the prompt GDN recurrence's per-head kernel against the column-split + norm kernels, bitwise
     add_executable(hip_gdn_rec_head tests/hip/gdn_rec_head.cpp)
     target_link_libraries(hip_gdn_rec_head PRIVATE strata_prefill strata_hip_runtime)
     add_test(NAME hip_gdn_rec_head COMMAND hip_gdn_rec_head)
@@ -1745,7 +1745,7 @@ if(STRATA_NATIVE_EXPERTS)
     if(NOT EXISTS "${_strata_mmq}/common.cuh" OR NOT EXISTS "${_strata_mmq}/quantize.cu")
       message(FATAL_ERROR "The selected GGML source is missing the ggml-cuda MMQ sources: ${_strata_mmq}")
     endif()
-    # Aurora: moe_fused.cu's gfx11 and moe_fused_iq.cu's gfx11 / gfx12 WMMA kernels for the prompt experts (opt-in STRATA_PF_FUSED=1)
+    # Fused experts: moe_fused.cu's gfx11 and moe_fused_iq.cu's gfx11 / gfx12 WMMA kernels for the prompt experts (opt-in STRATA_PF_FUSED=1)
     set(_strata_mmq_sources
       src/prefill/moe_mmq.cu
       src/prefill/moe_fused.cu
@@ -1779,7 +1779,7 @@ if(STRATA_NATIVE_EXPERTS)
     target_link_libraries(strata_mmq PUBLIC ggml-base hip::host roc::hipblas)
     target_link_libraries(strata_prefill PUBLIC strata_mmq)
     target_compile_definitions(strata_prefill PUBLIC STRATA_PREFILL_MMQ=1 STRATA_PREFILL_FUSED=1)
-    # Aurora: the gfx11 fused experts against the FP64 reference and MMQ (tests/cuda's test; exit 77 off gfx11)
+    # gfx11: the fused experts against the FP64 reference and MMQ (tests/cuda's test; exit 77 off gfx11)
     add_executable(hip_prefill_fused_moe tests/cuda/prefill_fused_moe_test.cpp)
     target_include_directories(hip_prefill_fused_moe PRIVATE "${_strata_gg}/include")
     target_link_libraries(hip_prefill_fused_moe PRIVATE strata_mmq ggml-base strata_hip_runtime)
