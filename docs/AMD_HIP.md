@@ -385,7 +385,7 @@ an RX 9070 XT 16 GB and a Radeon AI PRO R9700 32 GB (both gfx1201), a Ryzen 9 39
   tok/s on a 4K prompt, 52.0 -> 60.5 warm) and +5-7% on the 9070 XT, prompts unchanged, the same tokens.
 - **hipBLASLt:** the validation above used hipBLASLt 1.4.1. A table calibrated on the R9700 at the engine's shapes
   with that version (0.98-1.76x per GEMM over hipBLAS) changed the end-to-end prompt speed by 0-3%, within noise,
-  so none was shipped for it: there the plain hipBLAS path is already close (a table I calibrated on my own R9700
+  so none was shipped for it: there the plain hipBLAS path is already close (a table calibrated on an R9700
   with 1.4.1 measured the same: 1.15x per GEMM, +1% prompt - see "Tuning table" below). For hipBLASLt 1.5.0 (ROCm
   10.2.0a nightly) `tools/hip/gfx1201-hipblaslt-100500.txt` is shipped (see "Tuning table" below); on one R9700 it
   measured +3.9% prompt speed on 4,210-token prompts (1,590 vs 1,531 tok/s), a modest gain.
@@ -426,9 +426,9 @@ an RX 9070 XT 16 GB and a Radeon AI PRO R9700 32 GB (both gfx1201), a Ryzen 9 39
     the prompt path's expert ring is 96 slots (as STRATA_PREFILL_RING=96): with the default 384 the 9070 XT's 4K
     prompts fell to 718 tok/s; with 96 they gain (1,017 -> 1,211; 16K 1,518 -> 2,032). PR #329
     (bsorensen110) contributed an equivalent gfx12 WMMA kernel of the same speed (within 1%); this one also masks KV
-    pages that KV streaming has not made resident, as the decode kernel does. On my R9700 (engine 0.1.40,
+    pages that KV streaming has not made resident, as the decode kernel does. On an R9700 (engine 0.1.40,
     IQ3_S at 431072 ctx, `--kv int8`, the gfx1201 hipBLASLt 1.4.1 table below, which names the machine, GPU idle):
-    fresh prompts of 4,210 and 8,830 tokens - the longest prompt I measured there is 8,830 tokens, the 431072 ctx is
+    fresh prompts of 4,210 and 8,830 tokens - the longest prompt measured there is 8,830 tokens, the 431072 ctx is
     what the model runs at, not what these prompts reach - three matched trials each, the first fresh prompt after
     each start left out: 1,571 -> 2,064 and 1,568 -> 2,065 tok/s at 8,830 tokens (+31.4 and +31.7%) and 1,699 ->
     1,990 at 4,210 (+17.1%), medians 1,571 -> 2,064 and a 1.27x geometric mean over those three. decode
@@ -824,7 +824,7 @@ Shipped tables:
   table when the installed hipBLASLt reports 1.4.1. Measurements:
   [bench/results/2026-10-12-community-gfx1103](../bench/results/2026-10-12-community-gfx1103/README.md).
 
-Calibrated on my PC and kept in this checkout, not shipped: `gfx1201-hipblaslt-100401.txt`, a Radeon AI PRO
+Calibrated locally and kept in this checkout, not shipped: `gfx1201-hipblaslt-100401.txt`, a Radeon AI PRO
 R9700 (gfx1201, 32 GB, 1002:7551) on a Ryzen 9 9950X3D with 62 GiB RAM, CachyOS (kernel 7.3.0-rc6-1-cachyos-rc,
 `linux-firmware-amdgpu 20260916`, the kernel's amdgpu driver), system ROCm `rocm-gfx120x-bin 10.1.0` (hipBLASLt
 1.4.1, HIP 7.16.26385, clang 24.0.0), Python 3.14.7 in setup's own venv, engine 0.1.40 compiled there for gfx1201,
@@ -843,7 +843,7 @@ hipBLASLt candidates (0.90-0.95x), with four different winning solution ids, all
 the T=8192 row does not send that call back to hipBLAS: `closest()` matches dtype/N/K/ldy and takes the nearest T
 bucket, so T=8192 would run the T=4096 row; both rows go or neither.
 
-Two calibration notes from my machine. The first case of a fresh `tune_hipblaslt` process times its hipBLAS
+Two calibration notes from that box. The first case of a fresh `tune_hipblaslt` process times its hipBLAS
 baseline while the clocks are still ramping: that T=4096 shape read 0.31-0.63 ms across five runs while the case
 timed right after it held 0.606-0.619 ms every time, so time a heavy case first and read the later ones. And the
 first fresh prompt after the model loads is not a measurement: it gave 949 and 1,423 tok/s in the two arms of that

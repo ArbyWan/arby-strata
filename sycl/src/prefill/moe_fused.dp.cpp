@@ -614,7 +614,7 @@ __dpct_inline__ void expert_kernel(
 }
 
 #if defined(__HIPCC__)
-// ---- Aurora (S23): the same products on gfx11 (RDNA3 / RDNA3.5) matrix cores, v_wmma_i32_16x16x16_iu8 (wave32).
+// ---- gfx11 (S23): the same products on the RDNA3 / RDNA3.5 matrix cores, v_wmma_i32_16x16x16_iu8 (wave32).
 // Fragments (gfx11): A lane l holds the 16 k of row l % 16 (lanes 16..31 repeat lanes 0..15), B lane l the 16 k of
 // column l % 16, C/D lane l holds D[2i + l / 16][l % 16], i = 0..7.  A = 16 weight rows, B = 16 tile rows (tokens):
 // a lane's eight results are eight weight rows of ONE tile row, whose activation scales it already holds.
@@ -946,7 +946,7 @@ bool enabled() {
     static const bool env = [] {
         const char* v = std::getenv("STRATA_PF_FUSED");
 #if defined(__HIPCC__)
-        return v != nullptr && v[0] == '1';   // Aurora: the gfx11 WMMA kernels are opt-in (STRATA_PF_FUSED=1)
+        return v != nullptr && v[0] == '1';   // gfx11: the WMMA kernels are opt-in (STRATA_PF_FUSED=1)
 #else
         return v == nullptr || v[0] != '0';
 #endif

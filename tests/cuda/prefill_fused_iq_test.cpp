@@ -524,7 +524,7 @@ void timing_part(const Pair& p, int T, cudaStream_t s) {
     const std::vector<float> y_mmq = mq ? download(mb.dm, (size_t) rows * N) : std::vector<float>((size_t) rows * N, 0.0f),
                              y_f = download(fb.dm, (size_t) rows * N);
     const std::vector<int32_t> slot = download_i(fb.slot, (size_t) rows);
-    {   // (Aurora S23) a hash of the fused output's bits, to compare two builds bit for bit
+    {   // (S23) a hash of the fused output's bits, to compare two builds bit for bit
         uint64_t hsh = 1469598103934665603ull;
         for (size_t i = 0; i < (size_t) rows; ++i)   // in pair order: the rows of an expert are placed in any order
             for (size_t c = 0; c < (size_t) N; ++c) { uint32_t u; std::memcpy(&u, &y_f[(size_t) slot[i] * N + c], 4); hsh = (hsh ^ u) * 1099511628211ull; }

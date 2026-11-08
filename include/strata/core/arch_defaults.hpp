@@ -1,6 +1,6 @@
 // include/strata/core/arch_defaults.hpp - the per-architecture defaults of switches that are exact everywhere.
 //
-// Every gfx1151 (Strix Halo, RDNA3.5, unified memory) switch in the table was measured on Aurora (experiments/s23 .. s26,
+// Every gfx1151 (Strix Halo, RDNA3.5, unified memory) switch in the table was measured on the Strix Halo box (experiments/s23 .. s26,
 // the c-best3-v4.2 config) with BYTE-IDENTICAL output against the same engine with the switch off: the same token ids at
 // 4K / 32K / 64K and on four models, and a bitwise harness per kernel.  They are therefore on by default on that
 // architecture and nowhere else: a CUDA build and every other HIP architecture run the code they always ran.

@@ -79,3 +79,11 @@ dist-hip/
 frontend/live_task_test.exe
 frontend/ui_live.o
 frontend/live_task_test.log
+
+# Rotated logs (*.log.1 ...), local dashboards and one-off build/launch helpers on a Windows box:
+# a stray `git add -A` must never sweep these in.
+*.log.*
+/strata-top/
+/arby-strata-UD.bat
+/build-frontend-ui.bat
+/compile-check.bat

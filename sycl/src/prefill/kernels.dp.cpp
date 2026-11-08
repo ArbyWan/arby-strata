@@ -492,7 +492,7 @@ __dpct_inline__ void gdn_conv_tiled_kernel(const float *__restrict__ hist,
         v0 = v1; v1 = v2; v2 = x;
     }
 }
-// Aurora (S23, opt-in STRATA_GDN_CONVL2=1): gdn_conv_tiled_kernel with gdn_l2_kernel folded in.  A block's 128 threads
+// Measured on gfx1151 (Strix Halo box), S23, opt-in STRATA_GDN_CONVL2=1: gdn_conv_tiled_kernel with gdn_l2_kernel folded in.  A block's 128 threads
 // are the 128 channels of one head, so for the q / k heads (block < 2 HK) the norm's sum of squares is the block's:
 // the same warp_sum, the same four partials added in the same order, the same v * rsqrtf(ss + eps) on the same
 // stored value - the same bits, without writing h and reading it back (16 tokens per round).
@@ -1234,8 +1234,8 @@ bool gdn_keyhead_ok() {
     return on;
 }
 #endif
-#if defined(__HIPCC__)   // the Aurora (gfx11) recurrence kernels: AMD builds only
-// Aurora (S23): the recurrence with the column-split grid of gdn_rec_cols_pipe_kernel (four 32-column blocks per value
+#if defined(__HIPCC__)   // the gfx11 recurrence kernels: AMD builds only
+// gfx11 (S23): the recurrence with the column-split grid of gdn_rec_cols_pipe_kernel (four 32-column blocks per value
 // head) but FOUR LANES per column, lane g holding the column's state rows 32g .. 32g + 31 in registers - exactly the
 // row group the old kernel's thread (col, rg = g) held - so a token needs no __syncthreads: the four kv / o partials
 // meet through wave shuffles and are added in the old order red[0] + red[1] + red[2] + red[3] (the same bits;
@@ -1352,7 +1352,7 @@ __global__ void __launch_bounds__(QTH) gdn_rec_quad_kernel(float* __restrict__ s
         for (int r = 0; r < 32; ++r) base[(size_t) r * HV * S] = s[r];
     }
 }
-// Aurora (S23, opt-in STRATA_GDN_PP=1): gdn_rec_quad_kernel with the same arithmetic in the same order, two changes in
+// gfx11 (S23, opt-in STRATA_GDN_PP=1): gdn_rec_quad_kernel with the same arithmetic in the same order, two changes in
 // how it is compiled.  (1) The VGPR count: the 32 state-row addresses of the first loads were kept live across the
 // whole walk to be reused by the final stores (64 VGPRs, 196 in all = 7 waves a SIMD for the 192 blocks of 4 waves
 // that need 9.6): the stores' lane offset goes through an asm so the addresses are made again, 133 VGPRs, all blocks
@@ -1478,7 +1478,7 @@ __global__ void __launch_bounds__(QTH) gdn_rec_quad_pp_kernel(float* __restrict_
     }
 }
 
-// Aurora (S23, opt-in STRATA_GDN_PP=2): gdn_rec_quad_kernel with two columns per lane (a wave: 4 row groups x 8 lanes x
+// gfx11 (S23, opt-in STRATA_GDN_PP=2): gdn_rec_quad_kernel with two columns per lane (a wave: 4 row groups x 8 lanes x
 // 2 columns = 16 columns; a block of 4 waves 64 columns, 96 blocks).  A lane's two columns share the k / q rows it
 // reads from shared memory (half the LDS reads and shuffles per column, the kernel's limit) and give each wave two
 // independent dependency chains; the 384 waves fit in one round at 230 VGPRs.  Per column the same arithmetic in
@@ -2763,7 +2763,7 @@ void gdn_recurrence_variant(int variant, float* state, const float* h, const flo
 }
 void gdn_recurrence(float* state, const float* h, const float* gate, const float* beta, const float* z,
                     const float* gamma, float eps, float* y, uint16_t* y16, int64_t T, void* stream, int64_t ld16) {
-    // Aurora (S23): four lanes per column + the grid-stride norm, the same bits (tests/hip/gdn_rec_head.cpp);
+    // gfx11 (S23): four lanes per column + the grid-stride norm, the same bits (tests/hip/gdn_rec_head.cpp);
     // STRATA_GDN_HEAD=1 (on by default on gfx1151; off with STRATA_GDN_HEAD=0 or STRATA_GDN_REC_HEADS) takes them
     // (AMD builds only; the arch defaults set STRATA_GDN_HEAD=1 on gfx1151 and leave other cards on the earlier kernels)
     static const bool head = [] { const char* v = std::getenv("STRATA_GDN_HEAD"); return v != nullptr && std::atoi(v) != 0; }();

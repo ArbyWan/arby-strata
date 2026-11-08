@@ -32,7 +32,7 @@ std::vector<std::pair<std::string, std::string>> arch_default_env(const char* gc
     if (!strata::kernels::gfx_arch_is_gfx1151(gcn_arch)) return t;
     const char* off = std::getenv("STRATA_GFX1151_DEFAULTS");
     if (off != nullptr && off[0] == '0') return t;
-    // Exact (bitwise) on Aurora, each with its measured gain in aurora_s23.md:
+    // Exact (bitwise) on gfx1151, each with its measured gain in the S23 experiment notes:
     t = {
         // prompt
         {"STRATA_GDN_HEAD", "1"},        // the GDN recurrence, four lanes a column + the grid-stride norm (S23)

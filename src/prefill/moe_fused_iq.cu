@@ -78,7 +78,7 @@ constexpr int GU_ROWS_K = 2560, D_ROWS_K = 640;   // K of gate/up (n_embd) and o
 constexpr int T_IQ2_XXS = GGML_TYPE_IQ2_XXS, T_IQ2_XS = GGML_TYPE_IQ2_XS, T_IQ2_S = GGML_TYPE_IQ2_S,
               T_IQ3_XXS = GGML_TYPE_IQ3_XXS, T_IQ3_S = GGML_TYPE_IQ3_S, T_IQ4_XS = GGML_TYPE_IQ4_XS,
               T_IQ4_NL = GGML_TYPE_IQ4_NL, T_Q2_0 = GGML_TYPE_Q2_0,
-              // Aurora (opt-in, HIP gfx11 only): Unsloth UD-Q4_K_XL's experts - gate/up Q4_K (one layer Q5_K), down Q5_1
+              // gfx11 (opt-in, HIP only): Unsloth UD-Q4_K_XL's experts - gate/up Q4_K (one layer Q5_K), down Q5_1
               // (five layers Q8_0).  Their weights are w = d_w q + m_w (a minimum), so a sub-block's dot is
               //   sum w x = d_x (d_w sum q a + m_w sum a):
               // the activation blocks carry sum a per 32 values in their eight spare bytes (quant_act_nat_kernel and
@@ -233,7 +233,7 @@ __device__ __forceinline__ void signed8(uint32_t gx, uint32_t gy, uint32_t s, ui
     qy = __vsub4(gy ^ m1, m1);
 }
 #if defined(__HIPCC__)
-// gfx11 (Aurora): the signs from a shared-memory table instead of the compare / subtract emulation.  An entry (one per
+// gfx11: the signs from a shared-memory table instead of the compare / subtract emulation.  An entry (one per
 // sign byte b; for the 7-bit sign formats per 7 bits, the parity bit folded in) is {m0, c0, m1, c1}: m = 0xFF in the
 // bytes whose sign bit is set (bits 0-3 for .x, 4-7 for .y), c = m & 0x01010101.  q = (g ^ m) + c is -g where the sign
 // is set - the two's complement, byte-wise - and g elsewhere; no byte carries into the next, because no codebook entry
@@ -722,7 +722,7 @@ native_kernel(const Batch b, const NativeGeom geo, const Tables tb, const uint8_
 }
 
 #if defined(__HIPCC__)
-// ---- Aurora (S23): the native packs' fused experts on gfx11 (RDNA3 / RDNA3.5) matrix cores, v_wmma_i32_16x16x16_iu8
+// ---- gfx11 (S23): the native packs' fused experts on the RDNA3 / RDNA3.5 matrix cores, v_wmma_i32_16x16x16_iu8
 // (wave32).  The CUDA kernel's arithmetic: a 32-value sub-block decoded to int8 (load_unit / convert above) and its
 // scales; per 32 values the int32 dot starts from MAGIC (the C operand), so as_float(d) - 1.5 * 2^23 is the dot; the
 // formats with a scale per 16 values take each 16-value k-step's dot alone.  Fragments (gfx11): A lane l holds the 16
@@ -1312,7 +1312,7 @@ const DevInfo& dev_info() {
 }
 
 // opt-in on top of STRATA_PF_FUSED=1: STRATA_PF_FUSED_KQ=1 takes UD-Q4_K_XL's formats (the output differs from the FP16
-// expert path's at rounding level; KL-gated, see aurora_s23.md)
+// expert path's at rounding level; KL-gated, see the S23 experiment notes)
 bool kq_on() {
     static const bool on = [] {
         const char* v = std::getenv("STRATA_PF_FUSED_KQ");

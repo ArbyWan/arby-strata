@@ -458,7 +458,7 @@ auto &sk = *sycl::ext::oneapi::group_local_memory_for_overwrite<float[2][S]>(
             sq_part = oc * oc;
         }
         // every thread takes the shuffles, as the single-token kernel does: inside the `rg == 0` branch hipcc on
-        // gfx1151 gave another rounding for 3% of the outputs (gdn_parity section 5 on Aurora)
+        // gfx1151 gave another rounding for 3% of the outputs (gdn_parity section 5 on gfx1151)
         /*
 DPCT1108: '__shfl_xor_sync' was migrated with the experimental feature
 masked sub_group function which may not be supported by all compilers or
