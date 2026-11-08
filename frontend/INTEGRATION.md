@@ -1,8 +1,8 @@
 # Integration notes — live console UI
 
 **Status: implemented.** These notes record the hook points that were wired and why; the shipped
-code is `frontend/live_task.*` and `frontend/ui_live.*`, and `C:\Hermes\Default Project\strata-cli-ui-draft.md`
-carries the full design record.
+code is `frontend/live_task.*` and `frontend/ui_live.*`; the design record, kept outside this
+repository, carries the full rationale.
 
 ## What has actually been verified
 

@@ -88,7 +88,7 @@ rem   GGUF    the first shard (-00001-of-00002); the engine loads the rest besid
 rem   MMPROJ  the vision projector for --mmproj; leave --mmproj off below if the model has none
 rem   PACK    the pack built for the same model (packs\<model>)
 if not defined MDL set "MDL=%~dp0models\my-model"
-if not defined GGUF set "GGUF=%MDL%\my-model-Q3_K_M-00001-of-00002.gguf"
+if not defined GGUF set "GGUF=%MDL%\IQ3_XXS\my-model-IQ3_XXS-00001-of-00002.gguf"
 if not defined MMPROJ set "MMPROJ=%MDL%\mmproj-my-model-BF16.gguf"
 if not defined PACK set "PACK=%~dp0packs\my-model"
 for %%F in ("%GGUF%") do if not exist "%%~fF" (echo Model not found: %%~fF & exit /b 1)

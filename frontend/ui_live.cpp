@@ -184,7 +184,7 @@ void ConsoleUI::log_line(const std::string & line, bool to_console) {
         std::fputc('\n', log_fp_);
         std::fflush(log_fp_);
     }
-    if (mode_ == Mode::Off || !to_console) return;
+    if (!to_console && mode_ != Mode::Off) return;   // Off: everything reaches the console, as before
     if (mode_ == Mode::Live) {
         clear_block_locked();        // step above the block, print, and let the next publish redraw
         write_raw(line + "\n");
